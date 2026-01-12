@@ -35,6 +35,19 @@ class Scanner {
         try {
             console.log(`Starting scan of directory: ${modelDirectory}`);
 
+            // Check if directory exists
+            if (!fs.existsSync(modelDirectory)) {
+                throw new Error(`Directory does not exist: ${modelDirectory}`);
+            }
+
+            // Check if it's actually a directory
+            const stats = fs.statSync(modelDirectory);
+            if (!stats.isDirectory()) {
+                throw new Error(`Path is not a directory: ${modelDirectory}`);
+            }
+
+            console.log(`Directory verified. Starting recursive scan...`);
+
             // Clear existing models before rescanning
             this.clearExistingModels();
 
@@ -42,8 +55,13 @@ class Scanner {
             await this.scanDirectoryRecursive(modelDirectory, modelDirectory);
 
             console.log(`Scan complete. Found ${this.progress.modelsFound} models and ${this.progress.assetsFound} assets`);
+            console.log(`Total files examined: ${this.progress.totalFiles}`);
 
             return this.progress;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`Scan failed:`, message);
+            throw error;
         } finally {
             this.scanning = false;
         }
@@ -58,27 +76,37 @@ class Scanner {
     private async scanDirectoryRecursive(currentPath: string, rootPath: string): Promise<void> {
         try {
             const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+            console.log(`Scanning ${currentPath}: found ${entries.length} entries`);
 
             for (const entry of entries) {
                 const fullPath = path.join(currentPath, entry.name);
 
                 // Skip hidden files and node_modules
                 if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+                    console.log(`  Skipping hidden/node_modules: ${entry.name}`);
                     continue;
                 }
 
                 if (entry.isDirectory()) {
+                    console.log(`  Entering directory: ${entry.name}`);
                     // Recursively scan subdirectory
                     await this.scanDirectoryRecursive(fullPath, rootPath);
                 } else if (entry.isFile()) {
                     this.progress.totalFiles++;
+                    const ext = path.extname(fullPath).toLowerCase();
+
+                    console.log(`  File: ${entry.name} (ext: ${ext})`);
 
                     // Check if it's a model file
                     if (isModelFile(fullPath)) {
+                        console.log(`    -> Indexing as model`);
                         this.indexModel(fullPath, rootPath);
                     } else if (isArchiveFile(fullPath)) {
+                        console.log(`    -> Indexing as archive`);
                         // Index zip files as models
                         this.indexModel(fullPath, rootPath);
+                    } else {
+                        console.log(`    -> Skipping (not a model file)`);
                     }
 
                     this.progress.processedFiles++;
