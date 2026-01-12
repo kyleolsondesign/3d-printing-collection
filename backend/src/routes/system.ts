@@ -1,4 +1,5 @@
 import express from 'express';
+import { exec } from 'child_process';
 import db from '../config/database.js';
 import scanner from '../services/scanner.js';
 
@@ -116,12 +117,48 @@ router.get('/stats', (req, res) => {
         const totalFavorites = (db.prepare('SELECT COUNT(*) as count FROM favorites').get() as { count: number }).count;
         const totalPrinted = (db.prepare('SELECT COUNT(*) as count FROM printed_models').get() as { count: number }).count;
         const totalQueued = (db.prepare('SELECT COUNT(*) as count FROM print_queue').get() as { count: number }).count;
+        const totalLooseFiles = (db.prepare('SELECT COUNT(*) as count FROM loose_files').get() as { count: number }).count;
 
         res.json({
             totalModels,
             totalFavorites,
             totalPrinted,
-            totalQueued
+            totalQueued,
+            totalLooseFiles
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Get loose files
+router.get('/loose-files', (req, res) => {
+    try {
+        const looseFiles = db.prepare('SELECT * FROM loose_files ORDER BY filename ASC').all();
+        res.json({ looseFiles });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Open folder in Finder (macOS only)
+router.post('/open-folder', (req, res) => {
+    try {
+        const { folderPath } = req.body;
+
+        if (!folderPath) {
+            return res.status(400).json({ error: 'folderPath is required' });
+        }
+
+        // Use macOS 'open' command to reveal folder in Finder
+        exec(`open "${folderPath}"`, (error) => {
+            if (error) {
+                console.error('Failed to open folder:', error);
+                return res.status(500).json({ error: 'Failed to open folder' });
+            }
+            res.json({ success: true });
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

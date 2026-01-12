@@ -95,10 +95,11 @@ frontend/
   src/
     components/           # Reusable Vue components
     views/
-      BrowseView.vue      # Main model browsing interface
+      BrowseView.vue      # Main model browsing interface with "Open in Finder" buttons
       FavoritesView.vue   # Favorites list
       PrintedView.vue     # Print history
       QueueView.vue       # Print queue
+      LooseFilesView.vue  # Review and organize loose files
       SettingsView.vue    # Configuration and scanning
     router/
       index.ts            # Vue Router setup
@@ -115,11 +116,14 @@ frontend/
 
 ### Core Tables
 - **models**: All discovered model files with metadata (category, file type, paid/original flags)
+  - Only one model indexed per directory (deduplication)
+  - Excludes loose files (files in root directory)
 - **model_assets**: Associated images and PDFs for each model
 - **favorites**: User's favorited models with optional notes
 - **printed_models**: Print history with ratings (good/bad) and notes
 - **print_queue**: Queue of models to print with priority ordering
 - **config**: Application configuration (model directory path)
+- **loose_files**: Files in root directory that need organizing (not indexed as models)
 
 ### Full-Text Search
 - Uses SQLite FTS5 virtual table (`models_fts`) for fast keyword search
@@ -130,10 +134,16 @@ frontend/
 ### File Scanning
 The scanner service (backend/src/services/scanner.ts) recursively scans the model directory:
 1. Discovers all model files (STL, 3MF, gcode, OBJ, PLY, AMF) and archives (zip, rar, 7z)
-2. Extracts category from folder structure
-3. Detects special folders: "Paid" and "Original Creations"
-4. Finds associated images (.jpg, .png, .gif, .webp) and PDFs in the same directory
-5. Indexes everything into SQLite database
+2. **Deduplication**: Only indexes one model per directory (alphabetically first)
+   - Folders with multiple versions only get one indexed
+   - Duplicate count tracked and reported
+3. **Loose files**: Files in root directory are tracked separately in `loose_files` table
+   - Not indexed as models until organized into folders
+   - Can be reviewed on dedicated "Loose Files" page
+4. Extracts category from folder structure
+5. Detects special folders: "Paid" and "Original Creations"
+6. Finds associated images (.jpg, .png, .gif, .webp) and PDFs in the same directory
+7. Indexes everything into SQLite database
 
 **Category Logic**:
 - If path contains "Paid" → category = "Paid"
@@ -148,11 +158,13 @@ For each model file, the scanner looks for:
 
 ### API Architecture
 All API endpoints are in `/api/*`:
-- `/api/models` - Browse and search models
+- `/api/models` - Browse and search models (includes primary image for each model)
 - `/api/favorites` - Manage favorites
 - `/api/printed` - Track print history
 - `/api/queue` - Manage print queue
-- `/api/system` - Config, scanning, statistics
+- `/api/system` - Config, scanning, statistics, loose files
+- `/api/system/loose-files` - Get all loose files that need organizing
+- `/api/system/open-folder` - Open a folder in macOS Finder
 
 File serving uses secure path validation to prevent directory traversal attacks (backend/src/routes/models.ts).
 
@@ -227,11 +239,19 @@ proxy: {
 - **Graceful fallback**: Shows package emoji (📦) for models without images
 - **Image optimization**: Hover effects and smooth transitions on model cards
 
+### Smart Deduplication & Organization
+- **One model per folder**: Scanner only indexes one model file per directory (alphabetically first)
+- **Duplicate tracking**: Reports how many duplicate files were skipped during scan
+- **Loose files management**: Files in root directory are tracked separately (not indexed as models)
+- **Loose files review page**: Dedicated page to review and organize unorganized files
+- **Open in Finder**: Button on each model card to quickly open the containing folder
+
 ### Performance with Large Collections
 - Successfully tested with 38k+ models and 33k+ assets
 - Pagination handles large result sets efficiently
 - Database queries optimized with proper indexing
 - Image loading with error handling for missing/broken files
+- Deduplication reduces indexed models for folders with multiple versions
 
 ## Future Enhancements
 - Zip file extraction and viewing

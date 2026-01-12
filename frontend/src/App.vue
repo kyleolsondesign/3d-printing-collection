@@ -19,6 +19,10 @@
         <router-link to="/printed" :class="{ active: $route.name === 'printed' }">
           Printed
         </router-link>
+        <router-link to="/loose-files" :class="{ active: $route.name === 'loose-files' }">
+          Loose Files
+          <span v-if="looseFilesCount > 0" class="badge badge-warning">{{ looseFilesCount }}</span>
+        </router-link>
         <router-link to="/settings" :class="{ active: $route.name === 'settings' }">
           Settings
         </router-link>
@@ -32,15 +36,27 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useAppStore } from './store';
+import { systemApi } from './services/api';
 
 const store = useAppStore();
+const looseFilesCount = ref(0);
 
 onMounted(async () => {
   await store.loadConfig();
   await store.loadCategories();
+  await loadLooseFilesCount();
 });
+
+async function loadLooseFilesCount() {
+  try {
+    const response = await systemApi.getStats();
+    looseFilesCount.value = response.data.totalLooseFiles || 0;
+  } catch (error) {
+    console.error('Failed to load loose files count:', error);
+  }
+}
 </script>
 
 <style scoped>
@@ -99,6 +115,10 @@ onMounted(async () => {
   padding: 0.125rem 0.5rem;
   border-radius: 12px;
   margin-left: 0.5rem;
+}
+
+.badge-warning {
+  background: #f59e0b;
 }
 
 .main-content {

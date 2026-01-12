@@ -8,6 +8,8 @@ interface ScanProgress {
     processedFiles: number;
     modelsFound: number;
     assetsFound: number;
+    looseFilesFound: number;
+    duplicatesSkipped: number;
 }
 
 class Scanner {
@@ -16,7 +18,9 @@ class Scanner {
         totalFiles: 0,
         processedFiles: 0,
         modelsFound: 0,
-        assetsFound: 0
+        assetsFound: 0,
+        looseFilesFound: 0,
+        duplicatesSkipped: 0
     };
 
     async scanDirectory(modelDirectory: string): Promise<ScanProgress> {
@@ -29,7 +33,9 @@ class Scanner {
             totalFiles: 0,
             processedFiles: 0,
             modelsFound: 0,
-            assetsFound: 0
+            assetsFound: 0,
+            looseFilesFound: 0,
+            duplicatesSkipped: 0
         };
 
         try {
@@ -56,6 +62,8 @@ class Scanner {
 
             console.log(`Scan complete. Found ${this.progress.modelsFound} models and ${this.progress.assetsFound} assets`);
             console.log(`Total files examined: ${this.progress.totalFiles}`);
+            console.log(`Loose files found: ${this.progress.looseFilesFound}`);
+            console.log(`Duplicates skipped: ${this.progress.duplicatesSkipped}`);
 
             return this.progress;
         } catch (error) {
@@ -70,13 +78,16 @@ class Scanner {
     private clearExistingModels(): void {
         db.prepare('DELETE FROM models').run();
         db.prepare('DELETE FROM model_assets').run();
-        console.log('Cleared existing models from database');
+        db.prepare('DELETE FROM loose_files').run();
+        console.log('Cleared existing models and loose files from database');
     }
 
     private async scanDirectoryRecursive(currentPath: string, rootPath: string): Promise<void> {
         try {
             const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+            const modelFiles: string[] = [];
 
+            // First pass: collect all model files in this directory
             for (const entry of entries) {
                 const fullPath = path.join(currentPath, entry.name);
 
@@ -92,11 +103,14 @@ class Scanner {
                     this.progress.totalFiles++;
 
                     // Check if it's a model file
-                    if (isModelFile(fullPath)) {
-                        this.indexModel(fullPath, rootPath);
-                    } else if (isArchiveFile(fullPath)) {
-                        // Index zip files as models
-                        this.indexModel(fullPath, rootPath);
+                    if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
+                        // Check if file is in root directory (loose file)
+                        if (path.dirname(fullPath) === rootPath) {
+                            this.trackLooseFile(fullPath);
+                            this.progress.looseFilesFound++;
+                        } else {
+                            modelFiles.push(fullPath);
+                        }
                     }
 
                     this.progress.processedFiles++;
@@ -107,9 +121,43 @@ class Scanner {
                     }
                 }
             }
+
+            // Second pass: only index one model per directory
+            if (modelFiles.length > 0) {
+                // Sort files alphabetically and take the first one
+                modelFiles.sort();
+                const primaryModel = modelFiles[0];
+
+                this.indexModel(primaryModel, rootPath);
+
+                // Count skipped duplicates
+                if (modelFiles.length > 1) {
+                    this.progress.duplicatesSkipped += (modelFiles.length - 1);
+                    console.log(`  Skipped ${modelFiles.length - 1} duplicate(s) in ${currentPath}`);
+                }
+            }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error scanning directory ${currentPath}:`, message);
+        }
+    }
+
+    private trackLooseFile(filepath: string): void {
+        try {
+            const stats = fs.statSync(filepath);
+            const filename = path.basename(filepath);
+            const ext = path.extname(filepath).toLowerCase();
+            const fileType = ext.replace('.', '');
+
+            const insert = db.prepare(`
+                INSERT INTO loose_files (filename, filepath, file_size, file_type, category)
+                VALUES (?, ?, ?, ?, 'Uncategorized')
+            `);
+
+            insert.run(filename, filepath, stats.size, fileType);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`Error tracking loose file ${filepath}:`, message);
         }
     }
 

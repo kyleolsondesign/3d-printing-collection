@@ -101,6 +101,19 @@ function initializeDatabase(): void {
         )
     `);
 
+    // Loose files - files not in folders that need organizing
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS loose_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL UNIQUE,
+            file_size INTEGER,
+            file_type TEXT,
+            category TEXT,
+            discovered_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
     // Create indexes
     db.exec(`
         CREATE INDEX IF NOT EXISTS idx_models_category ON models(category);

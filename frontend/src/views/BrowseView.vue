@@ -61,6 +61,13 @@
           </div>
           <div class="model-actions">
             <button
+              @click="openInFinder(model)"
+              class="btn-icon"
+              title="Open in Finder"
+            >
+              📁
+            </button>
+            <button
               @click="store.toggleFavorite(model.id)"
               :class="['btn-icon', { active: model.isFavorite }]"
               title="Favorite"
@@ -102,7 +109,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useAppStore } from '../store';
-import { modelsApi } from '../services/api';
+import { modelsApi, systemApi } from '../services/api';
 import type { Model } from '../services/api';
 
 const store = useAppStore();
@@ -140,6 +147,17 @@ function onImageError(event: Event) {
   // Hide broken image, show placeholder instead
   const target = event.target as HTMLImageElement;
   target.style.display = 'none';
+}
+
+async function openInFinder(model: Model) {
+  try {
+    // Get the directory containing the model file
+    const folderPath = model.filepath.substring(0, model.filepath.lastIndexOf('/'));
+    await systemApi.openFolder(folderPath);
+  } catch (error) {
+    console.error('Failed to open folder:', error);
+    alert('Failed to open folder in Finder');
+  }
 }
 </script>
 
@@ -298,12 +316,12 @@ function onImageError(event: Event) {
 }
 
 .model-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
   gap: 0.5rem;
 }
 
 .btn-icon {
-  flex: 1;
   padding: 0.5rem;
   border: 1px solid #ddd;
   background: white;
@@ -314,7 +332,7 @@ function onImageError(event: Event) {
 
 .btn-icon:hover {
   border-color: #0066cc;
-  color: #0066cc;
+  background: #f0f7ff;
 }
 
 .btn-icon.active {

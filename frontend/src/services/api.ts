@@ -105,7 +105,9 @@ export const systemApi = {
     scan: (modelDirectory?: string) => api.post('/system/scan', { modelDirectory }),
     getScanStatus: () => api.get('/system/scan/status'),
     getCategories: () => api.get('/system/categories'),
-    getStats: () => api.get('/system/stats')
+    getStats: () => api.get('/system/stats'),
+    getLooseFiles: () => api.get('/system/loose-files'),
+    openFolder: (folderPath: string) => api.post('/system/open-folder', { folderPath })
 };
 
 export default api;

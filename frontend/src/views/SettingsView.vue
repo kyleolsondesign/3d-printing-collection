@@ -62,6 +62,10 @@
           <div class="stat-value">{{ stats.totalQueued }}</div>
           <div class="stat-label">Queued</div>
         </div>
+        <div class="stat-card" :class="{ 'stat-warning': stats.totalLooseFiles > 0 }">
+          <div class="stat-value">{{ stats.totalLooseFiles }}</div>
+          <div class="stat-label">Loose Files</div>
+        </div>
       </div>
     </div>
   </div>
@@ -87,7 +91,8 @@ const stats = ref({
   totalModels: 0,
   totalFavorites: 0,
   totalPrinted: 0,
-  totalQueued: 0
+  totalQueued: 0,
+  totalLooseFiles: 0
 });
 
 const scanProgressPercent = computed(() => {
@@ -334,5 +339,14 @@ h2 {
 .stat-label {
   color: #666;
   font-size: 0.9rem;
+}
+
+.stat-warning {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+}
+
+.stat-warning .stat-value {
+  color: #b45309;
 }
 </style>
