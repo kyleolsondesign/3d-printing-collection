@@ -34,8 +34,10 @@
       </div>
       <div class="progress-info">
         <p><strong>{{ scanStatus.processedFiles.toLocaleString() }}</strong> / {{ scanStatus.totalFiles.toLocaleString() }} files processed ({{ scanProgressPercent }}%)</p>
-        <p><strong>{{ scanStatus.modelsFound.toLocaleString() }}</strong> models found</p>
-        <p><strong>{{ scanStatus.assetsFound.toLocaleString() }}</strong> assets found</p>
+        <p><strong>{{ scanStatus.modelsFound.toLocaleString() }}</strong> models (folders) found</p>
+        <p><strong>{{ scanStatus.modelFilesFound.toLocaleString() }}</strong> model files indexed</p>
+        <p><strong>{{ scanStatus.assetsFound.toLocaleString() }}</strong> assets (images/PDFs) found</p>
+        <p v-if="scanStatus.looseFilesFound > 0"><strong>{{ scanStatus.looseFilesFound.toLocaleString() }}</strong> loose files to organize</p>
       </div>
     </div>
 
@@ -85,7 +87,9 @@ const scanStatus = ref({
   totalFiles: 0,
   processedFiles: 0,
   modelsFound: 0,
-  assetsFound: 0
+  modelFilesFound: 0,
+  assetsFound: 0,
+  looseFilesFound: 0
 });
 const stats = ref({
   totalModels: 0,

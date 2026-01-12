@@ -21,21 +21,33 @@ db.pragma('foreign_keys = ON');
 
 // Initialize database schema
 function initializeDatabase(): void {
-    // Models table - stores all discovered 3D model files
+    // Models table - stores folders containing 3D models (one entry per folder)
     db.exec(`
         CREATE TABLE IF NOT EXISTS models (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT NOT NULL,
             filepath TEXT NOT NULL UNIQUE,
-            file_size INTEGER,
-            file_type TEXT,
             category TEXT,
             is_paid INTEGER DEFAULT 0,
             is_original INTEGER DEFAULT 0,
-            parent_zip TEXT,
+            file_count INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             last_scanned TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Model files table - stores all actual model files in a folder
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS model_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL UNIQUE,
+            file_size INTEGER,
+            file_type TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
         )
     `);
 
@@ -111,6 +123,27 @@ function initializeDatabase(): void {
             file_type TEXT,
             category TEXT,
             discovered_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Tags table - for categorizing models with multiple tags
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Model tags - many-to-many relationship
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS model_tags (
+            model_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (model_id, tag_id),
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
         )
     `);
 

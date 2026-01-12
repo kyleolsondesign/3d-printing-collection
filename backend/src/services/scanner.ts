@@ -7,9 +7,9 @@ interface ScanProgress {
     totalFiles: number;
     processedFiles: number;
     modelsFound: number;
+    modelFilesFound: number;
     assetsFound: number;
     looseFilesFound: number;
-    duplicatesSkipped: number;
 }
 
 class Scanner {
@@ -18,10 +18,11 @@ class Scanner {
         totalFiles: 0,
         processedFiles: 0,
         modelsFound: 0,
+        modelFilesFound: 0,
         assetsFound: 0,
-        looseFilesFound: 0,
-        duplicatesSkipped: 0
+        looseFilesFound: 0
     };
+    private foldersWithModels: Map<string, string[]> = new Map();
 
     async scanDirectory(modelDirectory: string): Promise<ScanProgress> {
         if (this.scanning) {
@@ -33,10 +34,11 @@ class Scanner {
             totalFiles: 0,
             processedFiles: 0,
             modelsFound: 0,
+            modelFilesFound: 0,
             assetsFound: 0,
-            looseFilesFound: 0,
-            duplicatesSkipped: 0
+            looseFilesFound: 0
         };
+        this.foldersWithModels = new Map();
 
         try {
             console.log(`Starting scan of directory: ${modelDirectory}`);
@@ -57,13 +59,17 @@ class Scanner {
             // Clear existing models before rescanning
             this.clearExistingModels();
 
-            // Recursively scan directory
+            // Phase 1: Recursively scan and collect model files by folder
             await this.scanDirectoryRecursive(modelDirectory, modelDirectory);
 
-            console.log(`Scan complete. Found ${this.progress.modelsFound} models and ${this.progress.assetsFound} assets`);
-            console.log(`Total files examined: ${this.progress.totalFiles}`);
-            console.log(`Loose files found: ${this.progress.looseFilesFound}`);
-            console.log(`Duplicates skipped: ${this.progress.duplicatesSkipped}`);
+            // Phase 2: Index folders as models
+            this.indexFoldersAsModels(modelDirectory);
+
+            console.log(`Scan complete!`);
+            console.log(`- Models (folders): ${this.progress.modelsFound}`);
+            console.log(`- Model files: ${this.progress.modelFilesFound}`);
+            console.log(`- Assets (images/PDFs): ${this.progress.assetsFound}`);
+            console.log(`- Loose files: ${this.progress.looseFilesFound}`);
 
             return this.progress;
         } catch (error) {
@@ -77,17 +83,16 @@ class Scanner {
 
     private clearExistingModels(): void {
         db.prepare('DELETE FROM models').run();
+        db.prepare('DELETE FROM model_files').run();
         db.prepare('DELETE FROM model_assets').run();
         db.prepare('DELETE FROM loose_files').run();
-        console.log('Cleared existing models and loose files from database');
+        console.log('Cleared existing data from database');
     }
 
     private async scanDirectoryRecursive(currentPath: string, rootPath: string): Promise<void> {
         try {
             const entries = fs.readdirSync(currentPath, { withFileTypes: true });
-            const modelFiles: string[] = [];
 
-            // First pass: collect all model files in this directory
             for (const entry of entries) {
                 const fullPath = path.join(currentPath, entry.name);
 
@@ -104,41 +109,78 @@ class Scanner {
 
                     // Check if it's a model file
                     if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
+                        const folderPath = path.dirname(fullPath);
+
                         // Check if file is in root directory (loose file)
-                        if (path.dirname(fullPath) === rootPath) {
+                        if (folderPath === rootPath) {
                             this.trackLooseFile(fullPath);
                             this.progress.looseFilesFound++;
                         } else {
-                            modelFiles.push(fullPath);
+                            // Add to folder's model files collection
+                            if (!this.foldersWithModels.has(folderPath)) {
+                                this.foldersWithModels.set(folderPath, []);
+                            }
+                            this.foldersWithModels.get(folderPath)!.push(fullPath);
                         }
                     }
 
                     this.progress.processedFiles++;
-
-                    // Log progress every 1000 files
-                    if (this.progress.processedFiles % 1000 === 0) {
-                        console.log(`Progress: ${this.progress.processedFiles}/${this.progress.totalFiles} files processed, ${this.progress.modelsFound} models found`);
-                    }
-                }
-            }
-
-            // Second pass: only index one model per directory
-            if (modelFiles.length > 0) {
-                // Sort files alphabetically and take the first one
-                modelFiles.sort();
-                const primaryModel = modelFiles[0];
-
-                this.indexModel(primaryModel, rootPath);
-
-                // Count skipped duplicates
-                if (modelFiles.length > 1) {
-                    this.progress.duplicatesSkipped += (modelFiles.length - 1);
-                    console.log(`  Skipped ${modelFiles.length - 1} duplicate(s) in ${currentPath}`);
                 }
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error scanning directory ${currentPath}:`, message);
+        }
+    }
+
+    private indexFoldersAsModels(rootPath: string): void {
+        for (const [folderPath, modelFiles] of this.foldersWithModels.entries()) {
+            try {
+                const folderName = path.basename(folderPath);
+                const category = this.extractCategory(folderPath, rootPath);
+                const isPaid = this.isInFolder(folderPath, rootPath, 'Paid');
+                const isOriginal = this.isInFolder(folderPath, rootPath, 'Original Creations');
+
+                // Insert model (folder) into database
+                const insertModel = db.prepare(`
+                    INSERT INTO models (filename, filepath, category, is_paid, is_original, file_count)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `);
+
+                const result = insertModel.run(
+                    folderName,
+                    folderPath,
+                    category,
+                    isPaid ? 1 : 0,
+                    isOriginal ? 1 : 0,
+                    modelFiles.length
+                );
+
+                const modelId = Number(result.lastInsertRowid);
+
+                // Insert all model files for this model
+                const insertFile = db.prepare(`
+                    INSERT INTO model_files (model_id, filename, filepath, file_size, file_type)
+                    VALUES (?, ?, ?, ?, ?)
+                `);
+
+                for (const filePath of modelFiles) {
+                    const stats = fs.statSync(filePath);
+                    const filename = path.basename(filePath);
+                    const ext = path.extname(filePath).toLowerCase().replace('.', '');
+
+                    insertFile.run(modelId, filename, filePath, stats.size, ext);
+                    this.progress.modelFilesFound++;
+                }
+
+                // Find and index associated assets (images, PDFs)
+                this.indexAssets(modelId, folderPath);
+
+                this.progress.modelsFound++;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`Error indexing folder ${folderPath}:`, message);
+            }
         }
     }
 
@@ -161,62 +203,18 @@ class Scanner {
         }
     }
 
-    private indexModel(filepath: string, rootPath: string): void {
+    private indexAssets(modelId: number, folderPath: string): void {
         try {
-            const stats = fs.statSync(filepath);
-            const filename = path.basename(filepath);
-            const ext = path.extname(filepath).toLowerCase();
-
-            // Extract category from folder structure
-            const category = this.extractCategory(filepath, rootPath);
-
-            // Check if in special folders
-            const isPaid = this.isInFolder(filepath, rootPath, 'Paid');
-            const isOriginal = this.isInFolder(filepath, rootPath, 'Original Creations');
-
-            // Determine file type
-            const fileType = ext.replace('.', '');
-
-            // Insert model into database
-            const insert = db.prepare(`
-                INSERT INTO models (filename, filepath, file_size, file_type, category, is_paid, is_original)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `);
-
-            const result = insert.run(
-                filename,
-                filepath,
-                stats.size,
-                fileType,
-                category,
-                isPaid ? 1 : 0,
-                isOriginal ? 1 : 0
-            );
-
-            const modelId = Number(result.lastInsertRowid);
-
-            // Find and index associated assets (images, PDFs)
-            this.indexAssets(modelId, filepath);
-
-            this.progress.modelsFound++;
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            console.error(`Error indexing model ${filepath}:`, message);
-        }
-    }
-
-    private indexAssets(modelId: number, modelFilepath: string): void {
-        const modelDir = path.dirname(modelFilepath);
-        const modelBasename = path.basename(modelFilepath, path.extname(modelFilepath));
-
-        try {
-            const files = fs.readdirSync(modelDir);
+            const files = fs.readdirSync(folderPath);
 
             for (const file of files) {
-                const assetPath = path.join(modelDir, file);
+                const assetPath = path.join(folderPath, file);
 
-                // Skip the model file itself
-                if (assetPath === modelFilepath) {
+                // Skip directories
+                try {
+                    const stat = fs.statSync(assetPath);
+                    if (stat.isDirectory()) continue;
+                } catch (e) {
                     continue;
                 }
 
@@ -225,8 +223,9 @@ class Scanner {
 
                 if (isImageFile(assetPath)) {
                     assetType = 'image';
-                    // Prefer images with same basename as model
-                    isPrimary = file.startsWith(modelBasename);
+                    // First image becomes primary
+                    const existingImages = db.prepare('SELECT COUNT(*) as count FROM model_assets WHERE model_id = ? AND asset_type = ?').get(modelId, 'image') as { count: number };
+                    isPrimary = existingImages.count === 0;
                 } else if (isDocumentFile(assetPath)) {
                     assetType = 'pdf';
                 }
@@ -243,7 +242,7 @@ class Scanner {
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            console.error(`Error indexing assets for ${modelFilepath}:`, message);
+            console.error(`Error indexing assets for ${folderPath}:`, message);
         }
     }
 

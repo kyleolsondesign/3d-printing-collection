@@ -115,10 +115,18 @@ frontend/
 ## Database Schema
 
 ### Core Tables
-- **models**: All discovered model files with metadata (category, file type, paid/original flags)
-  - Only one model indexed per directory (deduplication)
+- **models**: Folders containing 3D models (one entry per folder)
+  - `filename`: Folder name
+  - `filepath`: Path to the folder
+  - `category`: Primary category extracted from folder structure
+  - `file_count`: Number of model files in the folder
   - Excludes loose files (files in root directory)
+- **model_files**: All actual model files within each folder
+  - Multiple files per model (alternate versions, different formats)
+  - Links to parent model via `model_id`
 - **model_assets**: Associated images and PDFs for each model
+- **tags**: Tag names for categorizing models
+- **model_tags**: Many-to-many relationship for models with multiple tags/categories
 - **favorites**: User's favorited models with optional notes
 - **printed_models**: Print history with ratings (good/bad) and notes
 - **print_queue**: Queue of models to print with priority ordering
@@ -133,17 +141,29 @@ frontend/
 
 ### File Scanning
 The scanner service (backend/src/services/scanner.ts) recursively scans the model directory:
-1. Discovers all model files (STL, 3MF, gcode, OBJ, PLY, AMF) and archives (zip, rar, 7z)
-2. **Deduplication**: Only indexes one model per directory (alphabetically first)
-   - Folders with multiple versions only get one indexed
-   - Duplicate count tracked and reported
-3. **Loose files**: Files in root directory are tracked separately in `loose_files` table
+
+**Phase 1: File Discovery**
+1. Recursively scan all directories
+2. Discover all model files (STL, 3MF, gcode, OBJ, PLY, AMF) and archives (zip, rar, 7z)
+3. Group model files by their containing folder
+4. **Loose files**: Files in root directory are tracked separately in `loose_files` table
    - Not indexed as models until organized into folders
    - Can be reviewed on dedicated "Loose Files" page
-4. Extracts category from folder structure
-5. Detects special folders: "Paid" and "Original Creations"
-6. Finds associated images (.jpg, .png, .gif, .webp) and PDFs in the same directory
-7. Indexes everything into SQLite database
+
+**Phase 2: Folder Indexing**
+1. **Treat each folder as one model**
+   - Create one `models` entry per folder containing model files
+   - Store folder name and path
+   - All files in the folder are variations/formats of the same model
+2. **Index all model files** in each folder to `model_files` table
+   - Multiple STL/3MF/etc files → alternate versions or parts
+   - Track file count for each model
+3. Extracts primary category from folder structure
+4. Detects special folders: "Paid" and "Original Creations"
+5. Finds associated images (.jpg, .png, .gif, .webp) and PDFs in the folder
+6. First image found becomes the primary image
+
+**No Verbose Logging**: Scanner only logs summary stats at completion
 
 **Category Logic**:
 - If path contains "Paid" → category = "Paid"
@@ -239,12 +259,15 @@ proxy: {
 - **Graceful fallback**: Shows package emoji (📦) for models without images
 - **Image optimization**: Hover effects and smooth transitions on model cards
 
-### Smart Deduplication & Organization
-- **One model per folder**: Scanner only indexes one model file per directory (alphabetically first)
-- **Duplicate tracking**: Reports how many duplicate files were skipped during scan
+### Folder-Based Model Organization
+- **Folders = Models**: Each folder containing model files is treated as one model
+- **Multiple files per model**: All files in a folder are indexed as alternate versions/formats
+  - Example: A folder with 3 STL files → 1 model with 3 file versions
+  - No "duplicates" - all files are considered part of the same model
 - **Loose files management**: Files in root directory are tracked separately (not indexed as models)
 - **Loose files review page**: Dedicated page to review and organize unorganized files
 - **Open in Finder**: Button on each model card to quickly open the containing folder
+- **Multi-tag support**: Models can have multiple tags/categories (database schema ready, UI pending)
 
 ### Performance with Large Collections
 - Successfully tested with 38k+ models and 33k+ assets
