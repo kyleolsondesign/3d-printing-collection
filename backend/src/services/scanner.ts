@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import db from '../config/database.js';
 import { isModelFile, isImageFile, isDocumentFile, isArchiveFile } from '../utils/fileTypes.js';
+import { cleanupFolderName } from '../utils/nameCleanup.js';
 
 interface ScanProgress {
     totalFiles: number;
@@ -137,6 +138,7 @@ class Scanner {
         for (const [folderPath, modelFiles] of this.foldersWithModels.entries()) {
             try {
                 const folderName = path.basename(folderPath);
+                const cleanedName = cleanupFolderName(folderName);
                 const category = this.extractCategory(folderPath, rootPath);
                 const isPaid = this.isInFolder(folderPath, rootPath, 'Paid');
                 const isOriginal = this.isInFolder(folderPath, rootPath, 'Original Creations');
@@ -148,7 +150,7 @@ class Scanner {
                 `);
 
                 const result = insertModel.run(
-                    folderName,
+                    cleanedName,
                     folderPath,
                     category,
                     isPaid ? 1 : 0,
