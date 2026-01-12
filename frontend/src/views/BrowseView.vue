@@ -44,11 +44,12 @@
       <div v-for="model in store.models" :key="model.id" class="model-card">
         <div class="model-image">
           <img
-            v-if="getPrimaryImage(model)"
-            :src="getPrimaryImage(model)"
+            v-if="model.primaryImage"
+            :src="modelsApi.getFileUrl(model.primaryImage)"
             :alt="model.filename"
+            @error="onImageError"
           />
-          <div v-else class="no-image">No Image</div>
+          <div v-else class="no-image">📦</div>
         </div>
         <div class="model-info">
           <h3 :title="model.filename">{{ model.filename }}</h3>
@@ -135,10 +136,10 @@ function nextPage() {
   }
 }
 
-function getPrimaryImage(model: Model): string | null {
-  // This would need to fetch assets from the API
-  // For now, return null - we'll implement this in a future iteration
-  return null;
+function onImageError(event: Event) {
+  // Hide broken image, show placeholder instead
+  const target = event.target as HTMLImageElement;
+  target.style.display = 'none';
 }
 </script>
 
@@ -228,21 +229,28 @@ function getPrimaryImage(model: Model): string | null {
 .model-image {
   width: 100%;
   aspect-ratio: 4/3;
-  background: #f0f0f0;
+  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
 }
 
 .model-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.model-card:hover .model-image img {
+  transform: scale(1.05);
 }
 
 .no-image {
-  color: #999;
-  font-size: 0.9rem;
+  color: #ccc;
+  font-size: 3rem;
 }
 
 .model-info {

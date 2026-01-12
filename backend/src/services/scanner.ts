@@ -76,40 +76,35 @@ class Scanner {
     private async scanDirectoryRecursive(currentPath: string, rootPath: string): Promise<void> {
         try {
             const entries = fs.readdirSync(currentPath, { withFileTypes: true });
-            console.log(`Scanning ${currentPath}: found ${entries.length} entries`);
 
             for (const entry of entries) {
                 const fullPath = path.join(currentPath, entry.name);
 
                 // Skip hidden files and node_modules
                 if (entry.name.startsWith('.') || entry.name === 'node_modules') {
-                    console.log(`  Skipping hidden/node_modules: ${entry.name}`);
                     continue;
                 }
 
                 if (entry.isDirectory()) {
-                    console.log(`  Entering directory: ${entry.name}`);
                     // Recursively scan subdirectory
                     await this.scanDirectoryRecursive(fullPath, rootPath);
                 } else if (entry.isFile()) {
                     this.progress.totalFiles++;
-                    const ext = path.extname(fullPath).toLowerCase();
-
-                    console.log(`  File: ${entry.name} (ext: ${ext})`);
 
                     // Check if it's a model file
                     if (isModelFile(fullPath)) {
-                        console.log(`    -> Indexing as model`);
                         this.indexModel(fullPath, rootPath);
                     } else if (isArchiveFile(fullPath)) {
-                        console.log(`    -> Indexing as archive`);
                         // Index zip files as models
                         this.indexModel(fullPath, rootPath);
-                    } else {
-                        console.log(`    -> Skipping (not a model file)`);
                     }
 
                     this.progress.processedFiles++;
+
+                    // Log progress every 1000 files
+                    if (this.progress.processedFiles % 1000 === 0) {
+                        console.log(`Progress: ${this.progress.processedFiles}/${this.progress.totalFiles} files processed, ${this.progress.modelsFound} models found`);
+                    }
                 }
             }
         } catch (error) {

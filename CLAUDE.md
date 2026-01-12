@@ -213,11 +213,32 @@ proxy: {
 }
 ```
 
+## Recent Improvements
+
+### Scan Progress & Performance
+- **Progress bar**: Real-time visual progress during directory scanning
+- **Live updates**: Frontend polls scan status every 500ms during active scans
+- **Smart logging**: Backend logs progress every 1000 files instead of per-file (reduces noise for large collections)
+- **Auto-reload stats**: Statistics automatically refresh when scan completes
+
+### Image Display
+- **Primary images**: Model cards now display associated images from the model directory
+- **Automatic selection**: Prioritizes images with matching filename, falls back to any image in folder
+- **Graceful fallback**: Shows package emoji (📦) for models without images
+- **Image optimization**: Hover effects and smooth transitions on model cards
+
+### Performance with Large Collections
+- Successfully tested with 38k+ models and 33k+ assets
+- Pagination handles large result sets efficiently
+- Database queries optimized with proper indexing
+- Image loading with error handling for missing/broken files
+
 ## Future Enhancements
 - Zip file extraction and viewing
 - 3D model preview (STL viewer)
-- Thumbnail generation for models
+- Thumbnail generation for models (resize large images)
 - File system watcher for auto-refresh
 - Drag-and-drop reordering for print queue
 - Export/import favorites and queue
 - Print statistics and analytics
+- Lazy loading for images (only load visible thumbnails)

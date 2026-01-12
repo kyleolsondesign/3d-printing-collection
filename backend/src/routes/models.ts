@@ -25,7 +25,22 @@ router.get('/', (req, res) => {
         query += ' ORDER BY filename ASC LIMIT ? OFFSET ?';
         params.push(limit, offset);
 
-        const models = db.prepare(query).all(...params);
+        const models = db.prepare(query).all(...params) as any[];
+
+        // Get primary image for each model
+        const modelsWithImages = models.map(model => {
+            const primaryImage = db.prepare(`
+                SELECT filepath FROM model_assets
+                WHERE model_id = ? AND asset_type = 'image'
+                ORDER BY is_primary DESC, id ASC
+                LIMIT 1
+            `).get(model.id) as { filepath: string } | undefined;
+
+            return {
+                ...model,
+                primaryImage: primaryImage?.filepath || null
+            };
+        });
 
         // Get total count
         let countQuery = 'SELECT COUNT(*) as total FROM models';
@@ -38,7 +53,7 @@ router.get('/', (req, res) => {
         const { total } = db.prepare(countQuery).get(...countParams) as { total: number };
 
         res.json({
-            models,
+            models: modelsWithImages,
             pagination: {
                 page,
                 limit,

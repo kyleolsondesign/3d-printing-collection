@@ -26,10 +26,16 @@
 
     <div v-if="scanStatus.scanning" class="scan-progress">
       <h4>Scan in Progress</h4>
+      <div class="progress-bar">
+        <div
+          class="progress-fill"
+          :style="{ width: scanProgressPercent + '%' }"
+        ></div>
+      </div>
       <div class="progress-info">
-        <p>Files processed: {{ scanStatus.processedFiles }} / {{ scanStatus.totalFiles }}</p>
-        <p>Models found: {{ scanStatus.modelsFound }}</p>
-        <p>Assets found: {{ scanStatus.assetsFound }}</p>
+        <p><strong>{{ scanStatus.processedFiles.toLocaleString() }}</strong> / {{ scanStatus.totalFiles.toLocaleString() }} files processed ({{ scanProgressPercent }}%)</p>
+        <p><strong>{{ scanStatus.modelsFound.toLocaleString() }}</strong> models found</p>
+        <p><strong>{{ scanStatus.assetsFound.toLocaleString() }}</strong> assets found</p>
       </div>
     </div>
 
@@ -62,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { systemApi } from '../services/api';
 
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');
@@ -82,6 +88,11 @@ const stats = ref({
   totalFavorites: 0,
   totalPrinted: 0,
   totalQueued: 0
+});
+
+const scanProgressPercent = computed(() => {
+  if (scanStatus.value.totalFiles === 0) return 0;
+  return Math.round((scanStatus.value.processedFiles / scanStatus.value.totalFiles) * 100);
 });
 
 onMounted(async () => {
@@ -113,9 +124,16 @@ async function loadStats() {
 async function checkScanStatus() {
   try {
     const response = await systemApi.getScanStatus();
+    const wasScanning = scanStatus.value.scanning;
     scanStatus.value = response.data;
+
     if (scanStatus.value.scanning) {
-      setTimeout(checkScanStatus, 1000);
+      // Poll more frequently during active scan
+      setTimeout(checkScanStatus, 500);
+    } else if (wasScanning && !scanStatus.value.scanning) {
+      // Scan just completed, reload stats
+      await loadStats();
+      showMessage('Scan completed successfully!', 'success');
     }
   } catch (error) {
     console.error('Failed to check scan status:', error);
@@ -247,8 +265,33 @@ h2 {
   color: #0066cc;
 }
 
+.progress-bar {
+  width: 100%;
+  height: 24px;
+  background: #e0e0e0;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0066cc, #0052a3);
+  transition: width 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .progress-info p {
   margin: 0.5rem 0;
+}
+
+.progress-info strong {
+  color: #0066cc;
 }
 
 .message {

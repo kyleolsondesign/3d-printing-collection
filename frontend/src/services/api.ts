@@ -15,6 +15,7 @@ export interface Model {
     is_paid: number;
     is_original: number;
     created_at: string;
+    primaryImage?: string | null;
     isFavorite?: boolean;
     isQueued?: boolean;
 }
