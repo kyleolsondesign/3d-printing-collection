@@ -1,0 +1,39 @@
+import { createRouter, createWebHistory } from 'vue-router';
+import BrowseView from '../views/BrowseView.vue';
+import FavoritesView from '../views/FavoritesView.vue';
+import PrintedView from '../views/PrintedView.vue';
+import QueueView from '../views/QueueView.vue';
+import SettingsView from '../views/SettingsView.vue';
+
+const router = createRouter({
+    history: createWebHistory(),
+    routes: [
+        {
+            path: '/',
+            name: 'browse',
+            component: BrowseView
+        },
+        {
+            path: '/favorites',
+            name: 'favorites',
+            component: FavoritesView
+        },
+        {
+            path: '/printed',
+            name: 'printed',
+            component: PrintedView
+        },
+        {
+            path: '/queue',
+            name: 'queue',
+            component: QueueView
+        },
+        {
+            path: '/settings',
+            name: 'settings',
+            component: SettingsView
+        }
+    ]
+});
+
+export default router;
