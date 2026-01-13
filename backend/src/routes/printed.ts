@@ -1,7 +1,38 @@
 import express from 'express';
 import db from '../config/database.js';
+import { setFinderTags, getFinderTags, TAG_COLORS } from '../utils/finderTags.js';
 
 const router = express.Router();
+
+// Helper to update Finder tags for a model based on its current state
+async function updateModelFinderTags(modelId: number): Promise<void> {
+    try {
+        // Get model filepath
+        const model = db.prepare('SELECT filepath FROM models WHERE id = ?').get(modelId) as { filepath: string } | undefined;
+        if (!model) return;
+
+        // Check printed status
+        const printed = db.prepare('SELECT rating FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC LIMIT 1').get(modelId) as { rating: 'good' | 'bad' | null } | undefined;
+
+        // Check queue status
+        const queued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(modelId) as { id: number } | undefined;
+
+        // Build tags array
+        const tags: string[] = [];
+
+        if (printed) {
+            tags.push(printed.rating === 'good' ? TAG_COLORS.PRINTED_GOOD : TAG_COLORS.PRINTED_BAD);
+        }
+
+        if (queued) {
+            tags.push(TAG_COLORS.QUEUED);
+        }
+
+        await setFinderTags(model.filepath, tags);
+    } catch (error) {
+        console.error('Failed to update Finder tags:', error);
+    }
+}
 
 // Get all printed models
 router.get('/', (req, res) => {
@@ -21,7 +52,7 @@ router.get('/', (req, res) => {
 });
 
 // Mark model as printed
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const { model_id, rating, notes, print_time_hours, filament_used_grams } = req.body;
 
@@ -46,6 +77,9 @@ router.post('/', (req, res) => {
             filament_used_grams || null
         );
 
+        // Update Finder tags
+        await updateModelFinderTags(model_id);
+
         res.json({
             id: result.lastInsertRowid,
             model_id,
@@ -61,7 +95,7 @@ router.post('/', (req, res) => {
 });
 
 // Update printed model record
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { rating, notes, print_time_hours, filament_used_grams } = req.body;
@@ -70,11 +104,19 @@ router.put('/:id', (req, res) => {
             return res.status(400).json({ error: 'rating must be "good" or "bad"' });
         }
 
+        // Get model_id before update
+        const existing = db.prepare('SELECT model_id FROM printed_models WHERE id = ?').get(id) as { model_id: number } | undefined;
+
         db.prepare(`
             UPDATE printed_models
             SET rating = ?, notes = ?, print_time_hours = ?, filament_used_grams = ?
             WHERE id = ?
         `).run(rating, notes, print_time_hours, filament_used_grams, id);
+
+        // Update Finder tags
+        if (existing) {
+            await updateModelFinderTags(existing.model_id);
+        }
 
         res.json({ success: true });
     } catch (error) {
@@ -84,11 +126,19 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete printed model record
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
 
+        // Get model_id before delete
+        const existing = db.prepare('SELECT model_id FROM printed_models WHERE id = ?').get(id) as { model_id: number } | undefined;
+
         db.prepare('DELETE FROM printed_models WHERE id = ?').run(id);
+
+        // Update Finder tags
+        if (existing) {
+            await updateModelFinderTags(existing.model_id);
+        }
 
         res.json({ success: true });
     } catch (error) {

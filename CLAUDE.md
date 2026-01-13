@@ -87,6 +87,8 @@ backend/
       scanner.ts          # Directory scanning and indexing
     utils/
       fileTypes.ts        # File type detection
+      finderTags.ts       # macOS Finder tag read/write utilities
+      nameCleanup.ts      # Folder name cleanup utilities
     server.ts             # Express server entry point
   data/
     collection.db         # SQLite database
@@ -120,6 +122,7 @@ frontend/
   - `filepath`: Path to the folder
   - `category`: Primary category extracted from folder structure
   - `file_count`: Number of model files in the folder
+  - `deleted_at`: Soft delete timestamp (NULL = active, set = deleted)
   - Excludes loose files (files in root directory)
 - **model_files**: All actual model files within each folder
   - Multiple files per model (alternate versions, different formats)
@@ -292,6 +295,47 @@ For models without standalone images, the scanner automatically extracts images 
 - **Grid view**: Card-based layout with images (default)
 - **Table view**: Compact list with columns for name, category, file count, date, actions
 - **View toggle**: Switch between grid and table views
+
+### Scan Modes
+Three scan modes available in Settings:
+- **Sync (Recommended)**: Non-destructive sync that updates existing records, adds new models, and soft-deletes models whose folders no longer exist. Preserves favorites, print history, and queue.
+- **Add Only**: Only adds new models that don't exist in the database. Never modifies or deletes existing records.
+- **Full Rebuild**: Clears all model data and rescans from scratch. Favorites, history, and queue are preserved but become orphaned if model is deleted.
+
+### Soft Deletes
+- Models use soft deletion (deleted_at timestamp) instead of hard deletion
+- Deleted models are filtered out of queries by default
+- If a deleted model's folder reappears, it's automatically restored during sync
+- Stats page shows count of deleted models
+
+### macOS Finder Tag Integration
+The app integrates with macOS Finder tags to sync print status:
+
+**Tag Color Meanings:**
+- **Green tag**: Model has been printed with "good" rating
+- **Red tag**: Model has been printed with "bad" rating
+- **Blue tag**: Model is in the print queue
+
+**Reading Tags (during scan):**
+- Scanner reads Finder tags from model folders
+- Automatically creates printed_models/print_queue records based on tags
+- Existing records are preserved (tags only create new records)
+
+**Writing Tags (on UI changes):**
+- Adding/updating printed status updates folder's Green/Red tag
+- Adding/removing from queue updates folder's Blue tag
+- Tags are synced immediately when changes are made in the UI
+
+**Implementation:**
+- Uses `mdls` command to read tags
+- Uses `xattr` with binary plist to write tags
+- Tag utility: `backend/src/utils/finderTags.ts`
+
+### Nested Folder Handling
+- Model folders can contain nested subfolders (variants, parts, etc.)
+- Parent folder at depth 3 (root/category/model-folder) is the model
+- All files in nested subfolders are attributed to the parent model
+- Assets (images, PDFs) are also searched recursively in subfolders
 
 ### Performance with Large Collections
 - Successfully tested with 38k+ models and 33k+ assets

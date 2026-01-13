@@ -1,11 +1,17 @@
 import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import yauzl from 'yauzl';
 import db from '../config/database.js';
 import { isModelFile, isImageFile, isDocumentFile, isArchiveFile } from '../utils/fileTypes.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
+import { getFinderTags, parseModelStateFromTags } from '../utils/finderTags.js';
 
 export type ScanMode = 'full' | 'full_sync' | 'add_only';
+
+// Helper to yield control back to the event loop periodically
+// This prevents the scanner from blocking API requests
+const yieldToEventLoop = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
 interface ScanProgress {
     totalFiles: number;
@@ -378,6 +384,11 @@ class Scanner {
                     }
 
                     this.progress.processedFiles++;
+
+                    // Yield control every 100 files to keep API responsive
+                    if (this.progress.processedFiles % 100 === 0) {
+                        await yieldToEventLoop();
+                    }
                 }
             }
         } catch (error) {
@@ -504,6 +515,14 @@ class Scanner {
                 if (!this.hasPrimaryImage(modelId)) {
                     modelsNeedingImages.push({ modelId, folderPath });
                 }
+
+                // Process Finder tags for printed/queue status
+                await this.processFinderTags(modelId, folderPath);
+
+                // Yield control every 50 models to keep API responsive
+                if (this.progress.modelsFound % 50 === 0 || this.progress.modelsUpdated % 50 === 0) {
+                    await yieldToEventLoop();
+                }
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 console.error(`Error indexing folder ${folderPath}:`, message);
@@ -513,8 +532,14 @@ class Scanner {
         // Extract images from archives for models without images
         if (modelsNeedingImages.length > 0) {
             console.log(`Extracting images from archives for ${modelsNeedingImages.length} models...`);
+            let extractCount = 0;
             for (const { modelId, folderPath } of modelsNeedingImages) {
                 await this.extractImageFromArchives(modelId, folderPath);
+                extractCount++;
+                // Yield control every 20 extractions
+                if (extractCount % 20 === 0) {
+                    await yieldToEventLoop();
+                }
             }
         }
     }
@@ -601,6 +626,51 @@ class Scanner {
     private hasPrimaryImage(modelId: number): boolean {
         const result = db.prepare('SELECT COUNT(*) as count FROM model_assets WHERE model_id = ? AND asset_type = ?').get(modelId, 'image') as { count: number };
         return result.count > 0;
+    }
+
+    /**
+     * Process Finder tags on a model folder and create printed_models/print_queue records.
+     * - Green tag = printed with 'good' rating
+     * - Red tag = printed with 'bad' rating
+     * - Blue tag = in print queue
+     */
+    private async processFinderTags(modelId: number, folderPath: string): Promise<void> {
+        try {
+            const tags = await getFinderTags(folderPath);
+            if (tags.length === 0) return;
+
+            const state = parseModelStateFromTags(tags);
+
+            // Handle printed status
+            if (state.isPrinted) {
+                // Check if already in printed_models
+                const existing = db.prepare('SELECT id FROM printed_models WHERE model_id = ?').get(modelId) as { id: number } | undefined;
+
+                if (!existing) {
+                    // Insert new printed record (discovered from Finder tag)
+                    db.prepare(`
+                        INSERT INTO printed_models (model_id, rating, notes)
+                        VALUES (?, ?, 'Imported from Finder tag')
+                    `).run(modelId, state.printRating);
+                }
+            }
+
+            // Handle queue status
+            if (state.isQueued) {
+                // Check if already in print_queue
+                const existing = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(modelId) as { id: number } | undefined;
+
+                if (!existing) {
+                    // Insert new queue record (discovered from Finder tag)
+                    db.prepare(`
+                        INSERT INTO print_queue (model_id, notes)
+                        VALUES (?, 'Imported from Finder tag')
+                    `).run(modelId);
+                }
+            }
+        } catch (error) {
+            // Silently continue if tag reading fails
+        }
     }
 
     private async extractImageFromArchives(modelId: number, folderPath: string): Promise<void> {

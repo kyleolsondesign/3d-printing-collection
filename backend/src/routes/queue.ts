@@ -1,7 +1,38 @@
 import express from 'express';
 import db from '../config/database.js';
+import { setFinderTags, TAG_COLORS } from '../utils/finderTags.js';
 
 const router = express.Router();
+
+// Helper to update Finder tags for a model based on its current state
+async function updateModelFinderTags(modelId: number): Promise<void> {
+    try {
+        // Get model filepath
+        const model = db.prepare('SELECT filepath FROM models WHERE id = ?').get(modelId) as { filepath: string } | undefined;
+        if (!model) return;
+
+        // Check printed status
+        const printed = db.prepare('SELECT rating FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC LIMIT 1').get(modelId) as { rating: 'good' | 'bad' | null } | undefined;
+
+        // Check queue status
+        const queued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(modelId) as { id: number } | undefined;
+
+        // Build tags array
+        const tags: string[] = [];
+
+        if (printed) {
+            tags.push(printed.rating === 'good' ? TAG_COLORS.PRINTED_GOOD : TAG_COLORS.PRINTED_BAD);
+        }
+
+        if (queued) {
+            tags.push(TAG_COLORS.QUEUED);
+        }
+
+        await setFinderTags(model.filepath, tags);
+    } catch (error) {
+        console.error('Failed to update Finder tags:', error);
+    }
+}
 
 // Get print queue
 router.get('/', (req, res) => {
@@ -21,7 +52,7 @@ router.get('/', (req, res) => {
 });
 
 // Add to print queue
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const { model_id, priority, notes, estimated_time_hours } = req.body;
 
@@ -40,6 +71,9 @@ router.post('/', (req, res) => {
             notes || null,
             estimated_time_hours || null
         );
+
+        // Update Finder tags
+        await updateModelFinderTags(model_id);
 
         res.json({
             id: result.lastInsertRowid,
@@ -74,11 +108,19 @@ router.put('/:id', (req, res) => {
 });
 
 // Remove from queue
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
 
+        // Get model_id before delete
+        const existing = db.prepare('SELECT model_id FROM print_queue WHERE id = ?').get(id) as { model_id: number } | undefined;
+
         db.prepare('DELETE FROM print_queue WHERE id = ?').run(id);
+
+        // Update Finder tags
+        if (existing) {
+            await updateModelFinderTags(existing.model_id);
+        }
 
         res.json({ success: true });
     } catch (error) {
@@ -110,7 +152,7 @@ router.post('/reorder', (req, res) => {
 });
 
 // Toggle queue by model_id
-router.post('/toggle', (req, res) => {
+router.post('/toggle', async (req, res) => {
     try {
         const { model_id } = req.body;
 
@@ -122,10 +164,12 @@ router.post('/toggle', (req, res) => {
 
         if (existing) {
             db.prepare('DELETE FROM print_queue WHERE model_id = ?').run(model_id);
+            await updateModelFinderTags(model_id);
             res.json({ queued: false });
         } else {
             const insert = db.prepare('INSERT INTO print_queue (model_id) VALUES (?)');
             insert.run(model_id);
+            await updateModelFinderTags(model_id);
             res.json({ queued: true });
         }
     } catch (error) {
