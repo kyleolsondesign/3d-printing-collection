@@ -6,12 +6,14 @@ import mime from 'mime-types';
 
 const router = express.Router();
 
-// Get all models with pagination and filtering
+// Get all models with pagination, filtering, and sorting
 router.get('/', (req, res) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 50;
         const category = req.query.category as string;
+        const sort = req.query.sort as string || 'date_added';
+        const order = req.query.order as string || 'desc';
         const offset = (page - 1) * limit;
 
         let query = 'SELECT * FROM models';
@@ -22,7 +24,17 @@ router.get('/', (req, res) => {
             params.push(category);
         }
 
-        query += ' ORDER BY filename ASC LIMIT ? OFFSET ?';
+        // Map sort parameter to column name
+        const sortColumns: Record<string, string> = {
+            'date_added': 'date_added',
+            'date_created': 'date_created',
+            'name': 'filename',
+            'category': 'category'
+        };
+        const sortColumn = sortColumns[sort] || 'date_added';
+        const sortOrder = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+        query += ` ORDER BY ${sortColumn} ${sortOrder} NULLS LAST, filename ASC LIMIT ? OFFSET ?`;
         params.push(limit, offset);
 
         const models = db.prepare(query).all(...params) as any[];

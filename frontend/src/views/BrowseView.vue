@@ -15,21 +15,52 @@
     </div>
 
     <div class="filters">
-      <div class="category-filters">
-        <button
-          @click="filterByCategory('all')"
-          :class="['category-btn', { active: store.selectedCategory === 'all' }]"
-        >
-          All Models
-        </button>
-        <button
-          v-for="cat in store.categories"
-          :key="cat.category"
-          @click="filterByCategory(cat.category)"
-          :class="['category-btn', { active: store.selectedCategory === cat.category }]"
-        >
-          {{ cat.category }} ({{ cat.count }})
-        </button>
+      <div class="filter-row">
+        <div class="category-filters">
+          <button
+            @click="filterByCategory('all')"
+            :class="['category-btn', { active: store.selectedCategory === 'all' }]"
+          >
+            All Models
+          </button>
+          <button
+            v-for="cat in store.categories"
+            :key="cat.category"
+            @click="filterByCategory(cat.category)"
+            :class="['category-btn', { active: store.selectedCategory === cat.category }]"
+          >
+            {{ cat.category }} ({{ cat.count }})
+          </button>
+        </div>
+        <div class="view-controls">
+          <div class="sort-controls">
+            <select v-model="sortField" @change="handleSortChange" class="sort-select">
+              <option value="date_added">Date Added</option>
+              <option value="date_created">Date Created</option>
+              <option value="name">Name</option>
+              <option value="category">Category</option>
+            </select>
+            <button @click="toggleSortOrder" class="sort-order-btn" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
+              {{ sortOrder === 'desc' ? '↓' : '↑' }}
+            </button>
+          </div>
+          <div class="view-toggle">
+            <button
+              @click="viewMode = 'grid'"
+              :class="['view-btn', { active: viewMode === 'grid' }]"
+              title="Grid view"
+            >
+              ▦
+            </button>
+            <button
+              @click="viewMode = 'table'"
+              :class="['view-btn', { active: viewMode === 'table' }]"
+              title="Table view"
+            >
+              ≡
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -40,7 +71,8 @@
       <p>Go to Settings to configure your model directory and run a scan.</p>
     </div>
 
-    <div v-else class="models-grid">
+    <!-- Grid View -->
+    <div v-else-if="viewMode === 'grid'" class="models-grid">
       <div v-for="model in store.models" :key="model.id" class="model-card">
         <div class="model-image">
           <img
@@ -86,6 +118,64 @@
       </div>
     </div>
 
+    <!-- Table View -->
+    <div v-else class="models-table-container">
+      <table class="models-table">
+        <thead>
+          <tr>
+            <th class="col-image"></th>
+            <th class="col-name">Name</th>
+            <th class="col-category">Category</th>
+            <th class="col-files">Files</th>
+            <th class="col-date">Date Added</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="model in store.models" :key="model.id">
+            <td class="col-image">
+              <div class="table-image">
+                <img
+                  v-if="model.primaryImage"
+                  :src="modelsApi.getFileUrl(model.primaryImage)"
+                  :alt="model.filename"
+                  @error="onImageError"
+                />
+                <span v-else class="no-image-small">📦</span>
+              </div>
+            </td>
+            <td class="col-name">
+              <span class="model-name" :title="model.filename">{{ model.filename }}</span>
+              <span v-if="model.is_paid" class="badge-paid badge-small">Paid</span>
+              <span v-if="model.is_original" class="badge-original badge-small">Original</span>
+            </td>
+            <td class="col-category">{{ model.category }}</td>
+            <td class="col-files">{{ model.file_count }}</td>
+            <td class="col-date">{{ formatDate(model.date_added) }}</td>
+            <td class="col-actions">
+              <div class="table-actions">
+                <button @click="openInFinder(model)" class="btn-icon-small" title="Open in Finder">📁</button>
+                <button
+                  @click="store.toggleFavorite(model.id)"
+                  :class="['btn-icon-small', { active: model.isFavorite }]"
+                  title="Favorite"
+                >
+                  {{ model.isFavorite ? '★' : '☆' }}
+                </button>
+                <button
+                  @click="store.toggleQueue(model.id)"
+                  :class="['btn-icon-small', { active: model.isQueued }]"
+                  title="Add to Queue"
+                >
+                  {{ model.isQueued ? '✓' : '+' }}
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <div v-if="store.totalPages > 1" class="pagination">
       <button
         @click="prevPage"
@@ -114,32 +204,44 @@ import type { Model } from '../services/api';
 
 const store = useAppStore();
 const searchInput = ref('');
+const viewMode = ref<'grid' | 'table'>('grid');
+const sortField = ref('date_added');
+const sortOrder = ref<'asc' | 'desc'>('desc');
 
 onMounted(() => {
-  store.loadModels();
+  store.loadModels(1, 'all', sortField.value, sortOrder.value);
 });
 
 function filterByCategory(category: string) {
-  store.loadModels(1, category);
+  store.loadModels(1, category, sortField.value, sortOrder.value);
 }
 
 function handleSearch() {
   if (searchInput.value.trim()) {
     store.searchModels(searchInput.value);
   } else {
-    store.loadModels();
+    store.loadModels(1, 'all', sortField.value, sortOrder.value);
   }
+}
+
+function handleSortChange() {
+  store.loadModels(1, store.selectedCategory, sortField.value, sortOrder.value);
+}
+
+function toggleSortOrder() {
+  sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  store.loadModels(store.currentPage, store.selectedCategory, sortField.value, sortOrder.value);
 }
 
 function prevPage() {
   if (store.currentPage > 1) {
-    store.loadModels(store.currentPage - 1);
+    store.loadModels(store.currentPage - 1, store.selectedCategory, sortField.value, sortOrder.value);
   }
 }
 
 function nextPage() {
   if (store.currentPage < store.totalPages) {
-    store.loadModels(store.currentPage + 1);
+    store.loadModels(store.currentPage + 1, store.selectedCategory, sortField.value, sortOrder.value);
   }
 }
 
@@ -149,11 +251,16 @@ function onImageError(event: Event) {
   target.style.display = 'none';
 }
 
+function formatDate(dateString: string | null): string {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 async function openInFinder(model: Model) {
   try {
-    // Get the directory containing the model file
-    const folderPath = model.filepath.substring(0, model.filepath.lastIndexOf('/'));
-    await systemApi.openFolder(folderPath);
+    // The filepath is the folder path for folder-based models
+    await systemApi.openFolder(model.filepath);
   } catch (error) {
     console.error('Failed to open folder:', error);
     alert('Failed to open folder in Finder');
@@ -199,10 +306,81 @@ async function openInFinder(model: Model) {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+.filter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
 .category-filters {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  flex: 1;
+}
+
+.view-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.sort-controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.sort-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+}
+
+.sort-order-btn {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.sort-order-btn:hover {
+  border-color: #0066cc;
+  color: #0066cc;
+}
+
+.view-toggle {
+  display: flex;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.view-btn {
+  padding: 0.5rem 0.75rem;
+  border: none;
+  background: white;
+  font-size: 1rem;
+  cursor: pointer;
+  border-right: 1px solid #ddd;
+}
+
+.view-btn:last-child {
+  border-right: none;
+}
+
+.view-btn:hover {
+  background: #f0f7ff;
+}
+
+.view-btn.active {
+  background: #0066cc;
+  color: white;
 }
 
 .category-btn {
@@ -390,5 +568,120 @@ async function openInFinder(model: Model) {
 
 .empty p {
   margin: 0.5rem 0;
+}
+
+/* Table View Styles */
+.models-table-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.models-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.models-table th {
+  background: #f5f5f5;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #666;
+  border-bottom: 1px solid #ddd;
+}
+
+.models-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+}
+
+.models-table tr:hover {
+  background: #f9f9f9;
+}
+
+.col-image {
+  width: 60px;
+}
+
+.col-name {
+  min-width: 200px;
+}
+
+.col-category {
+  width: 120px;
+}
+
+.col-files {
+  width: 60px;
+  text-align: center;
+}
+
+.col-date {
+  width: 120px;
+}
+
+.col-actions {
+  width: 120px;
+}
+
+.table-image {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.no-image-small {
+  font-size: 1.25rem;
+}
+
+.model-name {
+  font-weight: 500;
+  margin-right: 0.5rem;
+}
+
+.badge-small {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.35rem;
+  margin-left: 0.25rem;
+}
+
+.table-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.btn-icon-small {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.btn-icon-small:hover {
+  border-color: #0066cc;
+  background: #f0f7ff;
+}
+
+.btn-icon-small.active {
+  background: #0066cc;
+  color: white;
+  border-color: #0066cc;
 }
 </style>

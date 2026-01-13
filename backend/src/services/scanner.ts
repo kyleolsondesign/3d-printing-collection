@@ -13,6 +13,12 @@ interface ScanProgress {
     looseFilesFound: number;
 }
 
+interface FolderData {
+    files: string[];
+    earliestAdded: Date | null;
+    earliestCreated: Date | null;
+}
+
 class Scanner {
     private scanning: boolean = false;
     private progress: ScanProgress = {
@@ -23,7 +29,7 @@ class Scanner {
         assetsFound: 0,
         looseFilesFound: 0
     };
-    private foldersWithModels: Map<string, string[]> = new Map();
+    private foldersWithModels: Map<string, FolderData> = new Map();
 
     async scanDirectory(modelDirectory: string): Promise<ScanProgress> {
         if (this.scanning) {
@@ -111,17 +117,39 @@ class Scanner {
                     // Check if it's a model file
                     if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
                         const folderPath = path.dirname(fullPath);
+                        const relativePath = path.relative(rootPath, fullPath);
+                        const pathDepth = relativePath.split(path.sep).length;
 
-                        // Check if file is in root directory (loose file)
-                        if (folderPath === rootPath) {
+                        // Check if file is loose (in root or directly in a category folder)
+                        // pathDepth 1 = root directory (e.g., "model.stl")
+                        // pathDepth 2 = one level deep (e.g., "Toys/model.stl")
+                        if (pathDepth <= 2) {
                             this.trackLooseFile(fullPath);
                             this.progress.looseFilesFound++;
                         } else {
+                            // Get file dates
+                            const stats = fs.statSync(fullPath);
+                            const fileAdded = stats.mtime;
+                            const fileCreated = stats.birthtime;
+
                             // Add to folder's model files collection
                             if (!this.foldersWithModels.has(folderPath)) {
-                                this.foldersWithModels.set(folderPath, []);
+                                this.foldersWithModels.set(folderPath, {
+                                    files: [],
+                                    earliestAdded: null,
+                                    earliestCreated: null
+                                });
                             }
-                            this.foldersWithModels.get(folderPath)!.push(fullPath);
+                            const folderData = this.foldersWithModels.get(folderPath)!;
+                            folderData.files.push(fullPath);
+
+                            // Track earliest dates
+                            if (!folderData.earliestAdded || fileAdded < folderData.earliestAdded) {
+                                folderData.earliestAdded = fileAdded;
+                            }
+                            if (!folderData.earliestCreated || fileCreated < folderData.earliestCreated) {
+                                folderData.earliestCreated = fileCreated;
+                            }
                         }
                     }
 
@@ -135,7 +163,7 @@ class Scanner {
     }
 
     private indexFoldersAsModels(rootPath: string): void {
-        for (const [folderPath, modelFiles] of this.foldersWithModels.entries()) {
+        for (const [folderPath, folderData] of this.foldersWithModels.entries()) {
             try {
                 const folderName = path.basename(folderPath);
                 const cleanedName = cleanupFolderName(folderName);
@@ -143,10 +171,14 @@ class Scanner {
                 const isPaid = this.isInFolder(folderPath, rootPath, 'Paid');
                 const isOriginal = this.isInFolder(folderPath, rootPath, 'Original Creations');
 
+                // Format dates as ISO strings
+                const dateAdded = folderData.earliestAdded?.toISOString() || null;
+                const dateCreated = folderData.earliestCreated?.toISOString() || null;
+
                 // Insert model (folder) into database
                 const insertModel = db.prepare(`
-                    INSERT INTO models (filename, filepath, category, is_paid, is_original, file_count)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO models (filename, filepath, category, is_paid, is_original, file_count, date_added, date_created)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 `);
 
                 const result = insertModel.run(
@@ -155,7 +187,9 @@ class Scanner {
                     category,
                     isPaid ? 1 : 0,
                     isOriginal ? 1 : 0,
-                    modelFiles.length
+                    folderData.files.length,
+                    dateAdded,
+                    dateCreated
                 );
 
                 const modelId = Number(result.lastInsertRowid);
@@ -166,7 +200,7 @@ class Scanner {
                     VALUES (?, ?, ?, ?, ?)
                 `);
 
-                for (const filePath of modelFiles) {
+                for (const filePath of folderData.files) {
                     const stats = fs.statSync(filePath);
                     const filename = path.basename(filePath);
                     const ext = path.extname(filePath).toLowerCase().replace('.', '');

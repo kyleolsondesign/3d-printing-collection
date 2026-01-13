@@ -31,11 +31,25 @@ function initializeDatabase(): void {
             is_paid INTEGER DEFAULT 0,
             is_original INTEGER DEFAULT 0,
             file_count INTEGER DEFAULT 0,
+            date_added TEXT,
+            date_created TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             last_scanned TEXT DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    // Add date columns if they don't exist (migration for existing databases)
+    try {
+        db.exec(`ALTER TABLE models ADD COLUMN date_added TEXT`);
+    } catch (e) {
+        // Column already exists, ignore
+    }
+    try {
+        db.exec(`ALTER TABLE models ADD COLUMN date_created TEXT`);
+    } catch (e) {
+        // Column already exists, ignore
+    }
 
     // Model files table - stores all actual model files in a folder
     db.exec(`

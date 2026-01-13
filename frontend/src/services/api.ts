@@ -11,9 +11,12 @@ export interface Model {
     filepath: string;
     file_size: number;
     file_type: string;
+    file_count: number;
     category: string;
     is_paid: number;
     is_original: number;
+    date_added: string | null;
+    date_created: string | null;
     created_at: string;
     primaryImage?: string | null;
     isFavorite?: boolean;
@@ -54,7 +57,7 @@ export interface Category {
 
 // Models API
 export const modelsApi = {
-    getAll: (params?: { page?: number; limit?: number; category?: string }) =>
+    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string }) =>
         api.get('/models', { params }),
 
     getById: (id: number) =>

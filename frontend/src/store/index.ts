@@ -22,10 +22,10 @@ export const useAppStore = defineStore('app', () => {
     }));
 
     // Actions
-    async function loadModels(page = 1, category = selectedCategory.value) {
+    async function loadModels(page = 1, category = selectedCategory.value, sort = 'date_added', order = 'desc') {
         loading.value = true;
         try {
-            const response = await modelsApi.getAll({ page, category, limit: 50 });
+            const response = await modelsApi.getAll({ page, category, limit: 50, sort, order });
             models.value = response.data.models;
             currentPage.value = response.data.pagination.page;
             totalPages.value = response.data.pagination.totalPages;
