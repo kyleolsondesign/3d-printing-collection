@@ -1,21 +1,54 @@
 <template>
   <div class="favorites-view">
-    <h2>Favorite Models</h2>
-    <p class="subtitle">Your favorited 3D models</p>
-
-    <div v-if="loading" class="loading">Loading favorites...</div>
-    <div v-else-if="favorites.length === 0" class="empty">
-      <p>No favorites yet. Add some models to your favorites from the Browse page!</p>
+    <div class="header">
+      <div class="header-left">
+        <h2>Favorites</h2>
+        <span class="count-badge" v-if="favorites.length > 0">{{ favorites.length }}</span>
+      </div>
+      <p class="subtitle">Your starred 3D models</p>
     </div>
-    <div v-else class="models-list">
-      <div v-for="fav in favorites" :key="fav.id" class="model-item">
-        <div class="model-content">
+
+    <div v-if="loading" class="loading">
+      <div class="loading-spinner"></div>
+      <span>Loading favorites...</span>
+    </div>
+
+    <div v-else-if="favorites.length === 0" class="empty">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>
+      </div>
+      <h3>No favorites yet</h3>
+      <p>Star models from the Browse page to add them here.</p>
+    </div>
+
+    <div v-else class="favorites-list">
+      <div
+        v-for="(fav, index) in favorites"
+        :key="fav.id"
+        class="favorite-card"
+        :style="{ animationDelay: `${index * 50}ms` }"
+      >
+        <div class="favorite-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+          </svg>
+        </div>
+        <div class="favorite-content">
           <h3>{{ fav.filename }}</h3>
-          <p class="model-path">{{ fav.category }} • {{ fav.file_type }}</p>
+          <div class="favorite-meta">
+            <span class="category-tag">{{ fav.category }}</span>
+            <span class="file-type">{{ fav.file_type }}</span>
+          </div>
           <p v-if="fav.notes" class="notes">{{ fav.notes }}</p>
         </div>
         <div class="actions">
-          <button @click="removeFavorite(fav.id)" class="btn-danger">Remove</button>
+          <button @click="removeFavorite(fav.id)" class="btn-remove" title="Remove from favorites">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -57,69 +90,212 @@ async function removeFavorite(id: number) {
 <style scoped>
 .favorites-view {
   max-width: 900px;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
 h2 {
   font-size: 1.75rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.count-badge {
+  background: var(--accent-primary);
+  color: var(--bg-deepest);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.25rem 0.625rem;
+  border-radius: 12px;
+  font-family: var(--font-mono);
 }
 
 .subtitle {
-  color: #666;
-  margin-bottom: 2rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
 }
 
-.models-list {
+.favorites-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
-.model-item {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+.favorite-card {
+  background: var(--bg-surface);
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
   display: flex;
-  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  transition: all var(--transition-base);
+  animation: fadeIn 0.4s ease-out backwards;
+}
+
+.favorite-card:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+}
+
+.favorite-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
   align-items: center;
+  justify-content: center;
+  background: var(--accent-primary-dim);
+  border-radius: var(--radius-md);
+  color: var(--accent-primary);
+  flex-shrink: 0;
 }
 
-.model-content h3 {
-  font-size: 1.1rem;
+.favorite-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.favorite-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.favorite-content h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
-.model-path {
-  color: #666;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
+.favorite-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+
+.category-tag {
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.file-type {
+  padding: 0.25rem 0.5rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-transform: uppercase;
 }
 
 .notes {
   font-size: 0.9rem;
-  color: #333;
+  color: var(--text-secondary);
   font-style: italic;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
 }
 
-.btn-danger {
-  padding: 0.5rem 1rem;
-  background: #dc2626;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s;
+.actions {
+  flex-shrink: 0;
 }
 
-.btn-danger:hover {
-  background: #b91c1c;
+.btn-remove {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  transition: all var(--transition-base);
 }
 
-.loading, .empty {
+.btn-remove svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  gap: 1rem;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-default);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
   text-align: center;
-  padding: 3rem;
-  color: #666;
+}
+
+.empty-icon {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  border-radius: 50%;
+  margin-bottom: 1.5rem;
+  color: var(--text-muted);
+}
+
+.empty-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.empty h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.empty p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
 }
 </style>

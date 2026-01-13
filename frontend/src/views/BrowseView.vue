@@ -1,16 +1,31 @@
 <template>
   <div class="browse-view">
     <div class="header">
-      <h2>Browse Models</h2>
+      <div class="header-left">
+        <h2>Browse Models</h2>
+        <span class="model-count" v-if="store.models.length > 0">
+          {{ store.models.length }} of {{ totalModels }} models
+        </span>
+      </div>
       <div class="controls">
-        <input
-          v-model="searchInput"
-          @keyup.enter="handleSearch"
-          type="text"
-          placeholder="Search models..."
-          class="search-input"
-        />
-        <button @click="handleSearch" class="btn-primary">Search</button>
+        <div class="search-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            v-model="searchInput"
+            @keyup.enter="handleSearch"
+            type="text"
+            placeholder="Search models..."
+            class="search-input"
+          />
+          <button v-if="searchInput" @click="clearSearch" class="search-clear">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -21,7 +36,7 @@
             @click="filterByCategory('all')"
             :class="['category-btn', { active: store.selectedCategory === 'all' }]"
           >
-            All Models
+            All
           </button>
           <button
             v-for="cat in store.categories"
@@ -29,7 +44,8 @@
             @click="filterByCategory(cat.category)"
             :class="['category-btn', { active: store.selectedCategory === cat.category }]"
           >
-            {{ cat.category }} ({{ cat.count }})
+            {{ cat.category }}
+            <span class="cat-count">{{ cat.count }}</span>
           </button>
         </div>
         <div class="view-controls">
@@ -41,7 +57,12 @@
               <option value="category">Category</option>
             </select>
             <button @click="toggleSortOrder" class="sort-order-btn" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
-              {{ sortOrder === 'desc' ? '↓' : '↑' }}
+              <svg v-if="sortOrder === 'desc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M19 12l-7 7-7-7"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 19V5M5 12l7-7 7 7"/>
+              </svg>
             </button>
           </div>
           <div class="view-toggle">
@@ -50,68 +71,97 @@
               :class="['view-btn', { active: viewMode === 'grid' }]"
               title="Grid view"
             >
-              ▦
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
             </button>
             <button
               @click="viewMode = 'table'"
               :class="['view-btn', { active: viewMode === 'table' }]"
               title="Table view"
             >
-              ≡
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+              </svg>
             </button>
           </div>
         </div>
       </div>
     </div>
 
-    <div v-if="store.loading" class="loading">Loading models...</div>
+    <div v-if="store.loading && store.models.length === 0" class="loading">
+      <div class="loading-spinner"></div>
+      <span>Loading models...</span>
+    </div>
 
     <div v-else-if="store.models.length === 0" class="empty">
-      <p>No models found.</p>
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <h3>No models found</h3>
       <p>Go to Settings to configure your model directory and run a scan.</p>
     </div>
 
     <!-- Grid View -->
     <div v-else-if="viewMode === 'grid'" class="models-grid">
-      <div v-for="model in store.models" :key="model.id" class="model-card">
-        <div class="model-image">
+      <div
+        v-for="(model, index) in store.models"
+        :key="model.id"
+        class="model-card"
+        :style="{ animationDelay: `${Math.min(index * 30, 300)}ms` }"
+      >
+        <div class="model-image" @click="openInFinder(model)">
           <img
             v-if="model.primaryImage"
             :src="modelsApi.getFileUrl(model.primaryImage)"
             :alt="model.filename"
             @error="onImageError"
+            loading="lazy"
           />
-          <div v-else class="no-image">📦</div>
+          <div v-else class="no-image">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+              <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>
+            </svg>
+          </div>
+          <div class="image-overlay">
+            <span class="open-hint">Open folder</span>
+          </div>
         </div>
         <div class="model-info">
           <h3 :title="model.filename">{{ model.filename }}</h3>
           <div class="model-meta">
-            <span class="category">{{ model.category }}</span>
-            <span class="file-type">{{ model.file_type }}</span>
+            <span class="category-tag">{{ model.category }}</span>
+            <span v-if="model.file_count > 1" class="file-count">{{ model.file_count }} files</span>
             <span v-if="model.is_paid" class="badge-paid">Paid</span>
             <span v-if="model.is_original" class="badge-original">Original</span>
           </div>
           <div class="model-actions">
             <button
-              @click="openInFinder(model)"
-              class="btn-icon"
-              title="Open in Finder"
-            >
-              📁
-            </button>
-            <button
               @click="store.toggleFavorite(model.id)"
-              :class="['btn-icon', { active: model.isFavorite }]"
-              title="Favorite"
+              :class="['action-btn', { active: model.isFavorite }]"
+              :title="model.isFavorite ? 'Remove from favorites' : 'Add to favorites'"
             >
-              {{ model.isFavorite ? '★' : '☆' }}
+              <svg viewBox="0 0 24 24" :fill="model.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
             </button>
             <button
               @click="store.toggleQueue(model.id)"
-              :class="['btn-icon', { active: model.isQueued }]"
-              title="Add to Print Queue"
+              :class="['action-btn', { active: model.isQueued }]"
+              :title="model.isQueued ? 'Remove from queue' : 'Add to queue'"
             >
-              {{ model.isQueued ? '✓' : '+' }} Queue
+              <svg v-if="model.isQueued" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
             </button>
           </div>
         </div>
@@ -132,7 +182,12 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="model in store.models" :key="model.id">
+          <tr
+            v-for="(model, index) in store.models"
+            :key="model.id"
+            :style="{ animationDelay: `${Math.min(index * 20, 200)}ms` }"
+            @click="openInFinder(model)"
+          >
             <td class="col-image">
               <div class="table-image">
                 <img
@@ -140,34 +195,47 @@
                   :src="modelsApi.getFileUrl(model.primaryImage)"
                   :alt="model.filename"
                   @error="onImageError"
+                  loading="lazy"
                 />
-                <span v-else class="no-image-small">📦</span>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="no-image-icon">
+                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                </svg>
               </div>
             </td>
             <td class="col-name">
               <span class="model-name" :title="model.filename">{{ model.filename }}</span>
-              <span v-if="model.is_paid" class="badge-paid badge-small">Paid</span>
-              <span v-if="model.is_original" class="badge-original badge-small">Original</span>
+              <div class="name-badges">
+                <span v-if="model.is_paid" class="badge-paid badge-small">Paid</span>
+                <span v-if="model.is_original" class="badge-original badge-small">Original</span>
+              </div>
             </td>
-            <td class="col-category">{{ model.category }}</td>
+            <td class="col-category">
+              <span class="category-pill">{{ model.category }}</span>
+            </td>
             <td class="col-files">{{ model.file_count }}</td>
             <td class="col-date">{{ formatDate(model.date_added) }}</td>
-            <td class="col-actions">
+            <td class="col-actions" @click.stop>
               <div class="table-actions">
-                <button @click="openInFinder(model)" class="btn-icon-small" title="Open in Finder">📁</button>
                 <button
                   @click="store.toggleFavorite(model.id)"
-                  :class="['btn-icon-small', { active: model.isFavorite }]"
+                  :class="['action-btn-small', { active: model.isFavorite }]"
                   title="Favorite"
                 >
-                  {{ model.isFavorite ? '★' : '☆' }}
+                  <svg viewBox="0 0 24 24" :fill="model.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
                 </button>
                 <button
                   @click="store.toggleQueue(model.id)"
-                  :class="['btn-icon-small', { active: model.isQueued }]"
-                  title="Add to Queue"
+                  :class="['action-btn-small', { active: model.isQueued }]"
+                  title="Queue"
                 >
-                  {{ model.isQueued ? '✓' : '+' }}
+                  <svg v-if="model.isQueued" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
                 </button>
               </div>
             </td>
@@ -176,28 +244,21 @@
       </table>
     </div>
 
-    <div v-if="store.totalPages > 1" class="pagination">
-      <button
-        @click="prevPage"
-        :disabled="store.currentPage === 1"
-        class="btn-secondary"
-      >
-        Previous
-      </button>
-      <span>Page {{ store.currentPage }} of {{ store.totalPages }}</span>
-      <button
-        @click="nextPage"
-        :disabled="store.currentPage === store.totalPages"
-        class="btn-secondary"
-      >
-        Next
-      </button>
+    <!-- Infinite scroll sentinel -->
+    <div ref="loadMoreSentinel" class="load-more-sentinel">
+      <div v-if="store.loading && store.models.length > 0" class="loading-more">
+        <div class="loading-spinner small"></div>
+        <span>Loading more...</span>
+      </div>
+      <div v-else-if="!hasMoreModels && store.models.length > 0" class="end-of-list">
+        <span>All {{ totalModels }} models loaded</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useAppStore } from '../store';
 import { modelsApi, systemApi } from '../services/api';
 import type { Model } from '../services/api';
@@ -207,46 +268,136 @@ const searchInput = ref('');
 const viewMode = ref<'grid' | 'table'>('grid');
 const sortField = ref('date_added');
 const sortOrder = ref<'asc' | 'desc'>('desc');
+const loadMoreSentinel = ref<HTMLElement | null>(null);
+const totalModels = ref(0);
 
-onMounted(() => {
-  store.loadModels(1, 'all', sortField.value, sortOrder.value);
+const hasMoreModels = computed(() => store.models.length < totalModels.value);
+
+let observer: IntersectionObserver | null = null;
+
+onMounted(async () => {
+  await loadInitialModels();
+  setupIntersectionObserver();
 });
 
-function filterByCategory(category: string) {
-  store.loadModels(1, category, sortField.value, sortOrder.value);
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect();
+  }
+});
+
+// Watch for changes that require reloading
+watch([sortField, sortOrder], () => {
+  resetAndLoad();
+});
+
+async function loadInitialModels() {
+  const response = await modelsApi.getAll({
+    page: 1,
+    category: 'all',
+    limit: 50,
+    sort: sortField.value,
+    order: sortOrder.value
+  });
+  store.models = response.data.models;
+  store.currentPage = 1;
+  store.totalPages = response.data.pagination.totalPages;
+  totalModels.value = response.data.pagination.total;
+  store.selectedCategory = 'all';
+}
+
+async function resetAndLoad() {
+  store.models = [];
+  store.currentPage = 1;
+  await loadInitialModels();
+}
+
+function setupIntersectionObserver() {
+  observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0];
+      if (entry.isIntersecting && hasMoreModels.value && !store.loading) {
+        loadMoreModels();
+      }
+    },
+    { rootMargin: '200px' }
+  );
+
+  if (loadMoreSentinel.value) {
+    observer.observe(loadMoreSentinel.value);
+  }
+}
+
+async function loadMoreModels() {
+  if (store.loading || !hasMoreModels.value) return;
+
+  store.loading = true;
+  try {
+    const nextPage = store.currentPage + 1;
+    const response = await modelsApi.getAll({
+      page: nextPage,
+      category: store.selectedCategory,
+      limit: 50,
+      sort: sortField.value,
+      order: sortOrder.value
+    });
+
+    store.models = [...store.models, ...response.data.models];
+    store.currentPage = nextPage;
+    store.totalPages = response.data.pagination.totalPages;
+    totalModels.value = response.data.pagination.total;
+  } catch (error) {
+    console.error('Failed to load more models:', error);
+  } finally {
+    store.loading = false;
+  }
+}
+
+async function filterByCategory(category: string) {
+  store.loading = true;
+  store.selectedCategory = category;
+  try {
+    const response = await modelsApi.getAll({
+      page: 1,
+      category,
+      limit: 50,
+      sort: sortField.value,
+      order: sortOrder.value
+    });
+    store.models = response.data.models;
+    store.currentPage = 1;
+    store.totalPages = response.data.pagination.totalPages;
+    totalModels.value = response.data.pagination.total;
+  } catch (error) {
+    console.error('Failed to filter models:', error);
+  } finally {
+    store.loading = false;
+  }
 }
 
 function handleSearch() {
   if (searchInput.value.trim()) {
     store.searchModels(searchInput.value);
   } else {
-    store.loadModels(1, 'all', sortField.value, sortOrder.value);
+    resetAndLoad();
   }
 }
 
+function clearSearch() {
+  searchInput.value = '';
+  resetAndLoad();
+}
+
 function handleSortChange() {
-  store.loadModels(1, store.selectedCategory, sortField.value, sortOrder.value);
+  // Handled by watcher
 }
 
 function toggleSortOrder() {
   sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
-  store.loadModels(store.currentPage, store.selectedCategory, sortField.value, sortOrder.value);
-}
-
-function prevPage() {
-  if (store.currentPage > 1) {
-    store.loadModels(store.currentPage - 1, store.selectedCategory, sortField.value, sortOrder.value);
-  }
-}
-
-function nextPage() {
-  if (store.currentPage < store.totalPages) {
-    store.loadModels(store.currentPage + 1, store.selectedCategory, sortField.value, sortOrder.value);
-  }
+  // Handled by watcher
 }
 
 function onImageError(event: Event) {
-  // Hide broken image, show placeholder instead
   const target = event.target as HTMLImageElement;
   target.style.display = 'none';
 }
@@ -259,11 +410,9 @@ function formatDate(dateString: string | null): string {
 
 async function openInFinder(model: Model) {
   try {
-    // The filepath is the folder path for folder-based models
     await systemApi.openFolder(model.filepath);
   } catch (error) {
     console.error('Failed to open folder:', error);
-    alert('Failed to open folder in Finder');
   }
 }
 </script>
@@ -273,17 +422,34 @@ async function openInFinder(model: Model) {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  animation: fadeIn 0.4s ease-out;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
 }
 
 .header h2 {
   font-size: 1.75rem;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.model-count {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
 }
 
 .controls {
@@ -291,39 +457,130 @@ async function openInFinder(model: Model) {
   gap: 0.5rem;
 }
 
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 1rem;
+  width: 18px;
+  height: 18px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
 .search-input {
-  padding: 0.5rem 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  min-width: 300px;
+  padding: 0.625rem 2.5rem 0.625rem 2.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  font-size: 0.9rem;
+  min-width: 280px;
+  color: var(--text-primary);
+}
+
+.search-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-dim);
+}
+
+.search-clear {
+  position: absolute;
+  right: 0.75rem;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: var(--bg-hover);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.search-clear svg {
+  width: 12px;
+  height: 12px;
+  color: var(--text-tertiary);
+}
+
+.search-clear:hover {
+  background: var(--text-tertiary);
+}
+
+.search-clear:hover svg {
+  color: var(--bg-deepest);
 }
 
 .filters {
-  background: white;
+  background: var(--bg-surface);
   padding: 1rem;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
 }
 
 .filter-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
 }
 
 .category-filters {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.375rem;
   flex-wrap: wrap;
   flex: 1;
 }
 
+.category-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all var(--transition-base);
+}
+
+.category-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+.category-btn.active {
+  background: var(--accent-primary);
+  color: var(--bg-deepest);
+  border-color: var(--accent-primary);
+}
+
+.category-btn.active .cat-count {
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+}
+
+.cat-count {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  padding: 0.125rem 0.375rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+}
+
 .view-controls {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   align-items: center;
 }
 
@@ -334,110 +591,118 @@ async function openInFinder(model: Model) {
 
 .sort-select {
   padding: 0.5rem 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  background: white;
-}
-
-.sort-order-btn {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #ddd;
-  background: white;
-  border-radius: 6px;
-  font-size: 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
+.sort-select:hover {
+  border-color: var(--border-strong);
+}
+
+.sort-order-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+
+.sort-order-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 .sort-order-btn:hover {
-  border-color: #0066cc;
-  color: #0066cc;
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }
 
 .view-toggle {
   display: flex;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
   overflow: hidden;
+  background: var(--bg-elevated);
 }
 
 .view-btn {
-  padding: 0.5rem 0.75rem;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
-  background: white;
-  font-size: 1rem;
-  cursor: pointer;
-  border-right: 1px solid #ddd;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-right: 1px solid var(--border-default);
 }
 
 .view-btn:last-child {
   border-right: none;
 }
 
+.view-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 .view-btn:hover {
-  background: #f0f7ff;
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .view-btn.active {
-  background: #0066cc;
-  color: white;
+  background: var(--accent-primary);
+  color: var(--bg-deepest);
 }
 
-.category-btn {
-  padding: 0.5rem 1rem;
-  border: 1px solid #ddd;
-  background: white;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-}
-
-.category-btn:hover {
-  border-color: #0066cc;
-  color: #0066cc;
-}
-
-.category-btn.active {
-  background: #0066cc;
-  color: white;
-  border-color: #0066cc;
-}
-
+/* Grid View */
 .models-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
 }
 
 .model-card {
-  background: white;
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-base);
+  animation: fadeIn 0.4s ease-out backwards;
 }
 
 .model-card:hover {
+  border-color: var(--border-strong);
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-lg);
 }
 
 .model-image {
   width: 100%;
   aspect-ratio: 4/3;
-  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-deep) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .model-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s ease;
+  transition: transform var(--transition-slow);
 }
 
 .model-card:hover .model-image img {
@@ -445,8 +710,39 @@ async function openInFinder(model: Model) {
 }
 
 .no-image {
-  color: #ccc;
-  font-size: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.no-image svg {
+  width: 48px;
+  height: 48px;
+}
+
+.image-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.model-image:hover .image-overlay {
+  opacity: 1;
+}
+
+.open-hint {
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  background: var(--accent-primary);
+  border-radius: var(--radius-md);
 }
 
 .model-info {
@@ -454,12 +750,13 @@ async function openInFinder(model: Model) {
 }
 
 .model-info h3 {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-primary);
 }
 
 .model-meta {
@@ -467,114 +764,88 @@ async function openInFinder(model: Model) {
   gap: 0.5rem;
   flex-wrap: wrap;
   margin-bottom: 0.75rem;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
-.category, .file-type {
+.category-tag {
   padding: 0.25rem 0.5rem;
-  background: #f0f0f0;
-  border-radius: 4px;
-  color: #666;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.file-count {
+  padding: 0.25rem 0.5rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
 }
 
 .badge-paid {
-  padding: 0.25rem 0.5rem;
-  background: #fef3c7;
-  color: #92400e;
-  border-radius: 4px;
-  font-weight: 500;
+  padding: 0.2rem 0.5rem;
+  background: var(--paid-bg);
+  color: var(--paid-text);
+  border: 1px solid var(--paid-border);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .badge-original {
-  padding: 0.25rem 0.5rem;
-  background: #dbeafe;
-  color: #1e40af;
-  border-radius: 4px;
-  font-weight: 500;
+  padding: 0.2rem 0.5rem;
+  background: var(--original-bg);
+  color: var(--original-text);
+  border: 1px solid var(--original-border);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .model-actions {
-  display: grid;
-  grid-template-columns: auto 1fr 1fr;
+  display: flex;
   gap: 0.5rem;
 }
 
-.btn-icon {
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  background: white;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover {
-  border-color: #0066cc;
-  background: #f0f7ff;
-}
-
-.btn-icon.active {
-  background: #0066cc;
-  color: white;
-  border-color: #0066cc;
-}
-
-.btn-primary {
-  padding: 0.5rem 1.5rem;
-  background: #0066cc;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.btn-primary:hover {
-  background: #0052a3;
-}
-
-.btn-secondary {
-  padding: 0.5rem 1rem;
-  background: white;
-  color: #333;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  border-color: #0066cc;
-  color: #0066cc;
-}
-
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pagination {
+.action-btn {
+  flex: 1;
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
+  justify-content: center;
+  padding: 0.5rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  transition: all var(--transition-base);
 }
 
-.loading, .empty {
-  text-align: center;
-  padding: 3rem;
-  color: #666;
+.action-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
-.empty p {
-  margin: 0.5rem 0;
+.action-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
 }
 
-/* Table View Styles */
+.action-btn.active {
+  background: var(--accent-primary);
+  color: var(--bg-deepest);
+  border-color: var(--accent-primary);
+}
+
+/* Table View */
 .models-table-container {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
   overflow: hidden;
 }
 
@@ -584,27 +855,35 @@ async function openInFinder(model: Model) {
 }
 
 .models-table th {
-  background: #f5f5f5;
-  padding: 0.75rem 1rem;
+  background: var(--bg-elevated);
+  padding: 0.875rem 1rem;
   text-align: left;
   font-weight: 600;
-  font-size: 0.85rem;
-  color: #666;
-  border-bottom: 1px solid #ddd;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-default);
 }
 
 .models-table td {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
 }
 
-.models-table tr:hover {
-  background: #f9f9f9;
+.models-table tr {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  animation: fadeIn 0.3s ease-out backwards;
+}
+
+.models-table tbody tr:hover {
+  background: var(--bg-hover);
 }
 
 .col-image {
-  width: 60px;
+  width: 56px;
 }
 
 .col-name {
@@ -612,28 +891,31 @@ async function openInFinder(model: Model) {
 }
 
 .col-category {
-  width: 120px;
+  width: 140px;
 }
 
 .col-files {
-  width: 60px;
+  width: 70px;
   text-align: center;
 }
 
 .col-date {
-  width: 120px;
+  width: 130px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
 }
 
 .col-actions {
-  width: 120px;
+  width: 100px;
 }
 
 .table-image {
-  width: 48px;
-  height: 48px;
-  border-radius: 4px;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  background: #f0f0f0;
+  background: var(--bg-elevated);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -645,43 +927,188 @@ async function openInFinder(model: Model) {
   object-fit: cover;
 }
 
-.no-image-small {
-  font-size: 1.25rem;
+.no-image-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--text-muted);
 }
 
 .model-name {
   font-weight: 500;
-  margin-right: 0.5rem;
+  color: var(--text-primary);
+}
+
+.name-badges {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
 }
 
 .badge-small {
-  font-size: 0.7rem;
-  padding: 0.15rem 0.35rem;
-  margin-left: 0.25rem;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+}
+
+.category-pill {
+  display: inline-block;
+  padding: 0.25rem 0.625rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
 .table-actions {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.375rem;
 }
 
-.btn-icon-small {
-  padding: 0.35rem 0.5rem;
-  border: 1px solid #ddd;
-  background: white;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  cursor: pointer;
+.action-btn-small {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  transition: all var(--transition-base);
 }
 
-.btn-icon-small:hover {
-  border-color: #0066cc;
-  background: #f0f7ff;
+.action-btn-small svg {
+  width: 14px;
+  height: 14px;
 }
 
-.btn-icon-small.active {
-  background: #0066cc;
-  color: white;
-  border-color: #0066cc;
+.action-btn-small:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.action-btn-small.active {
+  background: var(--accent-primary);
+  color: var(--bg-deepest);
+  border-color: var(--accent-primary);
+}
+
+/* Loading states */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  gap: 1rem;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-default);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner.small {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  border-radius: 50%;
+  margin-bottom: 1.5rem;
+  color: var(--text-muted);
+}
+
+.empty-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.empty h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.empty p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+/* Infinite scroll */
+.load-more-sentinel {
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+  min-height: 80px;
+}
+
+.loading-more {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.end-of-list {
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  font-family: var(--font-mono);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .search-input {
+    min-width: 100%;
+  }
+
+  .controls {
+    width: 100%;
+  }
+
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .view-controls {
+    justify-content: flex-end;
+  }
+
+  .models-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
 }
 </style>

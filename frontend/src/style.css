@@ -1,33 +1,199 @@
+/*
+ * 3D Printing Collection - Industrial Dark Theme
+ * Aesthetic: Workshop/Industrial - matte blacks, carbon textures, neon accents
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+    /* Core palette - deep industrial blacks with warmth */
+    --bg-deepest: #0a0a0b;
+    --bg-deep: #101113;
+    --bg-surface: #16181c;
+    --bg-elevated: #1c1f25;
+    --bg-hover: #23272f;
+
+    /* Text hierarchy */
+    --text-primary: #f0f2f5;
+    --text-secondary: #9ca3af;
+    --text-tertiary: #6b7280;
+    --text-muted: #4b5563;
+
+    /* Accent - electric cyan/teal for that 3D printer nozzle glow */
+    --accent-primary: #22d3ee;
+    --accent-primary-dim: rgba(34, 211, 238, 0.15);
+    --accent-primary-glow: rgba(34, 211, 238, 0.4);
+    --accent-secondary: #06b6d4;
+
+    /* Status colors */
+    --success: #10b981;
+    --success-dim: rgba(16, 185, 129, 0.15);
+    --warning: #f59e0b;
+    --warning-dim: rgba(245, 158, 11, 0.15);
+    --danger: #ef4444;
+    --danger-dim: rgba(239, 68, 68, 0.15);
+    --info: #6366f1;
+    --info-dim: rgba(99, 102, 241, 0.15);
+
+    /* Special badges */
+    --paid-bg: rgba(251, 191, 36, 0.12);
+    --paid-text: #fbbf24;
+    --paid-border: rgba(251, 191, 36, 0.3);
+    --original-bg: rgba(168, 85, 247, 0.12);
+    --original-text: #a855f7;
+    --original-border: rgba(168, 85, 247, 0.3);
+
+    /* Borders and dividers */
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-default: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.15);
+
+    /* Typography */
+    --font-display: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, monospace;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+    --shadow-glow: 0 0 20px var(--accent-primary-glow);
+
+    /* Transitions */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Border radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+}
+
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: #f5f5f5;
-    color: #333;
+    font-family: var(--font-display);
+    background: var(--bg-deepest);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+
+    /* Subtle carbon fiber texture */
+    background-image:
+        radial-gradient(circle at 25% 25%, rgba(255,255,255,0.01) 1px, transparent 1px),
+        radial-gradient(circle at 75% 75%, rgba(255,255,255,0.01) 1px, transparent 1px);
+    background-size: 4px 4px;
 }
 
 #app {
     min-height: 100vh;
 }
 
+/* Links */
 a {
-    color: #0066cc;
+    color: var(--accent-primary);
     text-decoration: none;
+    transition: color var(--transition-fast);
 }
 
 a:hover {
-    text-decoration: underline;
+    color: var(--accent-secondary);
 }
 
+/* Buttons - shared styles */
 button {
     cursor: pointer;
     font-family: inherit;
+    transition: all var(--transition-base);
 }
 
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Form elements */
 input, textarea, select {
     font-family: inherit;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    transition: all var(--transition-base);
+}
+
+input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-primary-dim);
+}
+
+input::placeholder, textarea::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* Selection highlight */
+::selection {
+    background: var(--accent-primary);
+    color: var(--bg-deepest);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-deep);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+
+/* Loading animation */
+@keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(-12px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* Utility classes */
+.fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-out forwards;
 }

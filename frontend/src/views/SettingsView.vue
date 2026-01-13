@@ -1,13 +1,22 @@
 <template>
   <div class="settings-view">
-    <h2>Settings</h2>
-    <p class="subtitle">Configure your 3D printing collection manager</p>
+    <div class="header">
+      <h2>Settings</h2>
+      <p class="subtitle">Configure your 3D printing collection manager</p>
+    </div>
 
     <div class="settings-section">
-      <h3>Model Directory</h3>
-      <p class="section-description">
-        Set the directory where your 3D model files are stored
-      </p>
+      <div class="section-header">
+        <div class="section-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Model Directory</h3>
+          <p class="section-description">Set the directory where your 3D model files are stored</p>
+        </div>
+      </div>
       <div class="input-group">
         <input
           v-model="modelDirectory"
@@ -16,56 +25,135 @@
           class="text-input"
         />
         <button @click="saveAndScan" class="btn-primary" :disabled="scanning">
+          <svg v-if="scanning" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
           {{ scanning ? 'Scanning...' : 'Save & Scan' }}
         </button>
       </div>
       <p v-if="lastScan" class="last-scan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
         Last scanned: {{ formatDate(lastScan) }}
       </p>
     </div>
 
     <div v-if="scanStatus.scanning" class="scan-progress">
-      <h4>Scan in Progress</h4>
-      <div class="progress-bar">
-        <div
-          class="progress-fill"
-          :style="{ width: scanProgressPercent + '%' }"
-        ></div>
+      <div class="progress-header">
+        <div class="progress-icon">
+          <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+          </svg>
+        </div>
+        <div>
+          <h4>Scan in Progress</h4>
+          <p>{{ scanProgressPercent }}% complete</p>
+        </div>
       </div>
-      <div class="progress-info">
-        <p><strong>{{ scanStatus.processedFiles.toLocaleString() }}</strong> / {{ scanStatus.totalFiles.toLocaleString() }} files processed ({{ scanProgressPercent }}%)</p>
-        <p><strong>{{ scanStatus.modelsFound.toLocaleString() }}</strong> models (folders) found</p>
-        <p><strong>{{ scanStatus.modelFilesFound.toLocaleString() }}</strong> model files indexed</p>
-        <p><strong>{{ scanStatus.assetsFound.toLocaleString() }}</strong> assets (images/PDFs) found</p>
-        <p v-if="scanStatus.looseFilesFound > 0"><strong>{{ scanStatus.looseFilesFound.toLocaleString() }}</strong> loose files to organize</p>
+      <div class="progress-bar">
+        <div class="progress-fill" :style="{ width: scanProgressPercent + '%' }"></div>
+      </div>
+      <div class="progress-stats">
+        <div class="stat">
+          <span class="stat-value">{{ scanStatus.processedFiles.toLocaleString() }}</span>
+          <span class="stat-label">/ {{ scanStatus.totalFiles.toLocaleString() }} files</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">{{ scanStatus.modelsFound.toLocaleString() }}</span>
+          <span class="stat-label">models</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">{{ scanStatus.modelFilesFound.toLocaleString() }}</span>
+          <span class="stat-label">model files</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">{{ scanStatus.assetsFound.toLocaleString() }}</span>
+          <span class="stat-label">assets</span>
+        </div>
+        <div v-if="scanStatus.looseFilesFound > 0" class="stat warning">
+          <span class="stat-value">{{ scanStatus.looseFilesFound.toLocaleString() }}</span>
+          <span class="stat-label">loose files</span>
+        </div>
       </div>
     </div>
 
     <div v-if="message" :class="['message', messageType]">
+      <svg v-if="messageType === 'success'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 12l2 2 4-4"/>
+        <circle cx="12" cy="12" r="10"/>
+      </svg>
+      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M15 9l-6 6M9 9l6 6"/>
+      </svg>
       {{ message }}
     </div>
 
     <div class="settings-section">
-      <h3>Database Statistics</h3>
+      <div class="section-header">
+        <div class="section-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Database Statistics</h3>
+          <p class="section-description">Overview of your collection</p>
+        </div>
+      </div>
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-value">{{ stats.totalModels }}</div>
+          <div class="stat-icon models">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+            </svg>
+          </div>
+          <div class="stat-value">{{ stats.totalModels.toLocaleString() }}</div>
           <div class="stat-label">Total Models</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">{{ stats.totalFavorites }}</div>
+          <div class="stat-icon favorites">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+          </div>
+          <div class="stat-value">{{ stats.totalFavorites.toLocaleString() }}</div>
           <div class="stat-label">Favorites</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">{{ stats.totalPrinted }}</div>
+          <div class="stat-icon printed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M9 12l2 2 4-4"/>
+              <circle cx="12" cy="12" r="10"/>
+            </svg>
+          </div>
+          <div class="stat-value">{{ stats.totalPrinted.toLocaleString() }}</div>
           <div class="stat-label">Printed</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">{{ stats.totalQueued }}</div>
+          <div class="stat-icon queued">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+            </svg>
+          </div>
+          <div class="stat-value">{{ stats.totalQueued.toLocaleString() }}</div>
           <div class="stat-label">Queued</div>
         </div>
-        <div class="stat-card" :class="{ 'stat-warning': stats.totalLooseFiles > 0 }">
-          <div class="stat-value">{{ stats.totalLooseFiles }}</div>
+        <div :class="['stat-card', { warning: stats.totalLooseFiles > 0 }]">
+          <div class="stat-icon loose">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
+              <path d="M13 2v7h7"/>
+            </svg>
+          </div>
+          <div class="stat-value">{{ stats.totalLooseFiles.toLocaleString() }}</div>
           <div class="stat-label">Loose Files</div>
         </div>
       </div>
@@ -137,10 +225,8 @@ async function checkScanStatus() {
     scanStatus.value = response.data;
 
     if (scanStatus.value.scanning) {
-      // Poll more frequently during active scan
       setTimeout(checkScanStatus, 500);
     } else if (wasScanning && !scanStatus.value.scanning) {
-      // Scan just completed, reload stats
       await loadStats();
       showMessage('Scan completed successfully!', 'success');
     }
@@ -188,38 +274,68 @@ function formatDate(dateString: string): string {
 
 <style scoped>
 .settings-view {
-  max-width: 800px;
+  max-width: 900px;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.header {
+  margin-bottom: 2rem;
 }
 
 h2 {
   font-size: 1.75rem;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
   margin-bottom: 0.5rem;
 }
 
 .subtitle {
-  color: #666;
-  margin-bottom: 2rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
 }
 
 .settings-section {
-  background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin-bottom: 2rem;
+  background: var(--bg-surface);
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 1.5rem;
 }
 
-.settings-section h3 {
-  font-size: 1.25rem;
+.section-header {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.section-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-primary-dim);
+  border-radius: var(--radius-md);
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.section-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.section-header h3 {
+  font-size: 1.1rem;
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
 }
 
 .section-description {
-  color: #666;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
 }
 
 .input-group {
@@ -229,128 +345,270 @@ h2 {
 
 .text-input {
   flex: 1;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 0.95rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.text-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-dim);
+  outline: none;
 }
 
 .btn-primary {
-  padding: 0.75rem 1.5rem;
-  background: #0066cc;
-  color: white;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--accent-primary);
+  color: var(--bg-deepest);
   border: none;
-  border-radius: 6px;
-  font-weight: 500;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.9rem;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.btn-primary svg {
+  width: 18px;
+  height: 18px;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #0052a3;
+  background: var(--accent-secondary);
+  transform: translateY(-1px);
 }
 
 .btn-primary:disabled {
-  opacity: 0.6;
+  opacity: 0.7;
   cursor: not-allowed;
 }
 
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .last-scan {
-  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
   font-size: 0.85rem;
-  color: #666;
+  color: var(--text-tertiary);
+}
+
+.last-scan svg {
+  width: 14px;
+  height: 14px;
 }
 
 .scan-progress {
-  background: #f0f7ff;
-  border: 1px solid #0066cc;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-primary);
   padding: 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 2rem;
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.5rem;
 }
 
-.scan-progress h4 {
+.progress-header {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
   margin-bottom: 1rem;
-  color: #0066cc;
+}
+
+.progress-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-primary-dim);
+  border-radius: var(--radius-md);
+  color: var(--accent-primary);
+}
+
+.progress-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.progress-header h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.125rem;
+}
+
+.progress-header p {
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
 }
 
 .progress-bar {
   width: 100%;
-  height: 24px;
-  background: #e0e0e0;
-  border-radius: 12px;
+  height: 8px;
+  background: var(--bg-elevated);
+  border-radius: 4px;
   overflow: hidden;
   margin-bottom: 1rem;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #0066cc, #0052a3);
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
   transition: width 0.3s ease;
+  border-radius: 4px;
+}
+
+.progress-stats {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 0.85rem;
-  font-weight: 600;
+  flex-wrap: wrap;
+  gap: 1.5rem;
 }
 
-.progress-info p {
-  margin: 0.5rem 0;
+.progress-stats .stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
 }
 
-.progress-info strong {
-  color: #0066cc;
+.progress-stats .stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+}
+
+.progress-stats .stat-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.progress-stats .stat.warning .stat-value {
+  color: var(--warning);
 }
 
 .message {
-  padding: 1rem;
-  border-radius: 6px;
-  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.message svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
 
 .message.success {
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--success-dim);
+  border: 1px solid var(--success);
+  color: var(--success);
 }
 
 .message.error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--danger-dim);
+  border: 1px solid var(--danger);
+  color: var(--danger);
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 1rem;
-  margin-top: 1rem;
 }
 
 .stat-card {
   text-align: center;
-  padding: 1.5rem;
-  background: #f9fafb;
-  border-radius: 8px;
+  padding: 1.25rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-base);
 }
 
-.stat-value {
-  font-size: 2rem;
+.stat-card:hover {
+  border-color: var(--border-strong);
+}
+
+.stat-card.warning {
+  border-color: var(--warning);
+  background: var(--warning-dim);
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  margin: 0 auto 0.75rem;
+}
+
+.stat-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.stat-icon.models {
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+}
+
+.stat-icon.favorites {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+.stat-icon.printed {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.stat-icon.queued {
+  background: var(--info-dim);
+  color: var(--info);
+}
+
+.stat-icon.loose {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+.stat-card .stat-value {
+  font-size: 1.75rem;
   font-weight: 700;
-  color: #0066cc;
-  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+  font-family: var(--font-mono);
 }
 
-.stat-label {
-  color: #666;
-  font-size: 0.9rem;
+.stat-card.warning .stat-value {
+  color: var(--warning);
 }
 
-.stat-warning {
-  background: #fef3c7;
-  border: 1px solid #f59e0b;
-}
-
-.stat-warning .stat-value {
-  color: #b45309;
+.stat-card .stat-label {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 </style>

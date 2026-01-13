@@ -1,52 +1,82 @@
 <template>
   <div class="loose-files-view">
     <div class="header">
-      <div>
+      <div class="header-left">
         <h2>Loose Files</h2>
-        <p class="subtitle">Model files that need to be organized into folders</p>
+        <span class="count-badge warning" v-if="looseFiles.length > 0">{{ looseFiles.length }}</span>
       </div>
-      <div class="stats-badge" v-if="looseFiles.length > 0">
-        {{ looseFiles.length }} file{{ looseFiles.length !== 1 ? 's' : '' }} to organize
-      </div>
+      <p class="subtitle">Model files that need to be organized into folders</p>
     </div>
 
-    <div v-if="loading" class="loading">Loading loose files...</div>
+    <div v-if="loading" class="loading">
+      <div class="loading-spinner"></div>
+      <span>Loading loose files...</span>
+    </div>
 
-    <div v-else-if="looseFiles.length === 0" class="empty">
-      <div class="empty-icon">✨</div>
+    <div v-else-if="looseFiles.length === 0" class="empty success">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M9 12l2 2 4-4"/>
+          <circle cx="12" cy="12" r="10"/>
+        </svg>
+      </div>
       <h3>All organized!</h3>
       <p>No loose files found. All your models are properly organized in folders.</p>
     </div>
 
-    <div v-else class="info-box">
-      <h4>Why organize these files?</h4>
-      <p>These model files are directly in your root directory without a folder. To get them indexed:</p>
-      <ol>
-        <li>Create a folder for each model (or group related models together)</li>
-        <li>Move the model file(s) into the folder</li>
-        <li>Optionally add images or PDFs to the folder for better previews</li>
-        <li>Run a new scan to index the organized models</li>
-      </ol>
-    </div>
-
-    <div v-if="!loading && looseFiles.length > 0" class="loose-files-list">
-      <div v-for="file in looseFiles" :key="file.id" class="file-item">
-        <div class="file-icon">📄</div>
-        <div class="file-info">
-          <h3>{{ file.filename }}</h3>
-          <div class="file-meta">
-            <span class="file-type">{{ file.file_type }}</span>
-            <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
-          </div>
-          <p class="file-path">{{ file.filepath }}</p>
+    <template v-else>
+      <div class="info-box">
+        <div class="info-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 16v-4M12 8h.01"/>
+          </svg>
         </div>
-        <div class="file-actions">
-          <button @click="openInFinder(file)" class="btn-primary" title="Open in Finder">
-            📁 Open in Finder
-          </button>
+        <div class="info-content">
+          <h4>Why organize these files?</h4>
+          <p>These model files are not in proper model folders. To get them indexed:</p>
+          <ol>
+            <li>Create a folder for each model (or group related models together)</li>
+            <li>Move the model file(s) into the folder</li>
+            <li>Optionally add images or PDFs to the folder for better previews</li>
+            <li>Run a new scan to index the organized models</li>
+          </ol>
         </div>
       </div>
-    </div>
+
+      <div class="loose-files-list">
+        <div
+          v-for="(file, index) in looseFiles"
+          :key="file.id"
+          class="file-card"
+          :style="{ animationDelay: `${index * 40}ms` }"
+        >
+          <div class="file-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
+              <path d="M13 2v7h7"/>
+            </svg>
+          </div>
+          <div class="file-info">
+            <h3>{{ file.filename }}</h3>
+            <div class="file-meta">
+              <span class="file-type">{{ file.file_type }}</span>
+              <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
+              <span class="file-category" v-if="file.category">{{ file.category }}</span>
+            </div>
+            <p class="file-path">{{ file.filepath }}</p>
+          </div>
+          <div class="file-actions">
+            <button @click="openInFinder(file)" class="btn-primary" title="Open in Finder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+              </svg>
+              Open
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -84,12 +114,10 @@ async function loadLooseFiles() {
 
 async function openInFinder(file: LooseFile) {
   try {
-    // Open the parent directory
     const folderPath = file.filepath.substring(0, file.filepath.lastIndexOf('/'));
     await systemApi.openFolder(folderPath);
   } catch (error) {
     console.error('Failed to open folder:', error);
-    alert('Failed to open folder in Finder');
   }
 }
 
@@ -104,86 +132,138 @@ function formatFileSize(bytes: number): string {
 <style scoped>
 .loose-files-view {
   max-width: 1000px;
+  animation: fadeIn 0.4s ease-out;
 }
 
 .header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
   margin-bottom: 2rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
 h2 {
   font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.count-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.25rem 0.625rem;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+}
+
+.count-badge.warning {
+  background: var(--warning);
+  color: var(--bg-deepest);
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.info-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--accent-primary);
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.5rem;
+  display: flex;
+  gap: 1rem;
+}
+
+.info-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-primary-dim);
+  border-radius: var(--radius-md);
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.info-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-content h4 {
+  color: var(--text-primary);
+  font-size: 0.95rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
 }
 
-.subtitle {
-  color: #666;
-}
-
-.stats-badge {
-  background: #fef3c7;
-  color: #92400e;
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-weight: 600;
+.info-content p {
+  color: var(--text-secondary);
   font-size: 0.9rem;
-}
-
-.info-box {
-  background: #f0f7ff;
-  border: 1px solid #0066cc;
-  padding: 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 2rem;
-}
-
-.info-box h4 {
   margin-bottom: 0.75rem;
-  color: #0066cc;
 }
 
-.info-box p {
-  margin-bottom: 0.75rem;
-  color: #333;
+.info-content ol {
+  margin-left: 1.25rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
 }
 
-.info-box ol {
-  margin-left: 1.5rem;
-  color: #333;
-}
-
-.info-box li {
-  margin: 0.5rem 0;
+.info-content li {
+  margin: 0.375rem 0;
 }
 
 .loose-files-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
-.file-item {
-  background: white;
-  border: 1px solid #e5e5e5;
-  border-radius: 8px;
-  padding: 1.5rem;
+.file-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
+  animation: fadeIn 0.4s ease-out backwards;
 }
 
-.file-item:hover {
-  border-color: #0066cc;
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.1);
+.file-card:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
 }
 
 .file-icon {
-  font-size: 2.5rem;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--warning-dim);
+  border-radius: var(--radius-md);
+  color: var(--warning);
   flex-shrink: 0;
+}
+
+.file-icon svg {
+  width: 24px;
+  height: 24px;
 }
 
 .file-info {
@@ -192,8 +272,9 @@ h2 {
 }
 
 .file-info h3 {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
   word-break: break-word;
 }
@@ -201,27 +282,40 @@ h2 {
 .file-meta {
   display: flex;
   gap: 0.75rem;
+  flex-wrap: wrap;
   margin-bottom: 0.5rem;
   font-size: 0.85rem;
 }
 
 .file-type {
-  background: #f0f0f0;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  color: #666;
+  background: var(--bg-hover);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
   text-transform: uppercase;
   font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
 }
 
 .file-size {
-  color: #999;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.file-category {
+  padding: 0.2rem 0.5rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
 }
 
 .file-path {
-  font-size: 0.85rem;
-  color: #666;
-  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
   word-break: break-all;
 }
 
@@ -230,40 +324,93 @@ h2 {
 }
 
 .btn-primary {
-  padding: 0.75rem 1.5rem;
-  background: #0066cc;
-  color: white;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: var(--accent-primary);
+  color: var(--bg-deepest);
   border: none;
-  border-radius: 6px;
-  font-weight: 500;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.875rem;
   cursor: pointer;
-  transition: background 0.2s;
-  white-space: nowrap;
+  transition: all var(--transition-base);
+}
+
+.btn-primary svg {
+  width: 16px;
+  height: 16px;
 }
 
 .btn-primary:hover {
-  background: #0052a3;
+  background: var(--accent-secondary);
+  transform: translateY(-1px);
 }
 
-.loading, .empty {
-  text-align: center;
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  gap: 1rem;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-default);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 4rem 2rem;
-  color: #666;
+  text-align: center;
+}
+
+.empty.success .empty-icon {
+  background: var(--success-dim);
+  color: var(--success);
 }
 
 .empty-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  border-radius: 50%;
+  margin-bottom: 1.5rem;
+  color: var(--text-muted);
+}
+
+.empty-icon svg {
+  width: 40px;
+  height: 40px;
 }
 
 .empty h3 {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
-  color: #333;
 }
 
 .empty p {
-  font-size: 1rem;
-  color: #666;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
 }
 </style>
