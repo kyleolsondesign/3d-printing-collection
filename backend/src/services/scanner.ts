@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import yauzl from 'yauzl';
 import db from '../config/database.js';
 import { isModelFile, isImageFile, isDocumentFile, isArchiveFile } from '../utils/fileTypes.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
@@ -69,8 +70,8 @@ class Scanner {
             // Phase 1: Recursively scan and collect model files by folder
             await this.scanDirectoryRecursive(modelDirectory, modelDirectory);
 
-            // Phase 2: Index folders as models
-            this.indexFoldersAsModels(modelDirectory);
+            // Phase 2: Index folders as models (includes image extraction from archives)
+            await this.indexFoldersAsModels(modelDirectory);
 
             console.log(`Scan complete!`);
             console.log(`- Models (folders): ${this.progress.modelsFound}`);
@@ -162,7 +163,9 @@ class Scanner {
         }
     }
 
-    private indexFoldersAsModels(rootPath: string): void {
+    private async indexFoldersAsModels(rootPath: string): Promise<void> {
+        const modelsNeedingImages: Array<{ modelId: number; folderPath: string }> = [];
+
         for (const [folderPath, folderData] of this.foldersWithModels.entries()) {
             try {
                 const folderName = path.basename(folderPath);
@@ -212,10 +215,23 @@ class Scanner {
                 // Find and index associated assets (images, PDFs)
                 this.indexAssets(modelId, folderPath);
 
+                // Check if model needs image extraction from archives
+                if (!this.hasPrimaryImage(modelId)) {
+                    modelsNeedingImages.push({ modelId, folderPath });
+                }
+
                 this.progress.modelsFound++;
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 console.error(`Error indexing folder ${folderPath}:`, message);
+            }
+        }
+
+        // Extract images from archives for models without images
+        if (modelsNeedingImages.length > 0) {
+            console.log(`Extracting images from archives for ${modelsNeedingImages.length} models...`);
+            for (const { modelId, folderPath } of modelsNeedingImages) {
+                await this.extractImageFromArchives(modelId, folderPath);
             }
         }
     }
@@ -280,6 +296,181 @@ class Scanner {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error indexing assets for ${folderPath}:`, message);
         }
+    }
+
+    private hasPrimaryImage(modelId: number): boolean {
+        const result = db.prepare('SELECT COUNT(*) as count FROM model_assets WHERE model_id = ? AND asset_type = ?').get(modelId, 'image') as { count: number };
+        return result.count > 0;
+    }
+
+    private async extractImageFromArchives(modelId: number, folderPath: string): Promise<void> {
+        try {
+            const files = fs.readdirSync(folderPath);
+
+            // Collect .3mf files and photo zips with their dates
+            const archives: Array<{ path: string; type: '3mf' | 'photozip'; date: Date }> = [];
+
+            for (const file of files) {
+                const filePath = path.join(folderPath, file);
+                const ext = path.extname(file).toLowerCase();
+                const baseName = path.basename(file, ext).toLowerCase();
+
+                try {
+                    const stat = fs.statSync(filePath);
+                    if (stat.isDirectory()) continue;
+
+                    if (ext === '.3mf') {
+                        archives.push({ path: filePath, type: '3mf', date: stat.mtime });
+                    } else if (ext === '.zip') {
+                        // Check if it's a photo zip (Photos.zip, images.zip, pictures.zip, etc.)
+                        const photoKeywords = ['photo', 'image', 'picture', 'pic', 'img', 'thumbnail', 'preview'];
+                        if (photoKeywords.some(kw => baseName.includes(kw))) {
+                            archives.push({ path: filePath, type: 'photozip', date: stat.mtime });
+                        }
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+
+            // Sort by date (earliest first) - 3mf files prioritized
+            archives.sort((a, b) => {
+                // Prioritize 3mf files over photo zips
+                if (a.type === '3mf' && b.type !== '3mf') return -1;
+                if (a.type !== '3mf' && b.type === '3mf') return 1;
+                return a.date.getTime() - b.date.getTime();
+            });
+
+            // Try to extract an image from each archive
+            for (const archive of archives) {
+                const extracted = await this.extractImageFromZip(archive.path, folderPath, archive.type);
+                if (extracted) {
+                    // Index the extracted image
+                    const insert = db.prepare(`
+                        INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
+                        VALUES (?, ?, 'image', 1)
+                    `);
+                    insert.run(modelId, extracted);
+                    this.progress.assetsFound++;
+                    return; // Stop after first successful extraction
+                }
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`Error extracting images from archives in ${folderPath}:`, message);
+        }
+    }
+
+    private extractImageFromZip(zipPath: string, outputDir: string, type: '3mf' | 'photozip'): Promise<string | null> {
+        return new Promise((resolve) => {
+            yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+                if (err || !zipfile) {
+                    resolve(null);
+                    return;
+                }
+
+                let foundImage: string | null = null;
+                const candidates: Array<{ name: string; score: number }> = [];
+
+                zipfile.on('error', () => {
+                    resolve(null);
+                });
+
+                zipfile.on('entry', (entry: yauzl.Entry) => {
+                    const entryName = entry.fileName;
+                    const ext = path.extname(entryName).toLowerCase();
+
+                    // Check if it's an image
+                    if (['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext)) {
+                        const baseName = path.basename(entryName).toLowerCase();
+                        let score = 0;
+
+                        if (type === '3mf') {
+                            // Prefer plate images in 3mf files
+                            if (baseName.includes('plate_1')) score = 100;
+                            else if (baseName.includes('plate')) score = 90;
+                            else if (entryName.toLowerCase().includes('metadata')) score = 80;
+                            else if (baseName.includes('thumbnail')) score = 70;
+                            else if (baseName.includes('preview')) score = 60;
+                            else score = 10;
+                        } else {
+                            // For photo zips, any image is good
+                            if (baseName.includes('main') || baseName.includes('cover')) score = 100;
+                            else if (baseName.includes('thumb') || baseName.includes('preview')) score = 90;
+                            else score = 50;
+                        }
+
+                        candidates.push({ name: entryName, score });
+                    }
+
+                    zipfile.readEntry();
+                });
+
+                zipfile.on('end', () => {
+                    if (candidates.length === 0) {
+                        zipfile.close();
+                        resolve(null);
+                        return;
+                    }
+
+                    // Sort by score and pick the best
+                    candidates.sort((a, b) => b.score - a.score);
+                    const bestCandidate = candidates[0].name;
+
+                    // Re-open to extract the specific file
+                    yauzl.open(zipPath, { lazyEntries: true }, (err2, zipfile2) => {
+                        if (err2 || !zipfile2) {
+                            resolve(null);
+                            return;
+                        }
+
+                        zipfile2.on('error', () => {
+                            resolve(null);
+                        });
+
+                        zipfile2.on('entry', (entry: yauzl.Entry) => {
+                            if (entry.fileName === bestCandidate) {
+                                zipfile2.openReadStream(entry, (streamErr, readStream) => {
+                                    if (streamErr || !readStream) {
+                                        zipfile2.readEntry();
+                                        return;
+                                    }
+
+                                    // Generate output filename
+                                    const ext = path.extname(bestCandidate);
+                                    const archiveName = path.basename(zipPath, path.extname(zipPath));
+                                    const outputName = `_extracted_${archiveName}${ext}`;
+                                    const outputPath = path.join(outputDir, outputName);
+
+                                    const writeStream = fs.createWriteStream(outputPath);
+                                    readStream.pipe(writeStream);
+
+                                    writeStream.on('finish', () => {
+                                        foundImage = outputPath;
+                                        zipfile2.close();
+                                    });
+
+                                    writeStream.on('error', () => {
+                                        zipfile2.readEntry();
+                                    });
+                                });
+                            } else {
+                                zipfile2.readEntry();
+                            }
+                        });
+
+                        zipfile2.on('end', () => {
+                            zipfile2.close();
+                            resolve(foundImage);
+                        });
+
+                        zipfile2.readEntry();
+                    });
+                });
+
+                zipfile.readEntry();
+            });
+        });
     }
 
     private extractCategory(filepath: string, rootPath: string): string {

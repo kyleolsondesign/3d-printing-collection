@@ -259,6 +259,17 @@ proxy: {
 - **Graceful fallback**: Shows package emoji (📦) for models without images
 - **Image optimization**: Hover effects and smooth transitions on model cards
 
+### Image Extraction from Archives
+For models without standalone images, the scanner automatically extracts images from:
+- **.3mf files**: These are ZIP archives that often contain plate preview images
+  - Prioritizes `plate_1.png` and similar plate images
+  - Falls back to thumbnail/preview images in Metadata folder
+  - Uses earliest-dated .3mf file when multiple exist
+- **Photo ZIP files**: Archives named with photo keywords (Photos.zip, images.zip, etc.)
+  - Extracts the best available image (prefers main/cover images)
+- Extracted images are saved to the model folder with `_extracted_` prefix
+- Only extracts when no other images exist for the model
+
 ### Folder-Based Model Organization
 - **Folders = Models**: Each folder containing model files is treated as one model
 - **Multiple files per model**: All files in a folder are indexed as alternate versions/formats
@@ -290,7 +301,6 @@ proxy: {
 - Deduplication reduces indexed models for folders with multiple versions
 
 ## Future Enhancements
-- Zip file extraction and viewing
 - 3D model preview (STL viewer)
 - Thumbnail generation for models (resize large images)
 - File system watcher for auto-refresh
