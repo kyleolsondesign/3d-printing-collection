@@ -92,6 +92,7 @@ class Scanner {
     /**
      * Scan and index a single model folder.
      * Used for rescanning individual models or newly organized loose files.
+     * Recursively scans subfolders for model files and assets.
      */
     async scanSingleFolder(folderPath: string, rootPath: string): Promise<{ modelId: number; filename: string } | null> {
         try {
@@ -104,33 +105,11 @@ class Scanner {
                 throw new Error(`Path is not a directory: ${folderPath}`);
             }
 
-            // Collect model files in this folder
-            const files = fs.readdirSync(folderPath);
+            // Collect model files recursively from this folder and all subfolders
             const modelFiles: string[] = [];
-            let earliestAdded: Date | null = null;
-            let earliestCreated: Date | null = null;
+            const dateTracker = { earliestAdded: null as Date | null, earliestCreated: null as Date | null };
 
-            for (const file of files) {
-                const filePath = path.join(folderPath, file);
-                try {
-                    const fileStat = fs.statSync(filePath);
-                    if (fileStat.isDirectory()) continue;
-
-                    if (isModelFile(filePath) || isArchiveFile(filePath)) {
-                        modelFiles.push(filePath);
-
-                        // Track dates
-                        if (!earliestAdded || fileStat.mtime < earliestAdded) {
-                            earliestAdded = fileStat.mtime;
-                        }
-                        if (!earliestCreated || fileStat.birthtime < earliestCreated) {
-                            earliestCreated = fileStat.birthtime;
-                        }
-                    }
-                } catch (e) {
-                    continue;
-                }
-            }
+            this.collectModelFilesRecursive(folderPath, modelFiles, dateTracker);
 
             if (modelFiles.length === 0) {
                 return null; // No model files found
@@ -142,8 +121,8 @@ class Scanner {
             const isPaid = this.isInFolder(folderPath, rootPath, 'Paid');
             const isOriginal = this.isInFolder(folderPath, rootPath, 'Original Creations');
 
-            const dateAdded = earliestAdded?.toISOString() || null;
-            const dateCreated = earliestCreated?.toISOString() || null;
+            const dateAdded = dateTracker.earliestAdded?.toISOString() || null;
+            const dateCreated = dateTracker.earliestCreated?.toISOString() || null;
 
             // Insert model into database
             const insertModel = db.prepare(`
@@ -177,7 +156,7 @@ class Scanner {
                 insertFile.run(modelId, filename, filePath, fileStats.size, ext);
             }
 
-            // Index assets
+            // Index assets (recursively searches subfolders)
             this.indexAssets(modelId, folderPath);
 
             // Extract images from archives if no primary image
@@ -191,6 +170,48 @@ class Scanner {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error scanning single folder ${folderPath}:`, message);
             throw error;
+        }
+    }
+
+    /**
+     * Recursively collect model files from a folder and all subfolders
+     */
+    private collectModelFilesRecursive(
+        currentPath: string,
+        modelFiles: string[],
+        dateTracker: { earliestAdded: Date | null; earliestCreated: Date | null }
+    ): void {
+        try {
+            const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+
+            for (const entry of entries) {
+                const fullPath = path.join(currentPath, entry.name);
+
+                // Skip hidden files
+                if (entry.name.startsWith('.')) continue;
+
+                if (entry.isDirectory()) {
+                    this.collectModelFilesRecursive(fullPath, modelFiles, dateTracker);
+                } else if (entry.isFile()) {
+                    if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
+                        modelFiles.push(fullPath);
+
+                        try {
+                            const fileStat = fs.statSync(fullPath);
+                            if (!dateTracker.earliestAdded || fileStat.mtime < dateTracker.earliestAdded) {
+                                dateTracker.earliestAdded = fileStat.mtime;
+                            }
+                            if (!dateTracker.earliestCreated || fileStat.birthtime < dateTracker.earliestCreated) {
+                                dateTracker.earliestCreated = fileStat.birthtime;
+                            }
+                        } catch (e) {
+                            // Continue without date tracking on error
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            // Continue on errors
         }
     }
 
@@ -253,7 +274,6 @@ class Scanner {
 
                     // Check if it's a model file
                     if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
-                        const folderPath = path.dirname(fullPath);
                         const relativePath = path.relative(rootPath, fullPath);
                         const pathDepth = relativePath.split(path.sep).length;
 
@@ -264,20 +284,24 @@ class Scanner {
                             this.trackLooseFile(fullPath);
                             this.progress.looseFilesFound++;
                         } else {
+                            // Determine the model root folder (depth 3 = root/category/model-folder)
+                            // Files in nested subfolders should be attributed to the parent model folder
+                            const modelFolderPath = this.getModelRootFolder(fullPath, rootPath);
+
                             // Get file dates
                             const stats = fs.statSync(fullPath);
                             const fileAdded = stats.mtime;
                             const fileCreated = stats.birthtime;
 
-                            // Add to folder's model files collection
-                            if (!this.foldersWithModels.has(folderPath)) {
-                                this.foldersWithModels.set(folderPath, {
+                            // Add to model folder's files collection
+                            if (!this.foldersWithModels.has(modelFolderPath)) {
+                                this.foldersWithModels.set(modelFolderPath, {
                                     files: [],
                                     earliestAdded: null,
                                     earliestCreated: null
                                 });
                             }
-                            const folderData = this.foldersWithModels.get(folderPath)!;
+                            const folderData = this.foldersWithModels.get(modelFolderPath)!;
                             folderData.files.push(fullPath);
 
                             // Track earliest dates
@@ -297,6 +321,28 @@ class Scanner {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error scanning directory ${currentPath}:`, message);
         }
+    }
+
+    /**
+     * Get the model root folder for a file path.
+     * The model root folder is at depth 3 (root/category/model-folder).
+     * Files in nested subfolders are attributed to this parent model folder.
+     */
+    private getModelRootFolder(filePath: string, rootPath: string): string {
+        const relativePath = path.relative(rootPath, filePath);
+        const parts = relativePath.split(path.sep);
+
+        // parts[0] = category folder
+        // parts[1] = model folder
+        // parts[2+] = nested subfolders and file
+
+        // Return the model folder path (first two directory levels under root)
+        if (parts.length >= 3) {
+            return path.join(rootPath, parts[0], parts[1]);
+        }
+
+        // Fallback to immediate parent (shouldn't happen given depth check)
+        return path.dirname(filePath);
     }
 
     private async indexFoldersAsModels(rootPath: string): Promise<void> {
@@ -393,44 +439,53 @@ class Scanner {
 
     private indexAssets(modelId: number, folderPath: string): void {
         try {
-            const files = fs.readdirSync(folderPath);
-
-            for (const file of files) {
-                const assetPath = path.join(folderPath, file);
-
-                // Skip directories
-                try {
-                    const stat = fs.statSync(assetPath);
-                    if (stat.isDirectory()) continue;
-                } catch (e) {
-                    continue;
-                }
-
-                let assetType: string | null = null;
-                let isPrimary = false;
-
-                if (isImageFile(assetPath)) {
-                    assetType = 'image';
-                    // First image becomes primary
-                    const existingImages = db.prepare('SELECT COUNT(*) as count FROM model_assets WHERE model_id = ? AND asset_type = ?').get(modelId, 'image') as { count: number };
-                    isPrimary = existingImages.count === 0;
-                } else if (isDocumentFile(assetPath)) {
-                    assetType = 'pdf';
-                }
-
-                if (assetType) {
-                    const insert = db.prepare(`
-                        INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
-                        VALUES (?, ?, ?, ?)
-                    `);
-
-                    insert.run(modelId, assetPath, assetType, isPrimary ? 1 : 0);
-                    this.progress.assetsFound++;
-                }
-            }
+            // Recursively scan folder and all subfolders for assets
+            this.indexAssetsRecursive(modelId, folderPath);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error indexing assets for ${folderPath}:`, message);
+        }
+    }
+
+    private indexAssetsRecursive(modelId: number, currentPath: string): void {
+        try {
+            const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+
+            for (const entry of entries) {
+                const fullPath = path.join(currentPath, entry.name);
+
+                // Skip hidden files
+                if (entry.name.startsWith('.')) continue;
+
+                if (entry.isDirectory()) {
+                    // Recursively scan subdirectories for assets
+                    this.indexAssetsRecursive(modelId, fullPath);
+                } else if (entry.isFile()) {
+                    let assetType: string | null = null;
+                    let isPrimary = false;
+
+                    if (isImageFile(fullPath)) {
+                        assetType = 'image';
+                        // First image becomes primary
+                        const existingImages = db.prepare('SELECT COUNT(*) as count FROM model_assets WHERE model_id = ? AND asset_type = ?').get(modelId, 'image') as { count: number };
+                        isPrimary = existingImages.count === 0;
+                    } else if (isDocumentFile(fullPath)) {
+                        assetType = 'pdf';
+                    }
+
+                    if (assetType) {
+                        const insert = db.prepare(`
+                            INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
+                            VALUES (?, ?, ?, ?)
+                        `);
+
+                        insert.run(modelId, fullPath, assetType, isPrimary ? 1 : 0);
+                        this.progress.assetsFound++;
+                    }
+                }
+            }
+        } catch (error) {
+            // Silently continue on individual file/folder errors
         }
     }
 
@@ -441,33 +496,9 @@ class Scanner {
 
     private async extractImageFromArchives(modelId: number, folderPath: string): Promise<void> {
         try {
-            const files = fs.readdirSync(folderPath);
-
-            // Collect .3mf files and photo zips with their dates
+            // Collect .3mf files and photo zips with their dates (recursively)
             const archives: Array<{ path: string; type: '3mf' | 'photozip'; date: Date }> = [];
-
-            for (const file of files) {
-                const filePath = path.join(folderPath, file);
-                const ext = path.extname(file).toLowerCase();
-                const baseName = path.basename(file, ext).toLowerCase();
-
-                try {
-                    const stat = fs.statSync(filePath);
-                    if (stat.isDirectory()) continue;
-
-                    if (ext === '.3mf') {
-                        archives.push({ path: filePath, type: '3mf', date: stat.mtime });
-                    } else if (ext === '.zip') {
-                        // Check if it's a photo zip (Photos.zip, images.zip, pictures.zip, etc.)
-                        const photoKeywords = ['photo', 'image', 'picture', 'pic', 'img', 'thumbnail', 'preview'];
-                        if (photoKeywords.some(kw => baseName.includes(kw))) {
-                            archives.push({ path: filePath, type: 'photozip', date: stat.mtime });
-                        }
-                    }
-                } catch (e) {
-                    continue;
-                }
-            }
+            this.collectArchivesRecursive(folderPath, archives);
 
             // Sort by date (earliest first) - 3mf files prioritized
             archives.sort((a, b) => {
@@ -494,6 +525,44 @@ class Scanner {
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error extracting images from archives in ${folderPath}:`, message);
+        }
+    }
+
+    private collectArchivesRecursive(currentPath: string, archives: Array<{ path: string; type: '3mf' | 'photozip'; date: Date }>): void {
+        try {
+            const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+
+            for (const entry of entries) {
+                const fullPath = path.join(currentPath, entry.name);
+
+                // Skip hidden files
+                if (entry.name.startsWith('.')) continue;
+
+                if (entry.isDirectory()) {
+                    this.collectArchivesRecursive(fullPath, archives);
+                } else if (entry.isFile()) {
+                    const ext = path.extname(entry.name).toLowerCase();
+                    const baseName = path.basename(entry.name, ext).toLowerCase();
+
+                    try {
+                        const stat = fs.statSync(fullPath);
+
+                        if (ext === '.3mf') {
+                            archives.push({ path: fullPath, type: '3mf', date: stat.mtime });
+                        } else if (ext === '.zip') {
+                            // Check if it's a photo zip (Photos.zip, images.zip, pictures.zip, etc.)
+                            const photoKeywords = ['photo', 'image', 'picture', 'pic', 'img', 'thumbnail', 'preview'];
+                            if (photoKeywords.some(kw => baseName.includes(kw))) {
+                                archives.push({ path: fullPath, type: 'photozip', date: stat.mtime });
+                            }
+                        }
+                    } catch (e) {
+                        continue;
+                    }
+                }
+            }
+        } catch (e) {
+            // Continue on errors
         }
     }
 

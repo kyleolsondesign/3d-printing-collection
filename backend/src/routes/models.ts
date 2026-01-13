@@ -201,7 +201,7 @@ router.post('/:id/rescan', async (req, res) => {
         }
 
         // Get the updated model with assets
-        const model = db.prepare('SELECT * FROM models WHERE id = ?').get(result.modelId);
+        const model = db.prepare('SELECT * FROM models WHERE id = ?').get(result.modelId) as Record<string, unknown> | undefined;
         const assets = db.prepare('SELECT * FROM model_assets WHERE model_id = ? ORDER BY is_primary DESC').all(result.modelId);
         const files = db.prepare('SELECT * FROM model_files WHERE model_id = ?').all(result.modelId);
 
