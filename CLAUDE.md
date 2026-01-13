@@ -264,10 +264,23 @@ proxy: {
 - **Multiple files per model**: All files in a folder are indexed as alternate versions/formats
   - Example: A folder with 3 STL files → 1 model with 3 file versions
   - No "duplicates" - all files are considered part of the same model
-- **Loose files management**: Files in root directory are tracked separately (not indexed as models)
+- **Loose files management**: Files in root OR directly in category folders are tracked separately
+  - Example: `Toys/model.stl` is loose (needs a folder), `Toys/MyModel/model.stl` is indexed
 - **Loose files review page**: Dedicated page to review and organize unorganized files
 - **Open in Finder**: Button on each model card to quickly open the containing folder
 - **Multi-tag support**: Models can have multiple tags/categories (database schema ready, UI pending)
+
+### Date Tracking & Sorting
+- **Date tracking**: Models track earliest file dates from all files in folder
+  - `date_added`: Earliest modification time (mtime) of files in model folder
+  - `date_created`: Earliest creation time (birthtime) of files in model folder
+- **Sorting options**: Sort by Date Added (default), Date Created, Name, or Category
+- **Sort order toggle**: Ascending or descending sort order
+
+### Browse View Options
+- **Grid view**: Card-based layout with images (default)
+- **Table view**: Compact list with columns for name, category, file count, date, actions
+- **View toggle**: Switch between grid and table views
 
 ### Performance with Large Collections
 - Successfully tested with 38k+ models and 33k+ assets
