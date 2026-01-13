@@ -92,6 +92,12 @@
       </div>
     </div>
 
+    <!-- Search active indicator -->
+    <div v-if="isSearchActive" class="search-results-bar">
+      <span>Search results for "{{ searchInput }}"</span>
+      <button @click="clearSearch" class="clear-search-btn">Clear search</button>
+    </div>
+
     <div v-if="store.loading && store.models.length === 0" class="loading">
       <div class="loading-spinner"></div>
       <span>Loading models...</span>
@@ -115,7 +121,7 @@
         class="model-card"
         :style="{ animationDelay: `${Math.min(index * 30, 300)}ms` }"
       >
-        <div class="model-image" @click="openInFinder(model)">
+        <div class="model-image" @click="openModal(model)">
           <img
             v-if="model.primaryImage"
             :src="modelsApi.getFileUrl(model.primaryImage)"
@@ -130,11 +136,11 @@
             </svg>
           </div>
           <div class="image-overlay">
-            <span class="open-hint">Open folder</span>
+            <span class="open-hint">View details</span>
           </div>
         </div>
         <div class="model-info">
-          <h3 :title="model.filename">{{ model.filename }}</h3>
+          <h3 :title="model.filename" @click="openModal(model)">{{ model.filename }}</h3>
           <div class="model-meta">
             <span class="category-tag">{{ model.category }}</span>
             <span v-if="model.file_count > 1" class="file-count">{{ model.file_count }} files</span>
@@ -163,6 +169,15 @@
                 <path d="M12 5v14M5 12h14"/>
               </svg>
             </button>
+            <button
+              @click="openInFinder(model)"
+              class="action-btn"
+              title="Open in Finder"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -186,7 +201,7 @@
             v-for="(model, index) in store.models"
             :key="model.id"
             :style="{ animationDelay: `${Math.min(index * 20, 200)}ms` }"
-            @click="openInFinder(model)"
+            @click="openModal(model)"
           >
             <td class="col-image">
               <div class="table-image">
@@ -237,6 +252,15 @@
                     <path d="M12 5v14M5 12h14"/>
                   </svg>
                 </button>
+                <button
+                  @click="openInFinder(model)"
+                  class="action-btn-small"
+                  title="Open in Finder"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                  </svg>
+                </button>
               </div>
             </td>
           </tr>
@@ -244,8 +268,8 @@
       </table>
     </div>
 
-    <!-- Infinite scroll sentinel -->
-    <div ref="loadMoreSentinel" class="load-more-sentinel">
+    <!-- Infinite scroll sentinel (disabled during search) -->
+    <div v-if="!isSearchActive" ref="loadMoreSentinel" class="load-more-sentinel">
       <div v-if="store.loading && store.models.length > 0" class="loading-more">
         <div class="loading-spinner small"></div>
         <span>Loading more...</span>
@@ -254,14 +278,23 @@
         <span>All {{ totalModels }} models loaded</span>
       </div>
     </div>
+
+    <!-- Model Details Modal -->
+    <ModelDetailsModal
+      v-if="selectedModelId"
+      :modelId="selectedModelId"
+      @close="selectedModelId = null"
+      @updated="handleModelUpdated"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useAppStore } from '../store';
 import { modelsApi, systemApi } from '../services/api';
 import type { Model } from '../services/api';
+import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 
 const store = useAppStore();
 const searchInput = ref('');
@@ -270,8 +303,10 @@ const sortField = ref('date_added');
 const sortOrder = ref<'asc' | 'desc'>('desc');
 const loadMoreSentinel = ref<HTMLElement | null>(null);
 const totalModels = ref(0);
+const isSearchActive = ref(false);
+const selectedModelId = ref<number | null>(null);
 
-const hasMoreModels = computed(() => store.models.length < totalModels.value);
+const hasMoreModels = computed(() => !isSearchActive.value && store.models.length < totalModels.value);
 
 let observer: IntersectionObserver | null = null;
 
@@ -288,7 +323,9 @@ onUnmounted(() => {
 
 // Watch for changes that require reloading
 watch([sortField, sortOrder], () => {
-  resetAndLoad();
+  if (!isSearchActive.value) {
+    resetAndLoad();
+  }
 });
 
 async function loadInitialModels() {
@@ -304,11 +341,13 @@ async function loadInitialModels() {
   store.totalPages = response.data.pagination.totalPages;
   totalModels.value = response.data.pagination.total;
   store.selectedCategory = 'all';
+  isSearchActive.value = false;
 }
 
 async function resetAndLoad() {
   store.models = [];
   store.currentPage = 1;
+  isSearchActive.value = false;
   await loadInitialModels();
 }
 
@@ -316,7 +355,7 @@ function setupIntersectionObserver() {
   observer = new IntersectionObserver(
     (entries) => {
       const entry = entries[0];
-      if (entry.isIntersecting && hasMoreModels.value && !store.loading) {
+      if (entry.isIntersecting && hasMoreModels.value && !store.loading && !isSearchActive.value) {
         loadMoreModels();
       }
     },
@@ -329,7 +368,7 @@ function setupIntersectionObserver() {
 }
 
 async function loadMoreModels() {
-  if (store.loading || !hasMoreModels.value) return;
+  if (store.loading || !hasMoreModels.value || isSearchActive.value) return;
 
   store.loading = true;
   try {
@@ -354,6 +393,12 @@ async function loadMoreModels() {
 }
 
 async function filterByCategory(category: string) {
+  if (isSearchActive.value) {
+    // Clear search when filtering
+    searchInput.value = '';
+    isSearchActive.value = false;
+  }
+
   store.loading = true;
   store.selectedCategory = category;
   try {
@@ -375,16 +420,29 @@ async function filterByCategory(category: string) {
   }
 }
 
-function handleSearch() {
+async function handleSearch() {
   if (searchInput.value.trim()) {
-    store.searchModels(searchInput.value);
+    store.loading = true;
+    isSearchActive.value = true;
+    try {
+      const response = await modelsApi.search(searchInput.value);
+      store.models = response.data.models;
+      totalModels.value = response.data.count;
+      store.currentPage = 1;
+      store.totalPages = 1; // Search returns all results
+    } catch (error) {
+      console.error('Failed to search models:', error);
+    } finally {
+      store.loading = false;
+    }
   } else {
-    resetAndLoad();
+    clearSearch();
   }
 }
 
 function clearSearch() {
   searchInput.value = '';
+  isSearchActive.value = false;
   resetAndLoad();
 }
 
@@ -406,6 +464,18 @@ function formatDate(dateString: string | null): string {
   if (!dateString) return '-';
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function openModal(model: Model) {
+  selectedModelId.value = model.id;
+}
+
+function handleModelUpdated(updatedModel: any) {
+  // Update the model in the list
+  const index = store.models.findIndex(m => m.id === updatedModel.id);
+  if (index !== -1) {
+    store.models[index] = { ...store.models[index], ...updatedModel };
+  }
 }
 
 async function openInFinder(model: Model) {
@@ -513,6 +583,35 @@ async function openInFinder(model: Model) {
 }
 
 .search-clear:hover svg {
+  color: var(--bg-deepest);
+}
+
+/* Search results bar */
+.search-results-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--accent-primary-dim);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--accent-primary);
+  font-size: 0.9rem;
+}
+
+.clear-search-btn {
+  padding: 0.375rem 0.75rem;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.clear-search-btn:hover {
+  background: var(--accent-primary);
   color: var(--bg-deepest);
 }
 
@@ -757,6 +856,11 @@ async function openInFinder(model: Model) {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-primary);
+  cursor: pointer;
+}
+
+.model-info h3:hover {
+  color: var(--accent-primary);
 }
 
 .model-meta {
@@ -907,7 +1011,7 @@ async function openInFinder(model: Model) {
 }
 
 .col-actions {
-  width: 100px;
+  width: 120px;
 }
 
 .table-image {

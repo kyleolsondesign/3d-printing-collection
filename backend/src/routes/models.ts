@@ -3,6 +3,7 @@ import db from '../config/database.js';
 import fs from 'fs';
 import path from 'path';
 import mime from 'mime-types';
+import scanner from '../services/scanner.js';
 
 const router = express.Router();
 
@@ -177,6 +178,53 @@ router.get('/file/serve', (req, res) => {
         }
 
         res.sendFile(resolvedPath);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Rescan a single model folder
+router.post('/:id/rescan', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const modelId = parseInt(id);
+
+        if (isNaN(modelId)) {
+            return res.status(400).json({ error: 'Invalid model ID' });
+        }
+
+        const result = await scanner.rescanModel(modelId);
+
+        if (!result) {
+            return res.status(404).json({ error: 'Model folder not found or contains no model files' });
+        }
+
+        // Get the updated model with assets
+        const model = db.prepare('SELECT * FROM models WHERE id = ?').get(result.modelId);
+        const assets = db.prepare('SELECT * FROM model_assets WHERE model_id = ? ORDER BY is_primary DESC').all(result.modelId);
+        const files = db.prepare('SELECT * FROM model_files WHERE model_id = ?').all(result.modelId);
+
+        res.json({
+            success: true,
+            model: {
+                ...model,
+                assets,
+                files
+            }
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Get all files for a model
+router.get('/:id/files', (req, res) => {
+    try {
+        const { id } = req.params;
+        const files = db.prepare('SELECT * FROM model_files WHERE model_id = ?').all(id);
+        res.json({ files });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

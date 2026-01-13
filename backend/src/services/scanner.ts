@@ -89,6 +89,142 @@ class Scanner {
         }
     }
 
+    /**
+     * Scan and index a single model folder.
+     * Used for rescanning individual models or newly organized loose files.
+     */
+    async scanSingleFolder(folderPath: string, rootPath: string): Promise<{ modelId: number; filename: string } | null> {
+        try {
+            if (!fs.existsSync(folderPath)) {
+                throw new Error(`Folder does not exist: ${folderPath}`);
+            }
+
+            const stats = fs.statSync(folderPath);
+            if (!stats.isDirectory()) {
+                throw new Error(`Path is not a directory: ${folderPath}`);
+            }
+
+            // Collect model files in this folder
+            const files = fs.readdirSync(folderPath);
+            const modelFiles: string[] = [];
+            let earliestAdded: Date | null = null;
+            let earliestCreated: Date | null = null;
+
+            for (const file of files) {
+                const filePath = path.join(folderPath, file);
+                try {
+                    const fileStat = fs.statSync(filePath);
+                    if (fileStat.isDirectory()) continue;
+
+                    if (isModelFile(filePath) || isArchiveFile(filePath)) {
+                        modelFiles.push(filePath);
+
+                        // Track dates
+                        if (!earliestAdded || fileStat.mtime < earliestAdded) {
+                            earliestAdded = fileStat.mtime;
+                        }
+                        if (!earliestCreated || fileStat.birthtime < earliestCreated) {
+                            earliestCreated = fileStat.birthtime;
+                        }
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+
+            if (modelFiles.length === 0) {
+                return null; // No model files found
+            }
+
+            const folderName = path.basename(folderPath);
+            const cleanedName = cleanupFolderName(folderName);
+            const category = this.extractCategory(folderPath, rootPath);
+            const isPaid = this.isInFolder(folderPath, rootPath, 'Paid');
+            const isOriginal = this.isInFolder(folderPath, rootPath, 'Original Creations');
+
+            const dateAdded = earliestAdded?.toISOString() || null;
+            const dateCreated = earliestCreated?.toISOString() || null;
+
+            // Insert model into database
+            const insertModel = db.prepare(`
+                INSERT INTO models (filename, filepath, category, is_paid, is_original, file_count, date_added, date_created)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+
+            const result = insertModel.run(
+                cleanedName,
+                folderPath,
+                category,
+                isPaid ? 1 : 0,
+                isOriginal ? 1 : 0,
+                modelFiles.length,
+                dateAdded,
+                dateCreated
+            );
+
+            const modelId = Number(result.lastInsertRowid);
+
+            // Insert model files
+            const insertFile = db.prepare(`
+                INSERT INTO model_files (model_id, filename, filepath, file_size, file_type)
+                VALUES (?, ?, ?, ?, ?)
+            `);
+
+            for (const filePath of modelFiles) {
+                const fileStats = fs.statSync(filePath);
+                const filename = path.basename(filePath);
+                const ext = path.extname(filePath).toLowerCase().replace('.', '');
+                insertFile.run(modelId, filename, filePath, fileStats.size, ext);
+            }
+
+            // Index assets
+            this.indexAssets(modelId, folderPath);
+
+            // Extract images from archives if no primary image
+            if (!this.hasPrimaryImage(modelId)) {
+                await this.extractImageFromArchives(modelId, folderPath);
+            }
+
+            console.log(`Indexed single folder: ${cleanedName}`);
+            return { modelId, filename: cleanedName };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`Error scanning single folder ${folderPath}:`, message);
+            throw error;
+        }
+    }
+
+    /**
+     * Rescan an existing model folder (delete and re-index)
+     */
+    async rescanModel(modelId: number): Promise<{ modelId: number; filename: string } | null> {
+        try {
+            // Get the model's folder path
+            const model = db.prepare('SELECT filepath FROM models WHERE id = ?').get(modelId) as { filepath: string } | undefined;
+            if (!model) {
+                throw new Error(`Model not found: ${modelId}`);
+            }
+
+            // Get root path from config
+            const configResult = db.prepare('SELECT value FROM config WHERE key = ?').get('model_directory') as { value: string } | undefined;
+            if (!configResult) {
+                throw new Error('Model directory not configured');
+            }
+
+            // Delete existing model data
+            db.prepare('DELETE FROM model_files WHERE model_id = ?').run(modelId);
+            db.prepare('DELETE FROM model_assets WHERE model_id = ?').run(modelId);
+            db.prepare('DELETE FROM models WHERE id = ?').run(modelId);
+
+            // Re-scan the folder
+            return await this.scanSingleFolder(model.filepath, configResult.value);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`Error rescanning model ${modelId}:`, message);
+            throw error;
+        }
+    }
+
     private clearExistingModels(): void {
         db.prepare('DELETE FROM models').run();
         db.prepare('DELETE FROM model_files').run();

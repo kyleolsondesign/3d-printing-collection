@@ -67,7 +67,13 @@ export const modelsApi = {
         api.get('/models/search/query', { params: { q: query } }),
 
     getFileUrl: (filepath: string) =>
-        `/api/models/file/serve?path=${encodeURIComponent(filepath)}`
+        `/api/models/file/serve?path=${encodeURIComponent(filepath)}`,
+
+    rescan: (id: number) =>
+        api.post(`/models/${id}/rescan`),
+
+    getFiles: (id: number) =>
+        api.get(`/models/${id}/files`)
 };
 
 // Favorites API
@@ -110,7 +116,9 @@ export const systemApi = {
     getCategories: () => api.get('/system/categories'),
     getStats: () => api.get('/system/stats'),
     getLooseFiles: () => api.get('/system/loose-files'),
-    openFolder: (folderPath: string) => api.post('/system/open-folder', { folderPath })
+    openFolder: (folderPath: string) => api.post('/system/open-folder', { folderPath }),
+    organizeLooseFile: (looseFileId: number) => api.post('/system/organize-loose-file', { looseFileId }),
+    organizeLooseFiles: (looseFileIds: number[]) => api.post('/system/organize-loose-files', { looseFileIds })
 };
 
 export default api;
