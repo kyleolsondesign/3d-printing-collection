@@ -5,10 +5,14 @@ import db from '../config/database.js';
 import { isModelFile, isImageFile, isDocumentFile, isArchiveFile } from '../utils/fileTypes.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
 
+export type ScanMode = 'full' | 'full_sync' | 'add_only';
+
 interface ScanProgress {
     totalFiles: number;
     processedFiles: number;
     modelsFound: number;
+    modelsUpdated: number;
+    modelsRemoved: number;
     modelFilesFound: number;
     assetsFound: number;
     looseFilesFound: number;
@@ -22,26 +26,39 @@ interface FolderData {
 
 class Scanner {
     private scanning: boolean = false;
+    private scanMode: ScanMode = 'full';
     private progress: ScanProgress = {
         totalFiles: 0,
         processedFiles: 0,
         modelsFound: 0,
+        modelsUpdated: 0,
+        modelsRemoved: 0,
         modelFilesFound: 0,
         assetsFound: 0,
         looseFilesFound: 0
     };
     private foldersWithModels: Map<string, FolderData> = new Map();
 
-    async scanDirectory(modelDirectory: string): Promise<ScanProgress> {
+    /**
+     * Scan the model directory with the specified mode:
+     * - 'full': Destructive scan - clears all model data and rescans (legacy behavior)
+     * - 'full_sync': Non-destructive sync - updates existing, adds new, removes deleted folders
+     *                Preserves favorites, print history, and queue (orphans them if model deleted)
+     * - 'add_only': Only adds new models that don't exist, never modifies or deletes
+     */
+    async scanDirectory(modelDirectory: string, mode: ScanMode = 'full'): Promise<ScanProgress> {
         if (this.scanning) {
             throw new Error('Scan already in progress');
         }
 
         this.scanning = true;
+        this.scanMode = mode;
         this.progress = {
             totalFiles: 0,
             processedFiles: 0,
             modelsFound: 0,
+            modelsUpdated: 0,
+            modelsRemoved: 0,
             modelFilesFound: 0,
             assetsFound: 0,
             looseFilesFound: 0
@@ -49,7 +66,7 @@ class Scanner {
         this.foldersWithModels = new Map();
 
         try {
-            console.log(`Starting scan of directory: ${modelDirectory}`);
+            console.log(`Starting ${mode} scan of directory: ${modelDirectory}`);
 
             // Check if directory exists
             if (!fs.existsSync(modelDirectory)) {
@@ -64,8 +81,13 @@ class Scanner {
 
             console.log(`Directory verified. Starting recursive scan...`);
 
-            // Clear existing models before rescanning
-            this.clearExistingModels();
+            // Only clear data in 'full' mode (destructive)
+            if (mode === 'full') {
+                this.clearExistingModels();
+            } else if (mode === 'full_sync') {
+                // Clear loose_files table - we'll rebuild it
+                db.prepare('DELETE FROM loose_files').run();
+            }
 
             // Phase 1: Recursively scan and collect model files by folder
             await this.scanDirectoryRecursive(modelDirectory, modelDirectory);
@@ -73,8 +95,18 @@ class Scanner {
             // Phase 2: Index folders as models (includes image extraction from archives)
             await this.indexFoldersAsModels(modelDirectory);
 
+            // Phase 3: In full_sync mode, remove models whose folders no longer exist
+            if (mode === 'full_sync') {
+                this.removeOrphanedModels();
+            }
+
             console.log(`Scan complete!`);
-            console.log(`- Models (folders): ${this.progress.modelsFound}`);
+            console.log(`- Mode: ${mode}`);
+            console.log(`- Models added: ${this.progress.modelsFound}`);
+            if (mode === 'full_sync') {
+                console.log(`- Models updated: ${this.progress.modelsUpdated}`);
+                console.log(`- Models removed: ${this.progress.modelsRemoved}`);
+            }
             console.log(`- Model files: ${this.progress.modelFilesFound}`);
             console.log(`- Assets (images/PDFs): ${this.progress.assetsFound}`);
             console.log(`- Loose files: ${this.progress.looseFilesFound}`);
@@ -254,6 +286,37 @@ class Scanner {
         console.log('Cleared existing data from database');
     }
 
+    /**
+     * Soft delete models whose folders no longer exist on the filesystem.
+     * Sets deleted_at timestamp instead of removing records.
+     * Preserves all data including favorites, print history, and queue.
+     */
+    private removeOrphanedModels(): void {
+        // Only check non-deleted models
+        const models = db.prepare('SELECT id, filepath FROM models WHERE deleted_at IS NULL').all() as Array<{ id: number; filepath: string }>;
+
+        for (const model of models) {
+            // Check if the folder still exists
+            if (!fs.existsSync(model.filepath) || !fs.statSync(model.filepath).isDirectory()) {
+                // Soft delete: set deleted_at timestamp
+                db.prepare('UPDATE models SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').run(model.id);
+                this.progress.modelsRemoved++;
+                console.log(`Soft deleted orphaned model: ${model.filepath}`);
+            }
+        }
+
+        // Also restore any previously deleted models whose folders now exist again
+        const deletedModels = db.prepare('SELECT id, filepath FROM models WHERE deleted_at IS NOT NULL').all() as Array<{ id: number; filepath: string }>;
+
+        for (const model of deletedModels) {
+            if (fs.existsSync(model.filepath) && fs.statSync(model.filepath).isDirectory()) {
+                // Restore the model
+                db.prepare('UPDATE models SET deleted_at = NULL WHERE id = ?').run(model.id);
+                console.log(`Restored model: ${model.filepath}`);
+            }
+        }
+    }
+
     private async scanDirectoryRecursive(currentPath: string, rootPath: string): Promise<void> {
         try {
             const entries = fs.readdirSync(currentPath, { withFileTypes: true });
@@ -360,24 +423,64 @@ class Scanner {
                 const dateAdded = folderData.earliestAdded?.toISOString() || null;
                 const dateCreated = folderData.earliestCreated?.toISOString() || null;
 
-                // Insert model (folder) into database
-                const insertModel = db.prepare(`
-                    INSERT INTO models (filename, filepath, category, is_paid, is_original, file_count, date_added, date_created)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `);
+                let modelId: number;
 
-                const result = insertModel.run(
-                    cleanedName,
-                    folderPath,
-                    category,
-                    isPaid ? 1 : 0,
-                    isOriginal ? 1 : 0,
-                    folderData.files.length,
-                    dateAdded,
-                    dateCreated
-                );
+                // Check if model already exists (for non-full modes)
+                const existingModel = db.prepare('SELECT id FROM models WHERE filepath = ?').get(folderPath) as { id: number } | undefined;
 
-                const modelId = Number(result.lastInsertRowid);
+                if (existingModel) {
+                    // Model exists
+                    if (this.scanMode === 'add_only') {
+                        // Skip existing models in add_only mode
+                        continue;
+                    }
+
+                    // full_sync mode: Update existing model
+                    modelId = existingModel.id;
+
+                    // Update model record
+                    db.prepare(`
+                        UPDATE models SET
+                            filename = ?, category = ?, is_paid = ?, is_original = ?,
+                            file_count = ?, date_added = ?, date_created = ?
+                        WHERE id = ?
+                    `).run(
+                        cleanedName,
+                        category,
+                        isPaid ? 1 : 0,
+                        isOriginal ? 1 : 0,
+                        folderData.files.length,
+                        dateAdded,
+                        dateCreated,
+                        modelId
+                    );
+
+                    // Clear and rebuild model_files and model_assets
+                    db.prepare('DELETE FROM model_files WHERE model_id = ?').run(modelId);
+                    db.prepare('DELETE FROM model_assets WHERE model_id = ?').run(modelId);
+
+                    this.progress.modelsUpdated++;
+                } else {
+                    // Insert new model (folder) into database
+                    const insertModel = db.prepare(`
+                        INSERT INTO models (filename, filepath, category, is_paid, is_original, file_count, date_added, date_created)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    `);
+
+                    const result = insertModel.run(
+                        cleanedName,
+                        folderPath,
+                        category,
+                        isPaid ? 1 : 0,
+                        isOriginal ? 1 : 0,
+                        folderData.files.length,
+                        dateAdded,
+                        dateCreated
+                    );
+
+                    modelId = Number(result.lastInsertRowid);
+                    this.progress.modelsFound++;
+                }
 
                 // Insert all model files for this model
                 const insertFile = db.prepare(`
@@ -401,8 +504,6 @@ class Scanner {
                 if (!this.hasPrimaryImage(modelId)) {
                     modelsNeedingImages.push({ modelId, folderPath });
                 }
-
-                this.progress.modelsFound++;
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 console.error(`Error indexing folder ${folderPath}:`, message);
@@ -420,6 +521,14 @@ class Scanner {
 
     private trackLooseFile(filepath: string): void {
         try {
+            // In add_only mode, check if loose file already exists
+            if (this.scanMode === 'add_only') {
+                const existing = db.prepare('SELECT id FROM loose_files WHERE filepath = ?').get(filepath);
+                if (existing) {
+                    return; // Skip existing loose files
+                }
+            }
+
             const stats = fs.statSync(filepath);
             const filename = path.basename(filepath);
             const ext = path.extname(filepath).toLowerCase();

@@ -107,11 +107,14 @@ export const queueApi = {
         api.post('/queue/reorder', { items })
 };
 
+// Scan modes for the scanner
+export type ScanMode = 'full' | 'full_sync' | 'add_only';
+
 // System API
 export const systemApi = {
     getConfig: () => api.get('/system/config'),
     setConfig: (key: string, value: string) => api.post('/system/config', { key, value }),
-    scan: (modelDirectory?: string) => api.post('/system/scan', { modelDirectory }),
+    scan: (modelDirectory?: string, mode: ScanMode = 'full') => api.post('/system/scan', { modelDirectory, mode }),
     getScanStatus: () => api.get('/system/scan/status'),
     getCategories: () => api.get('/system/categories'),
     getStats: () => api.get('/system/stats'),

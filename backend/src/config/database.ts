@@ -50,6 +50,12 @@ function initializeDatabase(): void {
     } catch (e) {
         // Column already exists, ignore
     }
+    // Add deleted_at for soft deletes
+    try {
+        db.exec(`ALTER TABLE models ADD COLUMN deleted_at TEXT`);
+    } catch (e) {
+        // Column already exists, ignore
+    }
 
     // Model files table - stores all actual model files in a folder
     db.exec(`
@@ -166,6 +172,7 @@ function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_models_category ON models(category);
         CREATE INDEX IF NOT EXISTS idx_models_filename ON models(filename);
         CREATE INDEX IF NOT EXISTS idx_models_filepath ON models(filepath);
+        CREATE INDEX IF NOT EXISTS idx_models_deleted_at ON models(deleted_at);
         CREATE INDEX IF NOT EXISTS idx_favorites_model ON favorites(model_id);
         CREATE INDEX IF NOT EXISTS idx_printed_model ON printed_models(model_id);
         CREATE INDEX IF NOT EXISTS idx_queue_priority ON print_queue(priority DESC, added_at);

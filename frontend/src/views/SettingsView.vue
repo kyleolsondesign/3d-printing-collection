@@ -24,6 +24,36 @@
           placeholder="/path/to/your/models"
           class="text-input"
         />
+      </div>
+
+      <div class="scan-mode-section">
+        <label class="scan-mode-label">Scan Mode</label>
+        <div class="scan-mode-options">
+          <label class="radio-option" :class="{ selected: scanMode === 'full_sync' }">
+            <input type="radio" v-model="scanMode" value="full_sync" />
+            <div class="radio-content">
+              <span class="radio-title">Sync (Recommended)</span>
+              <span class="radio-desc">Updates existing, adds new, soft-deletes removed. Preserves favorites & history.</span>
+            </div>
+          </label>
+          <label class="radio-option" :class="{ selected: scanMode === 'add_only' }">
+            <input type="radio" v-model="scanMode" value="add_only" />
+            <div class="radio-content">
+              <span class="radio-title">Add Only</span>
+              <span class="radio-desc">Only adds new models. Never modifies or deletes existing records.</span>
+            </div>
+          </label>
+          <label class="radio-option" :class="{ selected: scanMode === 'full' }">
+            <input type="radio" v-model="scanMode" value="full" />
+            <div class="radio-content">
+              <span class="radio-title">Full Rebuild</span>
+              <span class="radio-desc">Clears all model data and rescans from scratch. Preserves favorites & history.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="scan-actions">
         <button @click="saveAndScan" class="btn-primary" :disabled="scanning">
           <svg v-if="scanning" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12a9 9 0 11-6.219-8.56"/>
@@ -32,7 +62,7 @@
             <path d="M23 4v6h-6M1 20v-6h6"/>
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
           </svg>
-          {{ scanning ? 'Scanning...' : 'Save & Scan' }}
+          {{ scanning ? 'Scanning...' : 'Start Scan' }}
         </button>
       </div>
       <p v-if="lastScan" class="last-scan">
@@ -66,7 +96,15 @@
         </div>
         <div class="stat">
           <span class="stat-value">{{ scanStatus.modelsFound.toLocaleString() }}</span>
-          <span class="stat-label">models</span>
+          <span class="stat-label">added</span>
+        </div>
+        <div v-if="scanStatus.modelsUpdated > 0" class="stat">
+          <span class="stat-value">{{ scanStatus.modelsUpdated.toLocaleString() }}</span>
+          <span class="stat-label">updated</span>
+        </div>
+        <div v-if="scanStatus.modelsRemoved > 0" class="stat warning">
+          <span class="stat-value">{{ scanStatus.modelsRemoved.toLocaleString() }}</span>
+          <span class="stat-label">removed</span>
         </div>
         <div class="stat">
           <span class="stat-value">{{ scanStatus.modelFilesFound.toLocaleString() }}</span>
@@ -156,6 +194,15 @@
           <div class="stat-value">{{ stats.totalLooseFiles.toLocaleString() }}</div>
           <div class="stat-label">Loose Files</div>
         </div>
+        <div v-if="stats.deletedModels > 0" class="stat-card muted">
+          <div class="stat-icon deleted">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+            </svg>
+          </div>
+          <div class="stat-value">{{ stats.deletedModels.toLocaleString() }}</div>
+          <div class="stat-label">Deleted</div>
+        </div>
       </div>
     </div>
   </div>
@@ -163,9 +210,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { systemApi } from '../services/api';
+import { systemApi, type ScanMode } from '../services/api';
 
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');
+const scanMode = ref<ScanMode>('full_sync');
 const scanning = ref(false);
 const lastScan = ref<string | null>(null);
 const message = ref('');
@@ -175,12 +223,15 @@ const scanStatus = ref({
   totalFiles: 0,
   processedFiles: 0,
   modelsFound: 0,
+  modelsUpdated: 0,
+  modelsRemoved: 0,
   modelFilesFound: 0,
   assetsFound: 0,
   looseFilesFound: 0
 });
 const stats = ref({
   totalModels: 0,
+  deletedModels: 0,
   totalFavorites: 0,
   totalPrinted: 0,
   totalQueued: 0,
@@ -245,8 +296,8 @@ async function saveAndScan() {
   message.value = '';
 
   try {
-    await systemApi.scan(modelDirectory.value);
-    showMessage('Scan started successfully!', 'success');
+    await systemApi.scan(modelDirectory.value, scanMode.value);
+    showMessage(`Scan started (${scanMode.value} mode)`, 'success');
     lastScan.value = new Date().toISOString();
 
     scanStatus.value.scanning = true;
@@ -610,5 +661,82 @@ h2 {
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 500;
+}
+
+.stat-card.muted {
+  opacity: 0.7;
+}
+
+.stat-icon.deleted {
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+}
+
+.scan-mode-section {
+  margin-top: 1.25rem;
+}
+
+.scan-mode-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.scan-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.radio-option:hover {
+  border-color: var(--border-default);
+}
+
+.radio-option.selected {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+.radio-option input[type="radio"] {
+  margin-top: 0.125rem;
+  accent-color: var(--accent-primary);
+}
+
+.radio-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.radio-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.radio-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.scan-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

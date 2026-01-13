@@ -15,14 +15,25 @@ router.get('/', (req, res) => {
         const category = req.query.category as string;
         const sort = req.query.sort as string || 'date_added';
         const order = req.query.order as string || 'desc';
+        const includeDeleted = req.query.includeDeleted === 'true';
         const offset = (page - 1) * limit;
 
         let query = 'SELECT * FROM models';
         const params: any[] = [];
+        const conditions: string[] = [];
+
+        // Filter out soft-deleted models by default
+        if (!includeDeleted) {
+            conditions.push('deleted_at IS NULL');
+        }
 
         if (category && category !== 'all') {
-            query += ' WHERE category = ?';
+            conditions.push('category = ?');
             params.push(category);
+        }
+
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
         }
 
         // Map sort parameter to column name
@@ -55,12 +66,20 @@ router.get('/', (req, res) => {
             };
         });
 
-        // Get total count
+        // Get total count with same filters
         let countQuery = 'SELECT COUNT(*) as total FROM models';
         const countParams: any[] = [];
+        const countConditions: string[] = [];
+
+        if (!includeDeleted) {
+            countConditions.push('deleted_at IS NULL');
+        }
         if (category && category !== 'all') {
-            countQuery += ' WHERE category = ?';
+            countConditions.push('category = ?');
             countParams.push(category);
+        }
+        if (countConditions.length > 0) {
+            countQuery += ' WHERE ' + countConditions.join(' AND ');
         }
 
         const { total } = db.prepare(countQuery).get(...countParams) as { total: number };
@@ -125,11 +144,11 @@ router.get('/search/query', (req, res) => {
             return res.status(400).json({ error: 'Search query required' });
         }
 
-        // Use FTS5 for full-text search
+        // Use FTS5 for full-text search, exclude soft-deleted models
         const models = db.prepare(`
             SELECT models.* FROM models
             JOIN models_fts ON models.id = models_fts.rowid
-            WHERE models_fts MATCH ?
+            WHERE models_fts MATCH ? AND models.deleted_at IS NULL
             ORDER BY rank
             LIMIT 100
         `).all(query);

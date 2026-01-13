@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import db from '../config/database.js';
-import scanner from '../services/scanner.js';
+import scanner, { ScanMode } from '../services/scanner.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
 
 const router = express.Router();
@@ -48,6 +48,11 @@ router.post('/config', (req, res) => {
 });
 
 // Trigger scan
+// Accepts optional 'mode' parameter:
+//   - 'full': Destructive scan - clears all data and rescans (default, legacy behavior)
+//   - 'full_sync': Non-destructive sync - updates existing, adds new, removes deleted
+//                  Preserves favorites, print history, and queue
+//   - 'add_only': Only adds new models, never modifies or deletes existing
 router.post('/scan', async (req, res) => {
     try {
         // Get model directory from config or request
@@ -64,6 +69,12 @@ router.post('/scan', async (req, res) => {
             return res.status(400).json({ error: 'Model directory not configured' });
         }
 
+        // Get scan mode (default to 'full' for backward compatibility)
+        const mode: ScanMode = req.body.mode || 'full';
+        if (!['full', 'full_sync', 'add_only'].includes(mode)) {
+            return res.status(400).json({ error: 'Invalid scan mode. Must be: full, full_sync, or add_only' });
+        }
+
         // Save model directory to config if provided
         if (req.body.modelDirectory) {
             db.prepare(`
@@ -74,11 +85,11 @@ router.post('/scan', async (req, res) => {
         }
 
         // Start scan (async)
-        scanner.scanDirectory(modelDirectory).catch(error => {
+        scanner.scanDirectory(modelDirectory, mode).catch(error => {
             console.error('Scan error:', error);
         });
 
-        res.json({ success: true, message: 'Scan started' });
+        res.json({ success: true, message: `Scan started (mode: ${mode})` });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });
@@ -96,12 +107,13 @@ router.get('/scan/status', (req, res) => {
     }
 });
 
-// Get all categories
+// Get all categories (excludes soft-deleted models)
 router.get('/categories', (req, res) => {
     try {
         const categories = db.prepare(`
             SELECT DISTINCT category, COUNT(*) as count
             FROM models
+            WHERE deleted_at IS NULL
             GROUP BY category
             ORDER BY category
         `).all();
@@ -116,7 +128,8 @@ router.get('/categories', (req, res) => {
 // Get statistics
 router.get('/stats', (req, res) => {
     try {
-        const totalModels = (db.prepare('SELECT COUNT(*) as count FROM models').get() as { count: number }).count;
+        const totalModels = (db.prepare('SELECT COUNT(*) as count FROM models WHERE deleted_at IS NULL').get() as { count: number }).count;
+        const deletedModels = (db.prepare('SELECT COUNT(*) as count FROM models WHERE deleted_at IS NOT NULL').get() as { count: number }).count;
         const totalFavorites = (db.prepare('SELECT COUNT(*) as count FROM favorites').get() as { count: number }).count;
         const totalPrinted = (db.prepare('SELECT COUNT(*) as count FROM printed_models').get() as { count: number }).count;
         const totalQueued = (db.prepare('SELECT COUNT(*) as count FROM print_queue').get() as { count: number }).count;
@@ -124,6 +137,7 @@ router.get('/stats', (req, res) => {
 
         res.json({
             totalModels,
+            deletedModels,
             totalFavorites,
             totalPrinted,
             totalQueued,
