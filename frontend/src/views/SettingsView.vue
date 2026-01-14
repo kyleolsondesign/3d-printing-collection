@@ -241,6 +241,10 @@ const stats = ref({
 });
 
 const scanProgressPercent = computed(() => {
+  // Use overallProgress from backend if available, otherwise fall back to file-based calculation
+  if (scanStatus.value.overallProgress !== undefined) {
+    return scanStatus.value.overallProgress;
+  }
   if (scanStatus.value.totalFiles === 0) return 0;
   return Math.round((scanStatus.value.processedFiles / scanStatus.value.totalFiles) * 100);
 });

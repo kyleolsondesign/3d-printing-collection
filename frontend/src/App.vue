@@ -229,6 +229,7 @@ watch(() => store.globalSearchQuery, (newVal) => {
   display: flex;
   gap: 0.25rem;
   align-items: center;
+  margin-left: 2rem;
 }
 
 .navbar-links a {

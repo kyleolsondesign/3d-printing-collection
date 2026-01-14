@@ -26,6 +26,9 @@ interface ScanProgress {
     looseFilesFound: number;
     currentStep: ScanStep;
     stepDescription: string;
+    totalFolders: number;
+    indexedFolders: number;
+    overallProgress: number;
 }
 
 interface FolderData {
@@ -47,7 +50,10 @@ class Scanner {
         assetsFound: 0,
         looseFilesFound: 0,
         currentStep: 'idle',
-        stepDescription: ''
+        stepDescription: '',
+        totalFolders: 0,
+        indexedFolders: 0,
+        overallProgress: 0
     };
     private foldersWithModels: Map<string, FolderData> = new Map();
 
@@ -75,7 +81,10 @@ class Scanner {
             assetsFound: 0,
             looseFilesFound: 0,
             currentStep: 'discovering',
-            stepDescription: 'Scanning directories...'
+            stepDescription: 'Scanning directories...',
+            totalFolders: 0,
+            indexedFolders: 0,
+            overallProgress: 0
         };
         this.foldersWithModels = new Map();
 
@@ -106,6 +115,10 @@ class Scanner {
             // Phase 1: Recursively scan and collect model files by folder
             await this.scanDirectoryRecursive(modelDirectory, modelDirectory);
 
+            // Set totalFolders for progress tracking
+            this.progress.totalFolders = this.foldersWithModels.size;
+            this.progress.overallProgress = 30; // Discovery complete
+
             // Phase 2: Index folders as models (includes image extraction from archives)
             this.progress.currentStep = 'indexing';
             this.progress.stepDescription = 'Indexing model folders...';
@@ -115,11 +128,13 @@ class Scanner {
             if (mode === 'full_sync') {
                 this.progress.currentStep = 'cleanup';
                 this.progress.stepDescription = 'Cleaning up orphaned models...';
+                this.progress.overallProgress = 95;
                 this.removeOrphanedModels();
             }
 
             this.progress.currentStep = 'complete';
             this.progress.stepDescription = 'Scan complete';
+            this.progress.overallProgress = 100;
             console.log(`Scan complete!`);
             console.log(`- Mode: ${mode}`);
             console.log(`- Models added: ${this.progress.modelsFound}`);
@@ -423,6 +438,10 @@ class Scanner {
                     }
 
                     this.progress.processedFiles++;
+                    // Discovery phase = 0-30% of overall progress
+                    if (this.progress.totalFiles > 0) {
+                        this.progress.overallProgress = Math.round((this.progress.processedFiles / this.progress.totalFiles) * 30);
+                    }
 
                     // Yield control every 100 files to keep API responsive
                     if (this.progress.processedFiles % 100 === 0) {
@@ -460,6 +479,8 @@ class Scanner {
 
     private async indexFoldersAsModels(rootPath: string): Promise<void> {
         const modelsNeedingImages: Array<{ modelId: number; folderPath: string }> = [];
+        let indexedCount = 0;
+        const totalFolders = this.foldersWithModels.size;
 
         for (const [folderPath, folderData] of this.foldersWithModels.entries()) {
             try {
@@ -583,13 +604,20 @@ class Scanner {
                 // Process Finder tags for printed/queue status
                 await this.processFinderTags(modelId, folderPath);
 
+                // Update indexing progress (30% + up to 60% = 90% total before extraction)
+                indexedCount++;
+                this.progress.indexedFolders = indexedCount;
+                // Indexing phase = 30-90% of overall progress
+                this.progress.overallProgress = 30 + Math.round((indexedCount / totalFolders) * 60);
+
                 // Yield control every 50 models to keep API responsive
-                if (this.progress.modelsFound % 50 === 0 || this.progress.modelsUpdated % 50 === 0) {
+                if (indexedCount % 50 === 0) {
                     await yieldToEventLoop();
                 }
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 console.error(`Error indexing folder ${folderPath}:`, message);
+                indexedCount++;
             }
         }
 

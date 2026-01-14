@@ -376,6 +376,8 @@ async function setPrimaryImage(asset: ModelAsset) {
       a.is_primary = a.id === asset.id ? 1 : 0;
     });
     primaryImage.value = asset.filepath;
+    // Also update the primaryImage property so browse cards update
+    (modelDetails.value as any).primaryImage = asset.filepath;
     emit('updated', modelDetails.value);
   } catch (error) {
     console.error('Failed to set primary image:', error);

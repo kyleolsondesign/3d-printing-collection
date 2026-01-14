@@ -84,7 +84,7 @@ export const modelsApi = {
         api.put(`/models/${modelId}/primary-image`, { assetId }),
 
     extractZip: (modelId: number, zipPath: string) =>
-        api.post(`/models/${modelId}/extract-zip`, { zipPath })
+        api.post(`/models/${modelId}/extract-zip`, { zipPath }, { timeout: 120000 })
 };
 
 // Favorites API
