@@ -5,7 +5,41 @@
         <h2>Print Queue</h2>
         <span class="count-badge" v-if="queue.length > 0">{{ queue.length }}</span>
       </div>
-      <p class="subtitle">Models waiting to be printed</p>
+      <div class="header-actions">
+        <button
+          v-if="queue.length > 0"
+          @click="toggleSelectionMode"
+          :class="['select-btn', { active: selectionMode }]"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path v-if="selectionMode" d="M9 12l2 2 4-4"/>
+          </svg>
+          <span>{{ selectionMode ? 'Cancel' : 'Select' }}</span>
+        </button>
+      </div>
+    </div>
+    <p class="subtitle">Models waiting to be printed</p>
+
+    <!-- Bulk actions bar -->
+    <div v-if="selectionMode" class="bulk-actions-bar">
+      <div class="bulk-left">
+        <span class="selected-count">{{ selectedCount }} selected</span>
+        <button @click="allSelected ? deselectAll() : selectAll()" class="select-all-btn">
+          {{ allSelected ? 'Deselect All' : 'Select All' }}
+        </button>
+      </div>
+      <div class="bulk-actions" :class="{ disabled: bulkLoading || selectedCount === 0 }">
+        <button @click="bulkRemove" class="bulk-btn delete-btn" :disabled="bulkLoading || selectedCount === 0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+          <span>Remove Selected</span>
+        </button>
+        <div v-if="bulkLoading" class="bulk-loading">
+          <div class="loading-spinner small"></div>
+        </div>
+      </div>
     </div>
 
     <div v-if="loading" class="loading">
@@ -27,11 +61,31 @@
       <div
         v-for="(item, index) in queue"
         :key="item.id"
-        class="queue-card"
+        :class="['queue-card', {
+          selected: selectedItems.has(item.model_id),
+          dragging: dragIndex === index,
+          'drag-over': dragOverIndex === index && dragIndex !== index
+        }]"
         :style="{ animationDelay: `${index * 50}ms` }"
+        :draggable="!selectionMode"
+        @click="selectionMode ? toggleSelection(item.model_id) : null"
+        @dragstart="handleDragStart(index, $event)"
+        @dragend="handleDragEnd"
+        @dragover.prevent="handleDragOver(index)"
+        @dragleave="handleDragLeave"
+        @drop.prevent="handleDrop(index)"
       >
-        <div class="queue-number">{{ index + 1 }}</div>
-        <div class="drag-handle">
+        <div v-if="selectionMode" class="selection-checkbox" @click.stop="toggleSelection(item.model_id)">
+          <svg v-if="selectedItems.has(item.model_id)" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="3" y="3" width="18" height="18" rx="3" fill="var(--accent-primary)"/>
+            <path d="M9 12l2 2 4-4" stroke="var(--bg-deepest)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="3"/>
+          </svg>
+        </div>
+        <div v-else class="queue-number">{{ index + 1 }}</div>
+        <div class="drag-handle" :class="{ 'can-drag': !selectionMode }">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M8 6h.01M8 12h.01M8 18h.01M12 6h.01M12 12h.01M12 18h.01"/>
           </svg>
@@ -57,11 +111,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { queueApi } from '../services/api';
 
 const queue = ref<any[]>([]);
 const loading = ref(true);
+
+// Selection mode state
+const selectionMode = ref(false);
+const selectedItems = ref<Set<number>>(new Set());
+const bulkLoading = ref(false);
+
+// Drag and drop state
+const dragIndex = ref<number | null>(null);
+const dragOverIndex = ref<number | null>(null);
+
+const selectedCount = computed(() => selectedItems.value.size);
+const allSelected = computed(() => queue.value.length > 0 && selectedItems.value.size === queue.value.length);
 
 onMounted(async () => {
   await loadQueue();
@@ -84,6 +150,102 @@ async function removeFromQueue(id: number) {
     queue.value = queue.value.filter(q => q.id !== id);
   } catch (error) {
     console.error('Failed to remove from queue:', error);
+  }
+}
+
+// Selection mode functions
+function toggleSelectionMode() {
+  selectionMode.value = !selectionMode.value;
+  if (!selectionMode.value) {
+    selectedItems.value.clear();
+  }
+}
+
+function toggleSelection(modelId: number) {
+  const newSet = new Set(selectedItems.value);
+  if (newSet.has(modelId)) {
+    newSet.delete(modelId);
+  } else {
+    newSet.add(modelId);
+  }
+  selectedItems.value = newSet;
+}
+
+function selectAll() {
+  selectedItems.value = new Set(queue.value.map(q => q.model_id));
+}
+
+function deselectAll() {
+  selectedItems.value = new Set();
+}
+
+async function bulkRemove() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedItems.value);
+    await queueApi.bulk(ids, 'remove');
+    // Remove from local state
+    queue.value = queue.value.filter(q => !ids.includes(q.model_id));
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to remove from queue:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+// Drag and drop functions
+function handleDragStart(index: number, event: DragEvent) {
+  if (selectionMode.value) return;
+  dragIndex.value = index;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(index));
+  }
+}
+
+function handleDragEnd() {
+  dragIndex.value = null;
+  dragOverIndex.value = null;
+}
+
+function handleDragOver(index: number) {
+  if (selectionMode.value || dragIndex.value === null) return;
+  dragOverIndex.value = index;
+}
+
+function handleDragLeave() {
+  dragOverIndex.value = null;
+}
+
+async function handleDrop(targetIndex: number) {
+  if (selectionMode.value || dragIndex.value === null || dragIndex.value === targetIndex) {
+    handleDragEnd();
+    return;
+  }
+
+  const sourceIndex = dragIndex.value;
+  const items = [...queue.value];
+  const [movedItem] = items.splice(sourceIndex, 1);
+  items.splice(targetIndex, 0, movedItem);
+
+  // Update local state immediately for responsiveness
+  queue.value = items;
+  handleDragEnd();
+
+  // Send reorder to backend - use position as priority (higher = higher priority)
+  try {
+    const reorderItems = items.map((item, idx) => ({
+      id: item.id,
+      priority: items.length - idx // Higher priority for items at the top
+    }));
+    await queueApi.reorder(reorderItems);
+  } catch (error) {
+    console.error('Failed to save reorder:', error);
+    // Reload queue to restore correct order
+    await loadQueue();
   }
 }
 </script>
@@ -316,5 +478,205 @@ h2 {
 .empty p {
   color: var(--text-secondary);
   font-size: 0.95rem;
+}
+
+/* Header actions */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.select-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all var(--transition-base);
+  cursor: pointer;
+}
+
+.select-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.select-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.select-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--bg-deepest);
+}
+
+/* Bulk actions bar */
+.bulk-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem 1.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-lg);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.bulk-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.selected-count {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+}
+
+.select-all-btn {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.select-all-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bulk-actions.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.bulk-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.bulk-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.bulk-btn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+.bulk-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bulk-btn.delete-btn:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.bulk-loading {
+  display: flex;
+  align-items: center;
+  margin-left: 0.5rem;
+}
+
+.loading-spinner.small {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+}
+
+/* Selection checkbox */
+.selection-checkbox {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.selection-checkbox svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-tertiary);
+}
+
+.selection-checkbox:hover svg {
+  color: var(--accent-primary);
+}
+
+.queue-card.selected {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+/* Drag and drop styles */
+.queue-card.dragging {
+  opacity: 0.5;
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+.queue-card.drag-over {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary);
+  transform: translateY(-2px);
+}
+
+.queue-card[draggable="true"] {
+  cursor: grab;
+}
+
+.queue-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.drag-handle.can-drag {
+  cursor: grab;
+}
+
+.drag-handle.can-drag:hover {
+  color: var(--accent-primary);
 }
 </style>

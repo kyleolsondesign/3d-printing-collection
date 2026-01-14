@@ -21,6 +21,8 @@ export interface Model {
     primaryImage?: string | null;
     isFavorite?: boolean;
     isQueued?: boolean;
+    isPrinted?: boolean;
+    printRating?: 'good' | 'bad' | null;
 }
 
 export interface ModelAsset {
@@ -73,13 +75,23 @@ export const modelsApi = {
         api.post(`/models/${id}/rescan`),
 
     getFiles: (id: number) =>
-        api.get(`/models/${id}/files`)
+        api.get(`/models/${id}/files`),
+
+    bulkDelete: (modelIds: number[]) =>
+        api.post('/models/bulk-delete', { model_ids: modelIds }),
+
+    setPrimaryImage: (modelId: number, assetId: number) =>
+        api.put(`/models/${modelId}/primary-image`, { assetId }),
+
+    extractZip: (modelId: number, zipPath: string) =>
+        api.post(`/models/${modelId}/extract-zip`, { zipPath })
 };
 
 // Favorites API
 export const favoritesApi = {
     getAll: () => api.get('/favorites'),
     toggle: (modelId: number) => api.post('/favorites/toggle', { model_id: modelId }),
+    bulk: (modelIds: number[], action: 'add' | 'remove') => api.post('/favorites/bulk', { model_ids: modelIds, action }),
     update: (id: number, notes: string) => api.put(`/favorites/${id}`, { notes }),
     delete: (id: number) => api.delete(`/favorites/${id}`)
 };
@@ -87,6 +99,9 @@ export const favoritesApi = {
 // Printed Models API
 export const printedApi = {
     getAll: () => api.get('/printed'),
+    toggle: (modelId: number, rating: 'good' | 'bad' = 'good') => api.post('/printed/toggle', { model_id: modelId, rating }),
+    bulk: (modelIds: number[], action: 'add' | 'remove', rating: 'good' | 'bad' = 'good') =>
+        api.post('/printed/bulk', { model_ids: modelIds, action, rating }),
     add: (data: { model_id: number; rating?: 'good' | 'bad'; notes?: string; print_time_hours?: number; filament_used_grams?: number }) =>
         api.post('/printed', data),
     update: (id: number, data: { rating?: 'good' | 'bad'; notes?: string; print_time_hours?: number; filament_used_grams?: number }) =>
@@ -98,6 +113,7 @@ export const printedApi = {
 export const queueApi = {
     getAll: () => api.get('/queue'),
     toggle: (modelId: number) => api.post('/queue/toggle', { model_id: modelId }),
+    bulk: (modelIds: number[], action: 'add' | 'remove') => api.post('/queue/bulk', { model_ids: modelIds, action }),
     add: (data: { model_id: number; priority?: number; notes?: string; estimated_time_hours?: number }) =>
         api.post('/queue', data),
     update: (id: number, data: { priority?: number; notes?: string; estimated_time_hours?: number }) =>

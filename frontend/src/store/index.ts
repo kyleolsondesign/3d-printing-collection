@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { Model, Category } from '../services/api';
-import { modelsApi, favoritesApi, queueApi, systemApi } from '../services/api';
+import { modelsApi, favoritesApi, queueApi, printedApi, systemApi } from '../services/api';
 
 export const useAppStore = defineStore('app', () => {
     // State
@@ -9,6 +9,7 @@ export const useAppStore = defineStore('app', () => {
     const categories = ref<Category[]>([]);
     const selectedCategory = ref<string>('all');
     const searchQuery = ref<string>('');
+    const globalSearchQuery = ref<string>(''); // Global search from navbar
     const loading = ref(false);
     const currentPage = ref(1);
     const totalPages = ref(1);
@@ -87,6 +88,19 @@ export const useAppStore = defineStore('app', () => {
         }
     }
 
+    async function togglePrinted(modelId: number, rating: 'good' | 'bad' = 'good') {
+        try {
+            const response = await printedApi.toggle(modelId, rating);
+            const model = models.value.find(m => m.id === modelId);
+            if (model) {
+                model.isPrinted = response.data.printed;
+                model.printRating = response.data.printed ? response.data.rating : null;
+            }
+        } catch (error) {
+            console.error('Failed to toggle printed:', error);
+        }
+    }
+
     async function loadConfig() {
         try {
             const response = await systemApi.getConfig();
@@ -108,12 +122,21 @@ export const useAppStore = defineStore('app', () => {
         }
     }
 
+    function setGlobalSearch(query: string) {
+        globalSearchQuery.value = query;
+    }
+
+    function clearGlobalSearch() {
+        globalSearchQuery.value = '';
+    }
+
     return {
         // State
         models,
         categories,
         selectedCategory,
         searchQuery,
+        globalSearchQuery,
         loading,
         currentPage,
         totalPages,
@@ -126,7 +149,10 @@ export const useAppStore = defineStore('app', () => {
         loadCategories,
         toggleFavorite,
         toggleQueue,
+        togglePrinted,
         loadConfig,
-        startScan
+        startScan,
+        setGlobalSearch,
+        clearGlobalSearch
     };
 });

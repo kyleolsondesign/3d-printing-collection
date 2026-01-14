@@ -344,11 +344,42 @@ The app integrates with macOS Finder tags to sync print status:
 - Image loading with error handling for missing/broken files
 - Deduplication reduces indexed models for folders with multiple versions
 
+### Global Navigation & Search
+- **Global search bar**: Search input moved to navbar, accessible from any view
+- **Context-aware search**: Search results show in the current view's format
+- **URL query params**: State is synced to URL for deep-linking
+  - Supported params: `category`, `q` (search), `sort`, `order`, `view`, `model`
+  - Example: `/?category=Toys&sort=name&order=asc&view=table`
+  - Deep link to model: `/?model=123` opens model details modal
+
+### Bulk Operations
+- **Selection mode**: Toggle to enable multi-select on browse, queue, and favorites pages
+- **Bulk actions on browse**: Add to favorites, add to queue, remove from queue, mark as printed, soft delete
+- **Bulk remove**: Queue and favorites pages support bulk removal
+- **Visual feedback**: Selected items highlighted, action buttons disabled when none selected
+
+### Queue Management
+- **Drag-and-drop reorder**: Reorder queue items by dragging
+- **Priority persistence**: Order is saved to database via reorder API
+
+### ZIP Extraction
+- **Extract archives**: Extract ZIP/RAR/7z files from model details modal
+- **Auto-cleanup**: Original archive moved to macOS Trash after extraction
+- **Auto-rescan**: Model folder rescanned after extraction to update assets
+
+### Thumbnail Selection
+- **Choose primary image**: When multiple images exist, select which one appears on model cards
+- **Set as Primary button**: Hover over thumbnail in details modal to set it
+
+### Enhanced Scan Progress
+- **Step tracking**: Shows current scan phase (discovering, indexing, extracting, tagging)
+- **Step descriptions**: Human-readable status messages during scan
+- **Scan prevention**: UI prevents starting new scans while one is in progress
+
 ## Future Enhancements
 - 3D model preview (STL viewer)
 - Thumbnail generation for models (resize large images)
 - File system watcher for auto-refresh
-- Drag-and-drop reordering for print queue
 - Export/import favorites and queue
 - Print statistics and analytics
 - Lazy loading for images (only load visible thumbnails)

@@ -147,4 +147,83 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+// Bulk add/remove printed
+router.post('/bulk', async (req, res) => {
+    try {
+        const { model_ids, action, rating } = req.body;
+
+        if (!Array.isArray(model_ids) || model_ids.length === 0) {
+            return res.status(400).json({ error: 'model_ids must be a non-empty array' });
+        }
+
+        if (action !== 'add' && action !== 'remove') {
+            return res.status(400).json({ error: 'action must be "add" or "remove"' });
+        }
+
+        if (action === 'add' && rating && rating !== 'good' && rating !== 'bad') {
+            return res.status(400).json({ error: 'rating must be "good" or "bad"' });
+        }
+
+        let affected = 0;
+
+        if (action === 'add') {
+            const insert = db.prepare('INSERT OR IGNORE INTO printed_models (model_id, rating) VALUES (?, ?)');
+            for (const modelId of model_ids) {
+                const result = insert.run(modelId, rating || 'good');
+                if (result.changes > 0) {
+                    affected++;
+                    await updateModelFinderTags(modelId);
+                }
+            }
+        } else {
+            const remove = db.prepare('DELETE FROM printed_models WHERE model_id = ?');
+            for (const modelId of model_ids) {
+                const result = remove.run(modelId);
+                if (result.changes > 0) {
+                    affected++;
+                    await updateModelFinderTags(modelId);
+                }
+            }
+        }
+
+        res.json({ success: true, affected });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Toggle printed status by model_id
+router.post('/toggle', async (req, res) => {
+    try {
+        const { model_id, rating } = req.body;
+
+        if (!model_id) {
+            return res.status(400).json({ error: 'model_id is required' });
+        }
+
+        if (rating && rating !== 'good' && rating !== 'bad') {
+            return res.status(400).json({ error: 'rating must be "good" or "bad"' });
+        }
+
+        const existing = db.prepare('SELECT * FROM printed_models WHERE model_id = ?').get(model_id);
+
+        if (existing) {
+            // Remove from printed
+            db.prepare('DELETE FROM printed_models WHERE model_id = ?').run(model_id);
+            await updateModelFinderTags(model_id);
+            res.json({ printed: false });
+        } else {
+            // Add to printed
+            const insert = db.prepare('INSERT INTO printed_models (model_id, rating) VALUES (?, ?)');
+            insert.run(model_id, rating || 'good');
+            await updateModelFinderTags(model_id);
+            res.json({ printed: true, rating: rating || 'good' });
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 export default router;

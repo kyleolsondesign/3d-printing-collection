@@ -3,29 +3,9 @@
     <div class="header">
       <div class="header-left">
         <h2>Browse Models</h2>
-        <span class="model-count" v-if="store.models.length > 0">
-          {{ store.models.length }} of {{ totalModels }} models
+        <span class="model-count" v-if="totalModels > 0">
+          {{ totalModels.toLocaleString() }} {{ totalModels === 1 ? 'model' : 'models' }}
         </span>
-      </div>
-      <div class="controls">
-        <div class="search-wrapper">
-          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="M21 21l-4.35-4.35"/>
-          </svg>
-          <input
-            v-model="searchInput"
-            @keyup.enter="handleSearch"
-            type="text"
-            placeholder="Search models..."
-            class="search-input"
-          />
-          <button v-if="searchInput" @click="clearSearch" class="search-clear">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
-        </div>
       </div>
     </div>
 
@@ -49,6 +29,17 @@
           </button>
         </div>
         <div class="view-controls">
+          <button
+            @click="toggleSelectionMode"
+            :class="['select-btn', { active: selectionMode }]"
+            title="Toggle selection mode"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <path v-if="selectionMode" d="M9 12l2 2 4-4"/>
+            </svg>
+            <span>{{ selectionMode ? 'Cancel' : 'Select' }}</span>
+          </button>
           <div class="sort-controls">
             <select v-model="sortField" @change="handleSortChange" class="sort-select">
               <option value="date_added">Date Added</option>
@@ -94,8 +85,54 @@
 
     <!-- Search active indicator -->
     <div v-if="isSearchActive" class="search-results-bar">
-      <span>Search results for "{{ searchInput }}"</span>
+      <span>Search results for "{{ store.globalSearchQuery }}"</span>
       <button @click="clearSearch" class="clear-search-btn">Clear search</button>
+    </div>
+
+    <!-- Bulk actions bar -->
+    <div v-if="selectionMode" class="bulk-actions-bar">
+      <div class="bulk-left">
+        <span class="selected-count">{{ selectedCount }} selected</span>
+        <button @click="allSelected ? deselectAll() : selectAll()" class="select-all-btn">
+          {{ allSelected ? 'Deselect All' : 'Select All' }}
+        </button>
+      </div>
+      <div class="bulk-actions" :class="{ disabled: bulkLoading || selectedCount === 0 }">
+        <button @click="bulkAddToFavorites" class="bulk-btn" title="Add to Favorites" :disabled="bulkLoading || selectedCount === 0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+          </svg>
+          <span>Favorite</span>
+        </button>
+        <button @click="bulkAddToQueue" class="bulk-btn" title="Add to Queue" :disabled="bulkLoading || selectedCount === 0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span>Queue</span>
+        </button>
+        <button @click="bulkRemoveFromQueue" class="bulk-btn" title="Remove from Queue" :disabled="bulkLoading || selectedCount === 0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 12h14"/>
+          </svg>
+          <span>Unqueue</span>
+        </button>
+        <button @click="bulkMarkPrinted('good')" class="bulk-btn printed-good-btn" title="Mark as Printed (Good)" :disabled="bulkLoading || selectedCount === 0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+            <path d="M6 14h12v8H6z"/>
+          </svg>
+          <span>Printed</span>
+        </button>
+        <button @click="bulkDelete" class="bulk-btn delete-btn" title="Delete" :disabled="bulkLoading || selectedCount === 0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+          </svg>
+          <span>Delete</span>
+        </button>
+        <div v-if="bulkLoading" class="bulk-loading">
+          <div class="loading-spinner small"></div>
+        </div>
+      </div>
     </div>
 
     <div v-if="store.loading && store.models.length === 0" class="loading">
@@ -118,10 +155,21 @@
       <div
         v-for="(model, index) in store.models"
         :key="model.id"
-        class="model-card"
+        :class="['model-card', { 'selected': selectedModels.has(model.id) }]"
         :style="{ animationDelay: `${Math.min(index * 30, 300)}ms` }"
+        @click="selectionMode ? toggleModelSelection(model.id) : null"
       >
-        <div class="model-image" @click="openModal(model)">
+        <!-- Selection checkbox -->
+        <div v-if="selectionMode" class="selection-checkbox" @click.stop="toggleModelSelection(model.id)">
+          <svg v-if="selectedModels.has(model.id)" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="3" y="3" width="18" height="18" rx="3" fill="var(--accent-primary)"/>
+            <path d="M9 12l2 2 4-4" stroke="var(--bg-deepest)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="3"/>
+          </svg>
+        </div>
+        <div class="model-image" @click.stop="selectionMode ? toggleModelSelection(model.id) : openModal(model)">
           <img
             v-if="model.primaryImage"
             :src="modelsApi.getFileUrl(model.primaryImage)"
@@ -170,6 +218,16 @@
               </svg>
             </button>
             <button
+              @click="store.togglePrinted(model.id)"
+              :class="['action-btn', { active: model.isPrinted, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]"
+              :title="model.isPrinted ? 'Remove from printed' : 'Mark as printed'"
+            >
+              <svg viewBox="0 0 24 24" :fill="model.isPrinted ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                <path d="M6 14h12v8H6z"/>
+              </svg>
+            </button>
+            <button
               @click="openInFinder(model)"
               class="action-btn"
               title="Open in Finder"
@@ -188,6 +246,17 @@
       <table class="models-table">
         <thead>
           <tr>
+            <th v-if="selectionMode" class="col-checkbox">
+              <div class="table-checkbox" @click="allSelected ? deselectAll() : selectAll()">
+                <svg v-if="allSelected" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="3" y="3" width="18" height="18" rx="3" fill="var(--accent-primary)"/>
+                  <path d="M9 12l2 2 4-4" stroke="var(--bg-deepest)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="3"/>
+                </svg>
+              </div>
+            </th>
             <th class="col-image"></th>
             <th class="col-name">Name</th>
             <th class="col-category">Category</th>
@@ -200,9 +269,21 @@
           <tr
             v-for="(model, index) in store.models"
             :key="model.id"
+            :class="{ 'selected': selectedModels.has(model.id) }"
             :style="{ animationDelay: `${Math.min(index * 20, 200)}ms` }"
-            @click="openModal(model)"
+            @click="selectionMode ? toggleModelSelection(model.id) : openModal(model)"
           >
+            <td v-if="selectionMode" class="col-checkbox" @click.stop="toggleModelSelection(model.id)">
+              <div class="table-checkbox">
+                <svg v-if="selectedModels.has(model.id)" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="3" y="3" width="18" height="18" rx="3" fill="var(--accent-primary)"/>
+                  <path d="M9 12l2 2 4-4" stroke="var(--bg-deepest)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="3"/>
+                </svg>
+              </div>
+            </td>
             <td class="col-image">
               <div class="table-image">
                 <img
@@ -253,6 +334,16 @@
                   </svg>
                 </button>
                 <button
+                  @click="store.togglePrinted(model.id)"
+                  :class="['action-btn-small', { active: model.isPrinted, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]"
+                  title="Printed"
+                >
+                  <svg viewBox="0 0 24 24" :fill="model.isPrinted ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                    <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                    <path d="M6 14h12v8H6z"/>
+                  </svg>
+                </button>
+                <button
                   @click="openInFinder(model)"
                   class="action-btn-small"
                   title="Open in Finder"
@@ -291,13 +382,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../store';
-import { modelsApi, systemApi } from '../services/api';
+import { modelsApi, systemApi, queueApi, printedApi, favoritesApi } from '../services/api';
 import type { Model } from '../services/api';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 
 const store = useAppStore();
-const searchInput = ref('');
+const route = useRoute();
+const router = useRouter();
 const viewMode = ref<'grid' | 'table'>('grid');
 const sortField = ref('date_added');
 const sortOrder = ref<'asc' | 'desc'>('desc');
@@ -305,14 +398,80 @@ const loadMoreSentinel = ref<HTMLElement | null>(null);
 const totalModels = ref(0);
 const isSearchActive = ref(false);
 const selectedModelId = ref<number | null>(null);
+const isInitialized = ref(false);
+
+// Selection mode state
+const selectionMode = ref(false);
+const selectedModels = ref<Set<number>>(new Set());
+const bulkLoading = ref(false);
 
 const hasMoreModels = computed(() => !isSearchActive.value && store.models.length < totalModels.value);
+const selectedCount = computed(() => selectedModels.value.size);
+const allSelected = computed(() => store.models.length > 0 && selectedModels.value.size === store.models.length);
 
 let observer: IntersectionObserver | null = null;
 
+// Read query params and initialize state
+function initFromQueryParams() {
+  const { category, q, sort, order, view, model } = route.query;
+
+  if (category && typeof category === 'string') {
+    store.selectedCategory = category;
+  }
+  if (q && typeof q === 'string') {
+    store.setGlobalSearch(q);
+  }
+  if (sort && typeof sort === 'string' && ['date_added', 'date_created', 'name', 'category'].includes(sort)) {
+    sortField.value = sort;
+  }
+  if (order && typeof order === 'string' && ['asc', 'desc'].includes(order)) {
+    sortOrder.value = order as 'asc' | 'desc';
+  }
+  if (view && typeof view === 'string' && ['grid', 'table'].includes(view)) {
+    viewMode.value = view as 'grid' | 'table';
+  }
+  if (model && typeof model === 'string') {
+    const modelId = parseInt(model);
+    if (!isNaN(modelId)) {
+      selectedModelId.value = modelId;
+    }
+  }
+}
+
+// Update URL query params when state changes
+function updateQueryParams() {
+  if (!isInitialized.value) return;
+
+  const query: Record<string, string> = {};
+
+  if (store.selectedCategory !== 'all') {
+    query.category = store.selectedCategory;
+  }
+  if (store.globalSearchQuery) {
+    query.q = store.globalSearchQuery;
+  }
+  if (sortField.value !== 'date_added') {
+    query.sort = sortField.value;
+  }
+  if (sortOrder.value !== 'desc') {
+    query.order = sortOrder.value;
+  }
+  if (viewMode.value !== 'grid') {
+    query.view = viewMode.value;
+  }
+  if (selectedModelId.value) {
+    query.model = String(selectedModelId.value);
+  }
+
+  // Update URL without navigation (replace to avoid history spam)
+  router.replace({ query });
+}
+
 onMounted(async () => {
+  initFromQueryParams();
   await loadInitialModels();
   setupIntersectionObserver();
+  isInitialized.value = true;
 });
 
 onUnmounted(() => {
@@ -326,12 +485,40 @@ watch([sortField, sortOrder], () => {
   if (!isSearchActive.value) {
     resetAndLoad();
   }
+  updateQueryParams();
+});
+
+// Watch for global search query changes
+watch(() => store.globalSearchQuery, (newQuery) => {
+  if (newQuery) {
+    handleSearch(newQuery);
+  } else if (isSearchActive.value) {
+    // Clear search when global query is cleared
+    resetAndLoad();
+  }
+  updateQueryParams();
+}, { immediate: true });
+
+// Watch for view mode and selected model changes to update URL
+watch([viewMode, selectedModelId], () => {
+  updateQueryParams();
+});
+
+// Watch for category changes to update URL
+watch(() => store.selectedCategory, () => {
+  updateQueryParams();
 });
 
 async function loadInitialModels() {
+  // If there's a search query from URL, don't load models (the search watcher will handle it)
+  if (store.globalSearchQuery) {
+    return;
+  }
+
+  const category = store.selectedCategory || 'all';
   const response = await modelsApi.getAll({
     page: 1,
-    category: 'all',
+    category,
     limit: 50,
     sort: sortField.value,
     order: sortOrder.value
@@ -340,7 +527,9 @@ async function loadInitialModels() {
   store.currentPage = 1;
   store.totalPages = response.data.pagination.totalPages;
   totalModels.value = response.data.pagination.total;
-  store.selectedCategory = 'all';
+  if (!store.selectedCategory) {
+    store.selectedCategory = 'all';
+  }
   isSearchActive.value = false;
 }
 
@@ -395,7 +584,7 @@ async function loadMoreModels() {
 async function filterByCategory(category: string) {
   if (isSearchActive.value) {
     // Clear search when filtering
-    searchInput.value = '';
+    store.clearGlobalSearch();
     isSearchActive.value = false;
   }
 
@@ -420,12 +609,12 @@ async function filterByCategory(category: string) {
   }
 }
 
-async function handleSearch() {
-  if (searchInput.value.trim()) {
+async function handleSearch(query: string) {
+  if (query.trim()) {
     store.loading = true;
     isSearchActive.value = true;
     try {
-      const response = await modelsApi.search(searchInput.value);
+      const response = await modelsApi.search(query);
       store.models = response.data.models;
       totalModels.value = response.data.count;
       store.currentPage = 1;
@@ -441,7 +630,7 @@ async function handleSearch() {
 }
 
 function clearSearch() {
-  searchInput.value = '';
+  store.clearGlobalSearch();
   isSearchActive.value = false;
   resetAndLoad();
 }
@@ -485,6 +674,140 @@ async function openInFinder(model: Model) {
     console.error('Failed to open folder:', error);
   }
 }
+
+// Selection mode functions
+function toggleSelectionMode() {
+  selectionMode.value = !selectionMode.value;
+  if (!selectionMode.value) {
+    selectedModels.value.clear();
+  }
+}
+
+function toggleModelSelection(modelId: number, event?: Event) {
+  if (event) {
+    event.stopPropagation();
+  }
+  const newSet = new Set(selectedModels.value);
+  if (newSet.has(modelId)) {
+    newSet.delete(modelId);
+  } else {
+    newSet.add(modelId);
+  }
+  selectedModels.value = newSet;
+}
+
+function selectAll() {
+  selectedModels.value = new Set(store.models.map(m => m.id));
+}
+
+function deselectAll() {
+  selectedModels.value.clear();
+  selectedModels.value = new Set(); // Trigger reactivity
+}
+
+async function bulkAddToQueue() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await queueApi.bulk(ids, 'add');
+    // Update local state
+    for (const id of ids) {
+      const model = store.models.find(m => m.id === id);
+      if (model) model.isQueued = true;
+    }
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to add to queue:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkRemoveFromQueue() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await queueApi.bulk(ids, 'remove');
+    // Update local state
+    for (const id of ids) {
+      const model = store.models.find(m => m.id === id);
+      if (model) model.isQueued = false;
+    }
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to remove from queue:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkMarkPrinted(rating: 'good' | 'bad' = 'good') {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await printedApi.bulk(ids, 'add', rating);
+    // Update local state
+    for (const id of ids) {
+      const model = store.models.find(m => m.id === id);
+      if (model) {
+        model.isPrinted = true;
+        model.printRating = rating;
+      }
+    }
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to mark as printed:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkDelete() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  if (!confirm(`Are you sure you want to delete ${selectedCount.value} model(s)? This is a soft delete and can be undone.`)) {
+    return;
+  }
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await modelsApi.bulkDelete(ids);
+    // Remove from local state
+    store.models = store.models.filter(m => !ids.includes(m.id));
+    totalModels.value -= ids.length;
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to delete models:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkAddToFavorites() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await favoritesApi.bulk(ids, 'add');
+    // Update local state
+    for (const id of ids) {
+      const model = store.models.find(m => m.id === id);
+      if (model) model.isFavorite = true;
+    }
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to add to favorites:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
 </script>
 
 <style scoped>
@@ -520,70 +843,6 @@ async function openInFinder(model: Model) {
   font-size: 0.875rem;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-}
-
-.controls {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.search-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 1rem;
-  width: 18px;
-  height: 18px;
-  color: var(--text-tertiary);
-  pointer-events: none;
-}
-
-.search-input {
-  padding: 0.625rem 2.5rem 0.625rem 2.75rem;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  font-size: 0.9rem;
-  min-width: 280px;
-  color: var(--text-primary);
-}
-
-.search-input:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-primary-dim);
-}
-
-.search-clear {
-  position: absolute;
-  right: 0.75rem;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  background: var(--bg-hover);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.search-clear svg {
-  width: 12px;
-  height: 12px;
-  color: var(--text-tertiary);
-}
-
-.search-clear:hover {
-  background: var(--text-tertiary);
-}
-
-.search-clear:hover svg {
-  color: var(--bg-deepest);
 }
 
 /* Search results bar */
@@ -722,6 +981,37 @@ async function openInFinder(model: Model) {
 .sort-order-btn:hover {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
+}
+
+/* Selection mode toggle */
+.select-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all var(--transition-base);
+}
+
+.select-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.select-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.select-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--bg-deepest);
 }
 
 .view-toggle {
@@ -943,6 +1233,26 @@ async function openInFinder(model: Model) {
   background: var(--accent-primary);
   color: var(--bg-deepest);
   border-color: var(--accent-primary);
+}
+
+.action-btn.printed-good {
+  background: var(--success);
+  color: var(--bg-deepest);
+  border-color: var(--success);
+}
+
+.action-btn.printed-bad {
+  background: var(--danger);
+  color: var(--bg-deepest);
+  border-color: var(--danger);
+}
+
+.action-btn-small.printed-good {
+  color: var(--success);
+}
+
+.action-btn-small.printed-bad {
+  color: var(--danger);
 }
 
 /* Table View */
@@ -1185,6 +1495,174 @@ async function openInFinder(model: Model) {
   color: var(--text-tertiary);
   font-size: 0.875rem;
   font-family: var(--font-mono);
+}
+
+/* Bulk actions bar */
+.bulk-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem 1.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-lg);
+  gap: 1rem;
+}
+
+.bulk-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.selected-count {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+}
+
+.select-all-btn {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.select-all-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bulk-actions.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.bulk-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.bulk-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.bulk-btn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+.bulk-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bulk-btn.printed-good-btn:hover:not(:disabled) {
+  border-color: var(--success);
+  color: var(--success);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.bulk-btn.delete-btn:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.bulk-loading {
+  display: flex;
+  align-items: center;
+  margin-left: 0.5rem;
+}
+
+/* Selection checkboxes */
+.selection-checkbox {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 10;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md);
+}
+
+.selection-checkbox svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-tertiary);
+}
+
+.selection-checkbox:hover svg {
+  color: var(--accent-primary);
+}
+
+.model-card {
+  position: relative;
+}
+
+.model-card.selected {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
+}
+
+/* Table checkbox */
+.col-checkbox {
+  width: 48px;
+  text-align: center;
+}
+
+.table-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.table-checkbox svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-tertiary);
+}
+
+.table-checkbox:hover svg {
+  color: var(--accent-primary);
+}
+
+.models-table tr.selected {
+  background: var(--accent-primary-dim);
+}
+
+.models-table tr.selected:hover {
+  background: var(--accent-primary-dim);
 }
 
 /* Responsive */

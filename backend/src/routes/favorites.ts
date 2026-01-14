@@ -72,6 +72,42 @@ router.delete('/:id', (req, res) => {
     }
 });
 
+// Bulk add/remove favorites
+router.post('/bulk', (req, res) => {
+    try {
+        const { model_ids, action } = req.body;
+
+        if (!Array.isArray(model_ids) || model_ids.length === 0) {
+            return res.status(400).json({ error: 'model_ids must be a non-empty array' });
+        }
+
+        if (action !== 'add' && action !== 'remove') {
+            return res.status(400).json({ error: 'action must be "add" or "remove"' });
+        }
+
+        let affected = 0;
+
+        if (action === 'add') {
+            const insert = db.prepare('INSERT OR IGNORE INTO favorites (model_id) VALUES (?)');
+            for (const modelId of model_ids) {
+                const result = insert.run(modelId);
+                if (result.changes > 0) affected++;
+            }
+        } else {
+            const remove = db.prepare('DELETE FROM favorites WHERE model_id = ?');
+            for (const modelId of model_ids) {
+                const result = remove.run(modelId);
+                if (result.changes > 0) affected++;
+            }
+        }
+
+        res.json({ success: true, affected });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 // Toggle favorite by model_id
 router.post('/toggle', (req, res) => {
     try {

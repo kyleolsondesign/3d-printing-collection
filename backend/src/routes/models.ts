@@ -4,6 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import mime from 'mime-types';
 import scanner from '../services/scanner.js';
+import extractZip from 'extract-zip';
+import { exec } from 'child_process';
 
 const router = express.Router();
 
@@ -51,8 +53,8 @@ router.get('/', (req, res) => {
 
         const models = db.prepare(query).all(...params) as any[];
 
-        // Get primary image for each model
-        const modelsWithImages = models.map(model => {
+        // Get primary image, favorite/queue/printed status for each model
+        const modelsWithDetails = models.map(model => {
             const primaryImage = db.prepare(`
                 SELECT filepath FROM model_assets
                 WHERE model_id = ? AND asset_type = 'image'
@@ -60,9 +62,17 @@ router.get('/', (req, res) => {
                 LIMIT 1
             `).get(model.id) as { filepath: string } | undefined;
 
+            const favorite = db.prepare('SELECT id FROM favorites WHERE model_id = ?').get(model.id);
+            const queued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model.id);
+            const printed = db.prepare('SELECT rating FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC LIMIT 1').get(model.id) as { rating: 'good' | 'bad' | null } | undefined;
+
             return {
                 ...model,
-                primaryImage: primaryImage?.filepath || null
+                primaryImage: primaryImage?.filepath || null,
+                isFavorite: !!favorite,
+                isQueued: !!queued,
+                isPrinted: !!printed,
+                printRating: printed?.rating || null
             };
         });
 
@@ -85,7 +95,7 @@ router.get('/', (req, res) => {
         const { total } = db.prepare(countQuery).get(...countParams) as { total: number };
 
         res.json({
-            models: modelsWithImages,
+            models: modelsWithDetails,
             pagination: {
                 page,
                 limit,
@@ -104,7 +114,7 @@ router.get('/:id', (req, res) => {
     try {
         const { id } = req.params;
 
-        const model = db.prepare('SELECT * FROM models WHERE id = ?').get(id);
+        const model = db.prepare('SELECT * FROM models WHERE id = ?').get(id) as { filepath: string } | undefined;
 
         if (!model) {
             return res.status(404).json({ error: 'Model not found' });
@@ -122,9 +132,41 @@ router.get('/:id', (req, res) => {
         // Get print history
         const printed = db.prepare('SELECT * FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC').all(id);
 
+        // Find ZIP files in the model folder
+        const zipFiles: { filename: string; filepath: string; size: number }[] = [];
+        const archiveExtensions = ['.zip', '.rar', '.7z'];
+
+        function findZipsRecursive(dir: string) {
+            try {
+                if (!fs.existsSync(dir)) return;
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.isDirectory()) {
+                        findZipsRecursive(fullPath);
+                    } else if (entry.isFile()) {
+                        const ext = path.extname(entry.name).toLowerCase();
+                        if (archiveExtensions.includes(ext)) {
+                            const stats = fs.statSync(fullPath);
+                            zipFiles.push({
+                                filename: entry.name,
+                                filepath: fullPath,
+                                size: stats.size
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                // Skip directories we can't read
+            }
+        }
+
+        findZipsRecursive(model.filepath);
+
         res.json({
             ...model,
             assets,
+            zipFiles,
             isFavorite: !!favorite,
             isQueued: !!queued,
             printHistory: printed
@@ -244,6 +286,146 @@ router.get('/:id/files', (req, res) => {
         const { id } = req.params;
         const files = db.prepare('SELECT * FROM model_files WHERE model_id = ?').all(id);
         res.json({ files });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Set primary image for a model
+router.put('/:id/primary-image', (req, res) => {
+    try {
+        const { id } = req.params;
+        const { assetId } = req.body;
+
+        if (!assetId) {
+            return res.status(400).json({ error: 'assetId is required' });
+        }
+
+        // Verify the asset belongs to this model and is an image
+        const asset = db.prepare(`
+            SELECT * FROM model_assets
+            WHERE id = ? AND model_id = ? AND asset_type = 'image'
+        `).get(assetId, id);
+
+        if (!asset) {
+            return res.status(404).json({ error: 'Image asset not found for this model' });
+        }
+
+        // Clear all primary flags for this model's images
+        db.prepare(`
+            UPDATE model_assets
+            SET is_primary = 0
+            WHERE model_id = ? AND asset_type = 'image'
+        `).run(id);
+
+        // Set the new primary image
+        db.prepare(`
+            UPDATE model_assets
+            SET is_primary = 1
+            WHERE id = ?
+        `).run(assetId);
+
+        res.json({ success: true });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Extract ZIP file in model folder
+router.post('/:id/extract-zip', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { zipPath } = req.body;
+
+        if (!zipPath) {
+            return res.status(400).json({ error: 'zipPath is required' });
+        }
+
+        // Get model to verify it exists and get the folder path
+        const model = db.prepare('SELECT * FROM models WHERE id = ?').get(id) as { filepath: string } | undefined;
+        if (!model) {
+            return res.status(404).json({ error: 'Model not found' });
+        }
+
+        // Security: Ensure the ZIP is within the model's folder
+        const resolvedZipPath = path.resolve(zipPath);
+        const resolvedModelPath = path.resolve(model.filepath);
+        if (!resolvedZipPath.startsWith(resolvedModelPath)) {
+            return res.status(403).json({ error: 'ZIP file must be within model folder' });
+        }
+
+        // Check ZIP exists
+        if (!fs.existsSync(resolvedZipPath)) {
+            return res.status(404).json({ error: 'ZIP file not found' });
+        }
+
+        // Create extraction directory (ZIP filename without extension)
+        const zipBasename = path.basename(resolvedZipPath, path.extname(resolvedZipPath));
+        const extractDir = path.join(path.dirname(resolvedZipPath), zipBasename);
+
+        // Avoid overwriting existing directory
+        if (fs.existsSync(extractDir)) {
+            return res.status(409).json({ error: 'Extraction directory already exists' });
+        }
+
+        // Extract the ZIP
+        await extractZip(resolvedZipPath, { dir: extractDir });
+
+        // Move ZIP to macOS Trash using osascript
+        await new Promise<void>((resolve, reject) => {
+            const escapedPath = resolvedZipPath.replace(/"/g, '\\"');
+            exec(`osascript -e 'tell application "Finder" to delete POSIX file "${escapedPath}"'`, (error) => {
+                if (error) {
+                    console.error('Failed to move ZIP to trash:', error);
+                    // Don't fail the request, just log the error
+                }
+                resolve();
+            });
+        });
+
+        // Rescan the model folder to update the database
+        const result = await scanner.rescanModel(parseInt(id));
+
+        // Return the updated model data
+        const updatedModel = db.prepare('SELECT * FROM models WHERE id = ?').get(id);
+        const assets = db.prepare('SELECT * FROM model_assets WHERE model_id = ? ORDER BY is_primary DESC').all(id);
+        const files = db.prepare('SELECT * FROM model_files WHERE model_id = ?').all(id);
+
+        res.json({
+            success: true,
+            extractedTo: extractDir,
+            model: {
+                ...updatedModel,
+                assets,
+                files
+            }
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Bulk soft delete models
+router.post('/bulk-delete', (req, res) => {
+    try {
+        const { model_ids } = req.body;
+
+        if (!Array.isArray(model_ids) || model_ids.length === 0) {
+            return res.status(400).json({ error: 'model_ids must be a non-empty array' });
+        }
+
+        const softDelete = db.prepare('UPDATE models SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?');
+        let affected = 0;
+
+        for (const modelId of model_ids) {
+            const result = softDelete.run(modelId);
+            if (result.changes > 0) affected++;
+        }
+
+        res.json({ success: true, affected });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

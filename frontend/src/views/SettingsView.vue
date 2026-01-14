@@ -54,15 +54,15 @@
       </div>
 
       <div class="scan-actions">
-        <button @click="saveAndScan" class="btn-primary" :disabled="scanning">
-          <svg v-if="scanning" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button @click="saveAndScan" class="btn-primary" :disabled="scanning || scanStatus.scanning">
+          <svg v-if="scanning || scanStatus.scanning" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12a9 9 0 11-6.219-8.56"/>
           </svg>
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6"/>
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
           </svg>
-          {{ scanning ? 'Scanning...' : 'Start Scan' }}
+          {{ scanning || scanStatus.scanning ? 'Scan in Progress...' : 'Start Scan' }}
         </button>
       </div>
       <p v-if="lastScan" class="last-scan">
@@ -82,7 +82,7 @@
           </svg>
         </div>
         <div>
-          <h4>Scan in Progress</h4>
+          <h4>{{ scanStatus.stepDescription || 'Scan in Progress' }}</h4>
           <p>{{ scanProgressPercent }}% complete</p>
         </div>
       </div>
@@ -227,7 +227,9 @@ const scanStatus = ref({
   modelsRemoved: 0,
   modelFilesFound: 0,
   assetsFound: 0,
-  looseFilesFound: 0
+  looseFilesFound: 0,
+  currentStep: 'idle' as string,
+  stepDescription: ''
 });
 const stats = ref({
   totalModels: 0,
@@ -289,6 +291,11 @@ async function checkScanStatus() {
 async function saveAndScan() {
   if (!modelDirectory.value) {
     showMessage('Please enter a model directory path', 'error');
+    return;
+  }
+
+  if (scanStatus.value.scanning) {
+    showMessage('A scan is already in progress', 'error');
     return;
   }
 

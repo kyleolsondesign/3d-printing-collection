@@ -6,7 +6,9 @@
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
+    "dev:backend:alt": "cd backend && PORT=3001 npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
+    "dev:frontend:alt": "cd frontend && VITE_API_PORT=3001 npm run dev",
     "start": "npm run dev"
   },
   "devDependencies": {

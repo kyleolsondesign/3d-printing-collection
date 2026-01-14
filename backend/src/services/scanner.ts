@@ -13,6 +13,8 @@ export type ScanMode = 'full' | 'full_sync' | 'add_only';
 // This prevents the scanner from blocking API requests
 const yieldToEventLoop = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
+type ScanStep = 'idle' | 'discovering' | 'indexing' | 'extracting' | 'tagging' | 'cleanup' | 'complete';
+
 interface ScanProgress {
     totalFiles: number;
     processedFiles: number;
@@ -22,6 +24,8 @@ interface ScanProgress {
     modelFilesFound: number;
     assetsFound: number;
     looseFilesFound: number;
+    currentStep: ScanStep;
+    stepDescription: string;
 }
 
 interface FolderData {
@@ -41,7 +45,9 @@ class Scanner {
         modelsRemoved: 0,
         modelFilesFound: 0,
         assetsFound: 0,
-        looseFilesFound: 0
+        looseFilesFound: 0,
+        currentStep: 'idle',
+        stepDescription: ''
     };
     private foldersWithModels: Map<string, FolderData> = new Map();
 
@@ -67,7 +73,9 @@ class Scanner {
             modelsRemoved: 0,
             modelFilesFound: 0,
             assetsFound: 0,
-            looseFilesFound: 0
+            looseFilesFound: 0,
+            currentStep: 'discovering',
+            stepDescription: 'Scanning directories...'
         };
         this.foldersWithModels = new Map();
 
@@ -99,13 +107,19 @@ class Scanner {
             await this.scanDirectoryRecursive(modelDirectory, modelDirectory);
 
             // Phase 2: Index folders as models (includes image extraction from archives)
+            this.progress.currentStep = 'indexing';
+            this.progress.stepDescription = 'Indexing model folders...';
             await this.indexFoldersAsModels(modelDirectory);
 
             // Phase 3: In full_sync mode, remove models whose folders no longer exist
             if (mode === 'full_sync') {
+                this.progress.currentStep = 'cleanup';
+                this.progress.stepDescription = 'Cleaning up orphaned models...';
                 this.removeOrphanedModels();
             }
 
+            this.progress.currentStep = 'complete';
+            this.progress.stepDescription = 'Scan complete';
             console.log(`Scan complete!`);
             console.log(`- Mode: ${mode}`);
             console.log(`- Models added: ${this.progress.modelsFound}`);
@@ -119,6 +133,8 @@ class Scanner {
 
             return this.progress;
         } catch (error) {
+            this.progress.currentStep = 'idle';
+            this.progress.stepDescription = 'Scan failed';
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Scan failed:`, message);
             throw error;
@@ -159,8 +175,31 @@ class Scanner {
             const isPaid = this.isInFolder(folderPath, rootPath, 'Paid');
             const isOriginal = this.isInFolder(folderPath, rootPath, 'Original Creations');
 
-            const dateAdded = dateTracker.earliestAdded?.toISOString() || null;
-            const dateCreated = dateTracker.earliestCreated?.toISOString() || null;
+            // Get folder's own dates first, fall back to earliest file dates
+            let dateAdded: string | null = null;
+            let dateCreated: string | null = null;
+
+            try {
+                const folderStat = fs.statSync(folderPath);
+                const folderMtime = folderStat.mtime;
+                const folderBirthtime = folderStat.birthtime;
+
+                // Use the earlier of folder date or file date
+                if (dateTracker.earliestAdded && dateTracker.earliestAdded < folderMtime) {
+                    dateAdded = dateTracker.earliestAdded.toISOString();
+                } else {
+                    dateAdded = folderMtime.toISOString();
+                }
+
+                if (dateTracker.earliestCreated && dateTracker.earliestCreated < folderBirthtime) {
+                    dateCreated = dateTracker.earliestCreated.toISOString();
+                } else {
+                    dateCreated = folderBirthtime.toISOString();
+                }
+            } catch (e) {
+                dateAdded = dateTracker.earliestAdded?.toISOString() || null;
+                dateCreated = dateTracker.earliestCreated?.toISOString() || null;
+            }
 
             // Insert model into database
             const insertModel = db.prepare(`
@@ -430,9 +469,34 @@ class Scanner {
                 const isPaid = this.isInFolder(folderPath, rootPath, 'Paid');
                 const isOriginal = this.isInFolder(folderPath, rootPath, 'Original Creations');
 
-                // Format dates as ISO strings
-                const dateAdded = folderData.earliestAdded?.toISOString() || null;
-                const dateCreated = folderData.earliestCreated?.toISOString() || null;
+                // Get folder's own dates first, fall back to earliest file dates
+                let dateAdded: string | null = null;
+                let dateCreated: string | null = null;
+
+                try {
+                    const folderStat = fs.statSync(folderPath);
+                    // Use folder dates as primary, but fall back to file dates if folder dates are newer
+                    // (sometimes folder dates get updated when copying/moving)
+                    const folderMtime = folderStat.mtime;
+                    const folderBirthtime = folderStat.birthtime;
+
+                    // Use the earlier of folder date or file date
+                    if (folderData.earliestAdded && folderData.earliestAdded < folderMtime) {
+                        dateAdded = folderData.earliestAdded.toISOString();
+                    } else {
+                        dateAdded = folderMtime.toISOString();
+                    }
+
+                    if (folderData.earliestCreated && folderData.earliestCreated < folderBirthtime) {
+                        dateCreated = folderData.earliestCreated.toISOString();
+                    } else {
+                        dateCreated = folderBirthtime.toISOString();
+                    }
+                } catch (e) {
+                    // Fall back to file dates if folder stat fails
+                    dateAdded = folderData.earliestAdded?.toISOString() || null;
+                    dateCreated = folderData.earliestCreated?.toISOString() || null;
+                }
 
                 let modelId: number;
 
@@ -531,6 +595,8 @@ class Scanner {
 
         // Extract images from archives for models without images
         if (modelsNeedingImages.length > 0) {
+            this.progress.currentStep = 'extracting';
+            this.progress.stepDescription = `Extracting images from archives (${modelsNeedingImages.length} models)...`;
             console.log(`Extracting images from archives for ${modelsNeedingImages.length} models...`);
             let extractCount = 0;
             for (const { modelId, folderPath } of modelsNeedingImages) {

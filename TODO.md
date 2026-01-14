@@ -1,0 +1,31 @@
+- [x] For the background command, use a PORT option that is not 3000, so that I can run the backend in a different terminal window
+- [x] When assessing the date added, use the model folder when available before using a model file itself.
+- [x] Add an option to the model overlay to extract the contents of any ZIP files in a model folder. The files from the ZIP should be extracted to a new folder matching the zip filename without extension. Move the ZIP to the macOS trash after successful extraction, then automatically rescan that model folder and update it.
+- [x] Update the scan progress indicator to show the overall process, right now it seems to just show the initial file count process. Also show what the current step is, for example what we log to console should also show in the UI status view.
+- [x] Disallow additional scans to be triggered while a scan is taking place (on the UI side, not necessarily on the backend).
+- [x] When listing the filepath for a model, exclude the global model directory and show the relative path from there.
+- [x] When there are multiple images for a model, allow choosing the main thumbnail image in the details modal view.
+- [x] Support "mark as printed" from the browse page
+- [x] Support bulk add to queue, bulk soft delete, bulk category updates, and bulk 'mark as printed' operations on the browse page
+- [x] Support bulk remove from queue on the queue and favorites pages
+- [x] Support drag/drop in the queue to reorder
+- [x] Remove the numbers in the global nav menu for Queue and Favorites
+- [x] Move the search bar to the global nav bar. When searching, results should be in the context of the tab you are on (browse, favorites, queue, printed, loose models) and with the results in the same components each tab normally renders with
+- [x] Add query params and support deep-linking for categories, search results, sorting, and card vs. list views
+- [x] On the browse page, next to browse models title, show only the total number of models within the currently selected category or within the search results. Don't show the number that have loaded on however many pages have been requested
+
+---
+
+- [ ] Not every folder with nested folders is a single model! The "paid" folder has many models under it, each organized by the model creator, for instance. If we're unsure about a model folder, keep it as "uncategorized" and let's merge the "loose models" and these into a tab that can be used to organize these models. Loose models we'd make a folder. Let's also identify some models where we cannot identify the correct parent folder and try to come up with a better algorithm
+- [ ] Allow adding images to "printed" records that represent "makes"
+- [ ] When model modal is open, the escape key should close it
+- [ ] Allow inline-edit of model name
+- [ ] Marking something as printed should remove it from the queue
+- [ ] The modal interface should be able to mark something as printed
+- [ ] The browse interface should have filters to hide printed and queued models, with the defaults hiding printed and showing queued
+- [ ] There needs to be a way to mark a printed model as not good
+- [ ] The Favorites, queue, printed, and loose/uncategorized pages all need to show the model images and clicking on them should launch the same modal view of the model
+- [ ] For loose models, the open folder button should not only open the containing folder, but select the file itself
+- [ ] Rename "Open in Finder" to "Show in Finder"
+- [ ] You should be able to click any file under a model in the modal view to show that file in finder
+- [ ] The "printed" view should be sorted by when the model was marked as printed, if we can tell when the finder tag was added or when we marked it printed in the UI. It should secondarily be sorted by date added of the model

@@ -31,7 +31,6 @@
             </svg>
           </span>
           <span class="nav-label">Favorites</span>
-          <span v-if="store.stats.favorites > 0" class="badge">{{ store.stats.favorites }}</span>
         </router-link>
         <router-link to="/queue" :class="{ active: $route.name === 'queue' }">
           <span class="nav-icon">
@@ -40,7 +39,6 @@
             </svg>
           </span>
           <span class="nav-label">Queue</span>
-          <span v-if="store.stats.queued > 0" class="badge">{{ store.stats.queued }}</span>
         </router-link>
         <router-link to="/printed" :class="{ active: $route.name === 'printed' }">
           <span class="nav-icon">
@@ -71,6 +69,28 @@
           <span class="nav-label">Settings</span>
         </router-link>
       </div>
+
+      <!-- Global Search -->
+      <div class="navbar-search">
+        <div class="search-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            v-model="searchInput"
+            @keyup.enter="handleSearch"
+            type="text"
+            placeholder="Search all models..."
+            class="search-input"
+          />
+          <button v-if="searchInput" @click="clearSearch" class="search-clear">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
     </nav>
 
     <main class="main-content">
@@ -80,12 +100,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useAppStore } from './store';
 import { systemApi } from './services/api';
 
 const store = useAppStore();
+const router = useRouter();
+const route = useRoute();
 const looseFilesCount = ref(0);
+const searchInput = ref('');
 
 onMounted(async () => {
   await store.loadConfig();
@@ -101,6 +125,26 @@ async function loadLooseFilesCount() {
     console.error('Failed to load loose files count:', error);
   }
 }
+
+function handleSearch() {
+  if (searchInput.value.trim()) {
+    store.setGlobalSearch(searchInput.value.trim());
+    // Navigate to browse if not already there
+    if (route.name !== 'browse') {
+      router.push('/');
+    }
+  }
+}
+
+function clearSearch() {
+  searchInput.value = '';
+  store.clearGlobalSearch();
+}
+
+// Sync search input with store (for when navigating back)
+watch(() => store.globalSearchQuery, (newVal) => {
+  searchInput.value = newVal;
+}, { immediate: true });
 </script>
 
 <style scoped>
@@ -246,6 +290,75 @@ async function loadLooseFilesCount() {
   background: var(--warning);
 }
 
+/* Global Search */
+.navbar-search {
+  margin-left: auto;
+}
+
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 0.75rem;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 240px;
+  padding: 0.5rem 2rem 0.5rem 2.25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition: all var(--transition-base);
+}
+
+.search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 3px var(--accent-primary-dim);
+}
+
+.search-clear {
+  position: absolute;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-base);
+}
+
+.search-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.search-clear svg {
+  width: 14px;
+  height: 14px;
+}
+
 .main-content {
   flex: 1;
   padding: 2rem;
@@ -269,6 +382,16 @@ async function loadLooseFilesCount() {
   }
 
   .brand-tagline {
+    display: none;
+  }
+
+  .search-input {
+    width: 160px;
+  }
+}
+
+@media (max-width: 600px) {
+  .navbar-search {
     display: none;
   }
 }
