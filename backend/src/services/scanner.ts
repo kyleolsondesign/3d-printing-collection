@@ -472,9 +472,12 @@ class Scanner {
                 return;
             }
 
-            // KEY CHANGE: Check if this folder is a model folder (contains model files directly)
-            // Don't check the root path itself
-            if (currentPath !== rootPath && this.isModelFolder(currentPath)) {
+            // Check if this folder is a model folder (contains model files directly)
+            // Don't check the root path itself, and don't treat top-level category folders
+            // (direct children of root) as model folders even if they contain model files.
+            // Category folders like "Toys", "Tools" are at depth 1 — model files there are loose.
+            const depth = path.relative(rootPath, currentPath).split(path.sep).length;
+            if (currentPath !== rootPath && depth >= 2 && this.isModelFolder(currentPath)) {
                 // Register this folder as a model and collect all files from it + subfolders
                 this.registerModelFolder(currentPath);
                 return; // Don't recurse further - subfolders belong to this model

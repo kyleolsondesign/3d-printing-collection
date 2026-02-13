@@ -274,7 +274,8 @@ For models without standalone images, the scanner automatically extracts images 
 - Only extracts when no other images exist for the model
 
 ### Folder-Based Model Organization
-- **Folders = Models**: Each folder containing model files is treated as one model
+- **Folders = Models**: Each folder containing model files is treated as one model (at depth >= 2 from root)
+- **Category folders excluded**: Direct children of root (depth 1) are category folders, never model folders — model files there are loose
 - **Multiple files per model**: All files in a folder are indexed as alternate versions/formats
   - Example: A folder with 3 STL files → 1 model with 3 file versions
   - No "duplicates" - all files are considered part of the same model

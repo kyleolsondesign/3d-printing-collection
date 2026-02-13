@@ -17,7 +17,7 @@
 ---
 
 - [x] Not every folder with nested folders is a single model! The "paid" folder has many models under it, each organized by the model creator, for instance. If we're unsure about a model folder, keep it as "uncategorized" and let's merge the "loose models" and these into a tab that can be used to organize these models. Loose models we'd make a folder. Let's also identify some models where we cannot identify the correct parent folder and try to come up with a better algorithm
-- [ ] Not every folder with a direct model file in it is a model folder. Anything under a top-level category folder is not
+- [x] Not every folder with a direct model file in it is a model folder. Anything under a top-level category folder is not
 - [x] When running a full rebuild, it wiped out my favorites
 - [ ] Allow adding images to "printed" records that represent "makes"
 - [ ] The PDFs can be treated as ZIP files to extract image assets. Some of them end up being garbage, but the first one with a name starting with "Page 1, object" is usually correct for the model. It is a TIFF though, and we should compress it down to a JPG.
