@@ -378,7 +378,13 @@ The app integrates with macOS Finder tags to sync print status:
 
 ### Print Workflow
 - **Printed removes from queue**: Marking a model as printed automatically removes it from the print queue
+- **Mark as printed from modal**: Model details modal has good/bad print rating buttons
+- **Mark as printed from queue**: Queue items have a thumbs-up button to mark as printed (removes from queue)
+- **Rating toggle on printed view**: Printed view shows clickable good/bad rating buttons to change rating
+- **Printed view sorting**: Sorted by print date (descending), secondary sort by model date_added
 - **Escape key closes modal**: Press Escape to close the model details modal
+- **Clickable files in modal**: Click any model file in the details modal to reveal it in Finder
+- **Show in Finder**: Uses `open -R` to reveal and select the item in Finder (works for both files and folders)
 
 ## Future Enhancements
 - 3D model preview (STL viewer)

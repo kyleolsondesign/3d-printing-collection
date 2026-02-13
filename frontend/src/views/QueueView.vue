@@ -99,6 +99,11 @@
           <p v-if="item.notes" class="notes">{{ item.notes }}</p>
         </div>
         <div class="actions">
+          <button @click="markAsPrinted(item)" class="btn-printed" title="Mark as printed (good)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+            </svg>
+          </button>
           <button @click="removeFromQueue(item.id)" class="btn-remove" title="Remove from queue">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
@@ -112,7 +117,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { queueApi } from '../services/api';
+import { queueApi, printedApi } from '../services/api';
 
 const queue = ref<any[]>([]);
 const loading = ref(true);
@@ -150,6 +155,16 @@ async function removeFromQueue(id: number) {
     queue.value = queue.value.filter(q => q.id !== id);
   } catch (error) {
     console.error('Failed to remove from queue:', error);
+  }
+}
+
+async function markAsPrinted(item: any) {
+  try {
+    await printedApi.toggle(item.model_id, 'good');
+    // Backend auto-removes from queue, so remove from local list
+    queue.value = queue.value.filter(q => q.id !== item.id);
+  } catch (error) {
+    console.error('Failed to mark as printed:', error);
   }
 }
 
@@ -392,7 +407,34 @@ h2 {
 }
 
 .actions {
+  display: flex;
+  gap: 0.5rem;
   flex-shrink: 0;
+}
+
+.btn-printed {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  transition: all var(--transition-base);
+  cursor: pointer;
+}
+
+.btn-printed svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-printed:hover {
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-dim);
 }
 
 .btn-remove {

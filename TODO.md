@@ -25,11 +25,11 @@
 - [x] When model modal is open, the escape key should close it
 - [ ] Allow inline-edit of model name on the modal view
 - [x] Marking something as printed should remove it from the queue
-- [ ] The modal interface and queue interface should be able to mark something as printed
-- [ ] There needs to be a way to mark a printed model as not good
+- [x] The modal interface and queue interface should be able to mark something as printed
+- [x] There needs to be a way to mark a printed model as not good
 - [ ] The browse interface should have filters to hide printed and queued models, with the defaults hiding printed and showing queued
 - [ ] The Favorites, queue, printed, and loose/uncategorized pages all need to show the model images and clicking on them should launch the same modal view of the model
-- [ ] For loose models, the open folder button should not only open the containing folder, but select the file itself
+- [x] For loose models, the open folder button should not only open the containing folder, but select the file itself
 - [x] Rename "Open in Finder" to "Show in Finder"
-- [ ] You should be able to click any file under a model in the modal view to show that file in finder
-- [ ] The "printed" view should be sorted by when the model was marked as printed, if we can tell when the finder tag was added or when we marked it printed in the UI. It should secondarily be sorted by date added of the model
+- [x] You should be able to click any file under a model in the modal view to show that file in finder
+- [x] The "printed" view should be sorted by when the model was marked as printed, if we can tell when the finder tag was added or when we marked it printed in the UI. It should secondarily be sorted by date added of the model

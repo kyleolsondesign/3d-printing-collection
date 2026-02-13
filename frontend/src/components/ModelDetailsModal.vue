@@ -85,7 +85,13 @@
               <div class="files-section" v-if="modelFiles.length > 0">
                 <h3>Model Files</h3>
                 <div class="files-list">
-                  <div v-for="file in modelFiles" :key="file.id" class="file-item">
+                  <div
+                    v-for="file in modelFiles"
+                    :key="file.id"
+                    class="file-item clickable"
+                    @click="showFileInFinder(file.filepath)"
+                    title="Show in Finder"
+                  >
                     <span class="file-type-badge">{{ file.file_type }}</span>
                     <span class="file-name">{{ file.filename }}</span>
                     <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
@@ -177,6 +183,28 @@
                   {{ modelDetails.isQueued ? 'In Queue' : 'Add to Queue' }}
                 </button>
 
+                <button
+                  @click="togglePrinted('good')"
+                  class="action-btn"
+                  :class="{ active: isPrinted && currentPrintRating === 'good' }"
+                >
+                  <svg viewBox="0 0 24 24" :fill="isPrinted && currentPrintRating === 'good' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                    <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+                  </svg>
+                  {{ isPrinted && currentPrintRating === 'good' ? 'Good Print' : 'Mark Good' }}
+                </button>
+
+                <button
+                  @click="togglePrinted('bad')"
+                  class="action-btn"
+                  :class="{ active: isPrinted && currentPrintRating === 'bad', 'bad-active': isPrinted && currentPrintRating === 'bad' }"
+                >
+                  <svg viewBox="0 0 24 24" :fill="isPrinted && currentPrintRating === 'bad' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                    <path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/>
+                  </svg>
+                  {{ isPrinted && currentPrintRating === 'bad' ? 'Bad Print' : 'Mark Bad' }}
+                </button>
+
                 <button @click="openInFinder" class="action-btn">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
@@ -202,7 +230,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { modelsApi, systemApi, favoritesApi, queueApi, type Model, type ModelAsset } from '../services/api';
+import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, type Model, type ModelAsset } from '../services/api';
 import { useAppStore } from '../store';
 
 interface ModelFile {
@@ -220,11 +248,20 @@ interface ZipFile {
   size: number;
 }
 
+interface PrintRecord {
+  id: number;
+  model_id: number;
+  printed_at: string;
+  rating: 'good' | 'bad' | null;
+  notes: string | null;
+}
+
 interface ModelDetails extends Model {
   assets: ModelAsset[];
   zipFiles?: ZipFile[];
   isFavorite: boolean;
   isQueued: boolean;
+  printHistory: PrintRecord[];
 }
 
 const props = defineProps<{
@@ -247,6 +284,14 @@ const primaryImage = ref<string | null>(null);
 
 const imageAssets = computed(() =>
   modelDetails.value?.assets.filter(a => a.asset_type === 'image') || []
+);
+
+const isPrinted = computed(() =>
+  (modelDetails.value?.printHistory?.length ?? 0) > 0
+);
+
+const currentPrintRating = computed(() =>
+  modelDetails.value?.printHistory?.[0]?.rating || null
 );
 
 const pdfAssets = computed(() =>
@@ -354,12 +399,49 @@ async function toggleQueue() {
   }
 }
 
+async function togglePrinted(rating: 'good' | 'bad') {
+  if (!modelDetails.value) return;
+  try {
+    if (isPrinted.value && currentPrintRating.value === rating) {
+      // Same rating clicked again — remove printed status
+      await printedApi.toggle(modelDetails.value.id, rating);
+      modelDetails.value.printHistory = [];
+    } else if (isPrinted.value) {
+      // Different rating — update existing record
+      const record = modelDetails.value.printHistory[0];
+      await printedApi.update(record.id, { rating });
+      modelDetails.value.printHistory = [{ ...record, rating }];
+    } else {
+      // Not printed — mark as printed
+      await printedApi.toggle(modelDetails.value.id, rating);
+      modelDetails.value.printHistory = [{
+        id: 0, model_id: modelDetails.value.id,
+        printed_at: new Date().toISOString(),
+        rating, notes: null
+      }];
+      // Marking as printed removes from queue
+      modelDetails.value.isQueued = false;
+    }
+    emit('updated', modelDetails.value);
+  } catch (error) {
+    console.error('Failed to toggle printed:', error);
+  }
+}
+
 async function openInFinder() {
   if (!modelDetails.value) return;
   try {
     await systemApi.openFolder(modelDetails.value.filepath);
   } catch (error) {
     console.error('Failed to open folder:', error);
+  }
+}
+
+async function showFileInFinder(filepath: string) {
+  try {
+    await systemApi.openFolder(filepath);
+  } catch (error) {
+    console.error('Failed to show file in Finder:', error);
   }
 }
 
@@ -755,6 +837,16 @@ async function extractZipFile(zipFile: ZipFile) {
   font-size: 0.85rem;
 }
 
+.file-item.clickable {
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.file-item.clickable:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
 .file-type-badge {
   padding: 0.125rem 0.5rem;
   background: var(--bg-hover);
@@ -922,7 +1014,7 @@ async function extractZipFile(zipFile: ZipFile) {
 /* Actions Section */
 .actions-section {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
   margin-top: auto;
   padding-top: 1rem;
@@ -960,6 +1052,12 @@ async function extractZipFile(zipFile: ZipFile) {
   background: var(--accent-primary-dim);
   border-color: var(--accent-primary);
   color: var(--accent-primary);
+}
+
+.action-btn.bad-active {
+  background: var(--danger-dim);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .action-btn svg {

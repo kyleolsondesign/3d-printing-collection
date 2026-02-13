@@ -41,7 +41,7 @@ router.get('/', (req, res) => {
             SELECT printed_models.*, models.*
             FROM printed_models
             JOIN models ON printed_models.model_id = models.id
-            ORDER BY printed_models.printed_at DESC
+            ORDER BY printed_models.printed_at DESC, models.date_added DESC
         `).all();
 
         res.json({ printed });

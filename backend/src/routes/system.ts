@@ -313,7 +313,7 @@ router.post('/organize-loose-files', async (req, res) => {
     }
 });
 
-// Open folder in Finder (macOS only)
+// Show file or folder in Finder (macOS only)
 router.post('/open-folder', (req, res) => {
     try {
         const { folderPath } = req.body;
@@ -322,11 +322,12 @@ router.post('/open-folder', (req, res) => {
             return res.status(400).json({ error: 'folderPath is required' });
         }
 
-        // Use macOS 'open' command to reveal folder in Finder
-        exec(`open "${folderPath}"`, (error) => {
+        // Use 'open -R' to reveal the item in Finder (selects it in the parent folder)
+        // This works for both files and folders
+        exec(`open -R "${folderPath}"`, (error) => {
             if (error) {
-                console.error('Failed to open folder:', error);
-                return res.status(500).json({ error: 'Failed to open folder' });
+                console.error('Failed to show in Finder:', error);
+                return res.status(500).json({ error: 'Failed to show in Finder' });
             }
             res.json({ success: true });
         });

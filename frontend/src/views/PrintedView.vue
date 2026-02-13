@@ -56,8 +56,25 @@
               {{ formatDate(item.printed_at) }}
             </span>
           </div>
-          <div v-if="item.rating" class="rating-badge" :class="item.rating">
-            {{ item.rating === 'good' ? 'Good print' : 'Bad print' }}
+          <div class="rating-toggle">
+            <button
+              @click.stop="setRating(item, 'good')"
+              :class="['rating-btn', { active: item.rating === 'good' }]"
+              title="Good print"
+            >
+              <svg viewBox="0 0 24 24" :fill="item.rating === 'good' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+              </svg>
+            </button>
+            <button
+              @click.stop="setRating(item, 'bad')"
+              :class="['rating-btn bad', { active: item.rating === 'bad' }]"
+              title="Bad print"
+            >
+              <svg viewBox="0 0 24 24" :fill="item.rating === 'bad' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                <path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/>
+              </svg>
+            </button>
           </div>
           <p v-if="item.notes" class="notes">{{ item.notes }}</p>
         </div>
@@ -85,6 +102,15 @@ async function loadPrinted() {
     console.error('Failed to load printed models:', error);
   } finally {
     loading.value = false;
+  }
+}
+
+async function setRating(item: any, rating: 'good' | 'bad') {
+  try {
+    await printedApi.update(item.id, { rating });
+    item.rating = rating;
+  } catch (error) {
+    console.error('Failed to update rating:', error);
   }
 }
 
@@ -239,22 +265,50 @@ h2 {
   height: 14px;
 }
 
-.rating-badge {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  font-weight: 600;
+.rating-toggle {
+  display: flex;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-.rating-badge.good {
-  background: var(--success-dim);
+.rating-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.rating-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.rating-btn:hover {
+  border-color: var(--success);
   color: var(--success);
 }
 
-.rating-badge.bad {
+.rating-btn.bad:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.rating-btn.active {
+  background: var(--success-dim);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.rating-btn.bad.active {
   background: var(--danger-dim);
+  border-color: var(--danger);
   color: var(--danger);
 }
 
