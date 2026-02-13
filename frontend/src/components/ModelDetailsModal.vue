@@ -181,7 +181,7 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
                   </svg>
-                  Open in Finder
+                  Show in Finder
                 </button>
 
                 <button @click="rescanModel" class="action-btn" :disabled="rescanning">
@@ -201,7 +201,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { modelsApi, systemApi, favoritesApi, queueApi, type Model, type ModelAsset } from '../services/api';
 import { useAppStore } from '../store';
 
@@ -264,8 +264,19 @@ const relativePath = computed(() => {
   return fullPath;
 });
 
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    emit('close');
+  }
+}
+
 onMounted(async () => {
+  document.addEventListener('keydown', handleKeydown);
   await loadModelDetails();
+});
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown);
 });
 
 watch(() => props.modelId, async () => {

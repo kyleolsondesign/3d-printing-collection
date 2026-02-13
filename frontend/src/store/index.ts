@@ -95,6 +95,10 @@ export const useAppStore = defineStore('app', () => {
             if (model) {
                 model.isPrinted = response.data.printed;
                 model.printRating = response.data.printed ? response.data.rating : null;
+                // Backend removes from queue when marking as printed
+                if (response.data.printed && response.data.removedFromQueue) {
+                    model.isQueued = false;
+                }
             }
         } catch (error) {
             console.error('Failed to toggle printed:', error);

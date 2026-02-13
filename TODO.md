@@ -16,19 +16,20 @@
 
 ---
 
-- [ ] Not every folder with nested folders is a single model! The "paid" folder has many models under it, each organized by the model creator, for instance. If we're unsure about a model folder, keep it as "uncategorized" and let's merge the "loose models" and these into a tab that can be used to organize these models. Loose models we'd make a folder. Let's also identify some models where we cannot identify the correct parent folder and try to come up with a better algorithm
-- [ ] When running a full scan, it wiped out my favorites
+- [x] Not every folder with nested folders is a single model! The "paid" folder has many models under it, each organized by the model creator, for instance. If we're unsure about a model folder, keep it as "uncategorized" and let's merge the "loose models" and these into a tab that can be used to organize these models. Loose models we'd make a folder. Let's also identify some models where we cannot identify the correct parent folder and try to come up with a better algorithm
+- [ ] Not every folder with a direct model file in it is a model folder. Anything under a top-level category folder is not
+- [x] When running a full rebuild, it wiped out my favorites
 - [ ] Allow adding images to "printed" records that represent "makes"
 - [ ] The PDFs can be treated as ZIP files to extract image assets. Some of them end up being garbage, but the first one with a name starting with "Page 1, object" is usually correct for the model. It is a TIFF though, and we should compress it down to a JPG.
 - [ ] Support "deleting" a thumbnail for a model, which would just be hiding it from our app but not deleting any files.
-- [ ] When model modal is open, the escape key should close it
+- [x] When model modal is open, the escape key should close it
 - [ ] Allow inline-edit of model name on the modal view
-- [ ] Marking something as printed should remove it from the queue
+- [x] Marking something as printed should remove it from the queue
 - [ ] The modal interface and queue interface should be able to mark something as printed
 - [ ] There needs to be a way to mark a printed model as not good
 - [ ] The browse interface should have filters to hide printed and queued models, with the defaults hiding printed and showing queued
 - [ ] The Favorites, queue, printed, and loose/uncategorized pages all need to show the model images and clicking on them should launch the same modal view of the model
 - [ ] For loose models, the open folder button should not only open the containing folder, but select the file itself
-- [ ] Rename "Open in Finder" to "Show in Finder"
+- [x] Rename "Open in Finder" to "Show in Finder"
 - [ ] You should be able to click any file under a model in the modal view to show that file in finder
 - [ ] The "printed" view should be sorted by when the model was marked as printed, if we can tell when the finder tag was added or when we marked it printed in the UI. It should secondarily be sorted by date added of the model

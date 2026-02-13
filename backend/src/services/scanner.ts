@@ -28,6 +28,8 @@ interface ScanProgress {
     stepDescription: string;
     totalFolders: number;
     indexedFolders: number;
+    modelsToExtract: number;
+    modelsExtracted: number;
     overallProgress: number;
 }
 
@@ -53,6 +55,8 @@ class Scanner {
         stepDescription: '',
         totalFolders: 0,
         indexedFolders: 0,
+        modelsToExtract: 0,
+        modelsExtracted: 0,
         overallProgress: 0
     };
     private foldersWithModels: Map<string, FolderData> = new Map();
@@ -84,6 +88,8 @@ class Scanner {
             stepDescription: 'Scanning directories...',
             totalFolders: 0,
             indexedFolders: 0,
+            modelsToExtract: 0,
+            modelsExtracted: 0,
             overallProgress: 0
         };
         this.foldersWithModels = new Map();
@@ -113,18 +119,26 @@ class Scanner {
             }
 
             // Phase 1: Recursively scan and collect model files by folder
+            // Discovery is very fast (~1% of total time)
             await this.scanDirectoryRecursive(modelDirectory, modelDirectory);
 
             // Set totalFolders for progress tracking
             this.progress.totalFolders = this.foldersWithModels.size;
-            this.progress.overallProgress = 30; // Discovery complete
+            this.progress.overallProgress = 1; // Discovery complete (1%)
 
-            // Phase 2: Index folders as models (includes image extraction from archives)
+            // Phase 2: Index folders as models
+            // Indexing is ~29% of total (1-30%)
             this.progress.currentStep = 'indexing';
             this.progress.stepDescription = 'Indexing model folders...';
             await this.indexFoldersAsModels(modelDirectory);
 
-            // Phase 3: In full_sync mode, remove models whose folders no longer exist
+            // Phase 3: In full mode, restore saved user data (favorites, queue, printed)
+            if (mode === 'full') {
+                this.restoreUserData();
+            }
+
+            // Phase 4: In full_sync mode, remove models whose folders no longer exist
+            // Cleanup is ~5% of total (95-100%)
             if (mode === 'full_sync') {
                 this.progress.currentStep = 'cleanup';
                 this.progress.stepDescription = 'Cleaning up orphaned models...';
@@ -338,12 +352,84 @@ class Scanner {
         }
     }
 
+    /**
+     * Clear model data for full rebuild while preserving favorites, queue, and printed records.
+     * Saves filepath-based mappings, clears models (which cascades related tables),
+     * then the mappings are restored after rebuild via restoreUserData().
+     */
+    private savedUserData: {
+        favorites: Array<{ filepath: string; added_at: string; notes: string | null }>;
+        queue: Array<{ filepath: string; added_at: string; priority: number; notes: string | null; estimated_time_hours: number | null }>;
+        printed: Array<{ filepath: string; printed_at: string; rating: string | null; notes: string | null; print_time_hours: number | null; filament_used_grams: number | null }>;
+    } | null = null;
+
     private clearExistingModels(): void {
+        // Save user data (favorites, queue, printed) keyed by filepath before clearing
+        this.savedUserData = {
+            favorites: db.prepare(`
+                SELECT m.filepath, f.added_at, f.notes
+                FROM favorites f JOIN models m ON f.model_id = m.id
+            `).all() as any[],
+            queue: db.prepare(`
+                SELECT m.filepath, q.added_at, q.priority, q.notes, q.estimated_time_hours
+                FROM print_queue q JOIN models m ON q.model_id = m.id
+            `).all() as any[],
+            printed: db.prepare(`
+                SELECT m.filepath, p.printed_at, p.rating, p.notes, p.print_time_hours, p.filament_used_grams
+                FROM printed_models p JOIN models m ON p.model_id = m.id
+            `).all() as any[]
+        };
+
+        console.log(`Saved user data: ${this.savedUserData.favorites.length} favorites, ${this.savedUserData.queue.length} queue items, ${this.savedUserData.printed.length} printed records`);
+
         db.prepare('DELETE FROM models').run();
         db.prepare('DELETE FROM model_files').run();
         db.prepare('DELETE FROM model_assets').run();
         db.prepare('DELETE FROM loose_files').run();
         console.log('Cleared existing data from database');
+    }
+
+    /**
+     * Restore favorites, queue, and printed records after a full rebuild
+     * by matching saved filepaths to newly created model IDs.
+     */
+    private restoreUserData(): void {
+        if (!this.savedUserData) return;
+
+        let restored = { favorites: 0, queue: 0, printed: 0 };
+
+        // Restore favorites
+        const insertFav = db.prepare('INSERT OR IGNORE INTO favorites (model_id, added_at, notes) VALUES (?, ?, ?)');
+        for (const fav of this.savedUserData.favorites) {
+            const model = db.prepare('SELECT id FROM models WHERE filepath = ?').get(fav.filepath) as { id: number } | undefined;
+            if (model) {
+                insertFav.run(model.id, fav.added_at, fav.notes);
+                restored.favorites++;
+            }
+        }
+
+        // Restore queue
+        const insertQueue = db.prepare('INSERT OR IGNORE INTO print_queue (model_id, added_at, priority, notes, estimated_time_hours) VALUES (?, ?, ?, ?, ?)');
+        for (const q of this.savedUserData.queue) {
+            const model = db.prepare('SELECT id FROM models WHERE filepath = ?').get(q.filepath) as { id: number } | undefined;
+            if (model) {
+                insertQueue.run(model.id, q.added_at, q.priority, q.notes, q.estimated_time_hours);
+                restored.queue++;
+            }
+        }
+
+        // Restore printed
+        const insertPrinted = db.prepare('INSERT OR IGNORE INTO printed_models (model_id, printed_at, rating, notes, print_time_hours, filament_used_grams) VALUES (?, ?, ?, ?, ?, ?)');
+        for (const p of this.savedUserData.printed) {
+            const model = db.prepare('SELECT id FROM models WHERE filepath = ?').get(p.filepath) as { id: number } | undefined;
+            if (model) {
+                insertPrinted.run(model.id, p.printed_at, p.rating, p.notes, p.print_time_hours, p.filament_used_grams);
+                restored.printed++;
+            }
+        }
+
+        console.log(`Restored user data: ${restored.favorites} favorites, ${restored.queue} queue items, ${restored.printed} printed records`);
+        this.savedUserData = null;
     }
 
     /**
@@ -379,13 +465,29 @@ class Scanner {
 
     private async scanDirectoryRecursive(currentPath: string, rootPath: string): Promise<void> {
         try {
+            const dirName = path.basename(currentPath);
+
+            // Skip hidden folders and node_modules
+            if (dirName.startsWith('.') || dirName === 'node_modules') {
+                return;
+            }
+
+            // KEY CHANGE: Check if this folder is a model folder (contains model files directly)
+            // Don't check the root path itself
+            if (currentPath !== rootPath && this.isModelFolder(currentPath)) {
+                // Register this folder as a model and collect all files from it + subfolders
+                this.registerModelFolder(currentPath);
+                return; // Don't recurse further - subfolders belong to this model
+            }
+
+            // Not a model folder - scan for loose files and recurse into subdirectories
             const entries = fs.readdirSync(currentPath, { withFileTypes: true });
 
             for (const entry of entries) {
                 const fullPath = path.join(currentPath, entry.name);
 
-                // Skip hidden files and node_modules
-                if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+                // Skip hidden files
+                if (entry.name.startsWith('.')) {
                     continue;
                 }
 
@@ -395,52 +497,16 @@ class Scanner {
                 } else if (entry.isFile()) {
                     this.progress.totalFiles++;
 
-                    // Check if it's a model file
+                    // Model files in non-model folders are loose files
                     if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
-                        const relativePath = path.relative(rootPath, fullPath);
-                        const pathDepth = relativePath.split(path.sep).length;
-
-                        // Check if file is loose (in root or directly in a category folder)
-                        // pathDepth 1 = root directory (e.g., "model.stl")
-                        // pathDepth 2 = one level deep (e.g., "Toys/model.stl")
-                        if (pathDepth <= 2) {
-                            this.trackLooseFile(fullPath);
-                            this.progress.looseFilesFound++;
-                        } else {
-                            // Determine the model root folder (depth 3 = root/category/model-folder)
-                            // Files in nested subfolders should be attributed to the parent model folder
-                            const modelFolderPath = this.getModelRootFolder(fullPath, rootPath);
-
-                            // Get file dates
-                            const stats = fs.statSync(fullPath);
-                            const fileAdded = stats.mtime;
-                            const fileCreated = stats.birthtime;
-
-                            // Add to model folder's files collection
-                            if (!this.foldersWithModels.has(modelFolderPath)) {
-                                this.foldersWithModels.set(modelFolderPath, {
-                                    files: [],
-                                    earliestAdded: null,
-                                    earliestCreated: null
-                                });
-                            }
-                            const folderData = this.foldersWithModels.get(modelFolderPath)!;
-                            folderData.files.push(fullPath);
-
-                            // Track earliest dates
-                            if (!folderData.earliestAdded || fileAdded < folderData.earliestAdded) {
-                                folderData.earliestAdded = fileAdded;
-                            }
-                            if (!folderData.earliestCreated || fileCreated < folderData.earliestCreated) {
-                                folderData.earliestCreated = fileCreated;
-                            }
-                        }
+                        this.trackLooseFile(fullPath);
+                        this.progress.looseFilesFound++;
                     }
 
                     this.progress.processedFiles++;
-                    // Discovery phase = 0-30% of overall progress
+                    // Discovery phase = 0-1% of overall progress (it's very fast)
                     if (this.progress.totalFiles > 0) {
-                        this.progress.overallProgress = Math.round((this.progress.processedFiles / this.progress.totalFiles) * 30);
+                        this.progress.overallProgress = Math.min(1, Math.round((this.progress.processedFiles / this.progress.totalFiles) * 1));
                     }
 
                     // Yield control every 100 files to keep API responsive
@@ -456,25 +522,67 @@ class Scanner {
     }
 
     /**
-     * Get the model root folder for a file path.
-     * The model root folder is at depth 3 (root/category/model-folder).
-     * Files in nested subfolders are attributed to this parent model folder.
+     * Check if a folder directly contains model files (not just in subfolders).
+     * This is the key detection method for identifying model folders.
      */
-    private getModelRootFolder(filePath: string, rootPath: string): string {
-        const relativePath = path.relative(rootPath, filePath);
-        const parts = relativePath.split(path.sep);
-
-        // parts[0] = category folder
-        // parts[1] = model folder
-        // parts[2+] = nested subfolders and file
-
-        // Return the model folder path (first two directory levels under root)
-        if (parts.length >= 3) {
-            return path.join(rootPath, parts[0], parts[1]);
+    private isModelFolder(folderPath: string): boolean {
+        try {
+            const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isFile() && !entry.name.startsWith('.')) {
+                    const fullPath = path.join(folderPath, entry.name);
+                    if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } catch {
+            return false;
         }
+    }
 
-        // Fallback to immediate parent (shouldn't happen given depth check)
-        return path.dirname(filePath);
+    /**
+     * Register a model folder and collect all files from it and subfolders
+     */
+    private registerModelFolder(folderPath: string): void {
+        const dateTracker = { earliestAdded: null as Date | null, earliestCreated: null as Date | null };
+        const modelFiles: string[] = [];
+
+        // Use existing collectModelFilesRecursive to gather all files
+        this.collectModelFilesRecursive(folderPath, modelFiles, dateTracker);
+
+        // Count files for progress tracking
+        this.countFilesInFolder(folderPath);
+
+        if (modelFiles.length > 0) {
+            this.foldersWithModels.set(folderPath, {
+                files: modelFiles,
+                earliestAdded: dateTracker.earliestAdded,
+                earliestCreated: dateTracker.earliestCreated
+            });
+        }
+    }
+
+    /**
+     * Count all files in a folder recursively (for progress tracking)
+     */
+    private countFilesInFolder(folderPath: string): void {
+        try {
+            const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.name.startsWith('.')) continue;
+                const fullPath = path.join(folderPath, entry.name);
+                if (entry.isDirectory()) {
+                    this.countFilesInFolder(fullPath);
+                } else if (entry.isFile()) {
+                    this.progress.totalFiles++;
+                    this.progress.processedFiles++;
+                }
+            }
+        } catch {
+            // Continue on errors
+        }
     }
 
     private async indexFoldersAsModels(rootPath: string): Promise<void> {
@@ -604,11 +712,10 @@ class Scanner {
                 // Process Finder tags for printed/queue status
                 await this.processFinderTags(modelId, folderPath);
 
-                // Update indexing progress (30% + up to 60% = 90% total before extraction)
+                // Update indexing progress: 1-30% of overall progress
                 indexedCount++;
                 this.progress.indexedFolders = indexedCount;
-                // Indexing phase = 30-90% of overall progress
-                this.progress.overallProgress = 30 + Math.round((indexedCount / totalFolders) * 60);
+                this.progress.overallProgress = 1 + Math.round((indexedCount / totalFolders) * 29);
 
                 // Yield control every 50 models to keep API responsive
                 if (indexedCount % 50 === 0) {
@@ -622,19 +729,30 @@ class Scanner {
         }
 
         // Extract images from archives for models without images
+        // Extraction is the longest phase: 30-95% of overall progress
         if (modelsNeedingImages.length > 0) {
             this.progress.currentStep = 'extracting';
-            this.progress.stepDescription = `Extracting images from archives (${modelsNeedingImages.length} models)...`;
+            this.progress.modelsToExtract = modelsNeedingImages.length;
+            this.progress.modelsExtracted = 0;
+            this.progress.stepDescription = `Extracting images (0 of ${modelsNeedingImages.length})...`;
+            this.progress.overallProgress = 30;
             console.log(`Extracting images from archives for ${modelsNeedingImages.length} models...`);
-            let extractCount = 0;
+
             for (const { modelId, folderPath } of modelsNeedingImages) {
                 await this.extractImageFromArchives(modelId, folderPath);
-                extractCount++;
-                // Yield control every 20 extractions
-                if (extractCount % 20 === 0) {
+                this.progress.modelsExtracted++;
+                // Update progress: 30-95% based on extraction progress
+                this.progress.overallProgress = 30 + Math.round((this.progress.modelsExtracted / this.progress.modelsToExtract) * 65);
+                this.progress.stepDescription = `Extracting images (${this.progress.modelsExtracted} of ${this.progress.modelsToExtract})...`;
+
+                // Yield control every 10 extractions to keep API responsive
+                if (this.progress.modelsExtracted % 10 === 0) {
                     await yieldToEventLoop();
                 }
             }
+        } else {
+            // No extraction needed, jump to 95%
+            this.progress.overallProgress = 95;
         }
     }
 

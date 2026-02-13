@@ -97,7 +97,7 @@ frontend/
   src/
     components/           # Reusable Vue components
     views/
-      BrowseView.vue      # Main model browsing interface with "Open in Finder" buttons
+      BrowseView.vue      # Main model browsing interface with "Show in Finder" buttons
       FavoritesView.vue   # Favorites list
       PrintedView.vue     # Print history
       QueueView.vue       # Print queue
@@ -281,7 +281,7 @@ For models without standalone images, the scanner automatically extracts images 
 - **Loose files management**: Files in root OR directly in category folders are tracked separately
   - Example: `Toys/model.stl` is loose (needs a folder), `Toys/MyModel/model.stl` is indexed
 - **Loose files review page**: Dedicated page to review and organize unorganized files
-- **Open in Finder**: Button on each model card to quickly open the containing folder
+- **Show in Finder**: Button on each model card to quickly open the containing folder
 - **Multi-tag support**: Models can have multiple tags/categories (database schema ready, UI pending)
 
 ### Date Tracking & Sorting
@@ -300,7 +300,7 @@ For models without standalone images, the scanner automatically extracts images 
 Three scan modes available in Settings:
 - **Sync (Recommended)**: Non-destructive sync that updates existing records, adds new models, and soft-deletes models whose folders no longer exist. Preserves favorites, print history, and queue.
 - **Add Only**: Only adds new models that don't exist in the database. Never modifies or deletes existing records.
-- **Full Rebuild**: Clears all model data and rescans from scratch. Favorites, history, and queue are preserved but become orphaned if model is deleted.
+- **Full Rebuild**: Clears all model data and rescans from scratch. Favorites, history, and queue are saved before clearing and restored by matching filepaths after rebuild.
 
 ### Soft Deletes
 - Models use soft deletion (deleted_at timestamp) instead of hard deletion
@@ -375,6 +375,10 @@ The app integrates with macOS Finder tags to sync print status:
 - **Step tracking**: Shows current scan phase (discovering, indexing, extracting, tagging)
 - **Step descriptions**: Human-readable status messages during scan
 - **Scan prevention**: UI prevents starting new scans while one is in progress
+
+### Print Workflow
+- **Printed removes from queue**: Marking a model as printed automatically removes it from the print queue
+- **Escape key closes modal**: Press Escape to close the model details modal
 
 ## Future Enhancements
 - 3D model preview (STL viewer)

@@ -77,6 +77,9 @@ router.post('/', async (req, res) => {
             filament_used_grams || null
         );
 
+        // Remove from queue if present
+        db.prepare('DELETE FROM print_queue WHERE model_id = ?').run(model_id);
+
         // Update Finder tags
         await updateModelFinderTags(model_id);
 
@@ -168,10 +171,12 @@ router.post('/bulk', async (req, res) => {
 
         if (action === 'add') {
             const insert = db.prepare('INSERT OR IGNORE INTO printed_models (model_id, rating) VALUES (?, ?)');
+            const removeFromQueue = db.prepare('DELETE FROM print_queue WHERE model_id = ?');
             for (const modelId of model_ids) {
                 const result = insert.run(modelId, rating || 'good');
                 if (result.changes > 0) {
                     affected++;
+                    removeFromQueue.run(modelId);
                     await updateModelFinderTags(modelId);
                 }
             }
@@ -217,8 +222,15 @@ router.post('/toggle', async (req, res) => {
             // Add to printed
             const insert = db.prepare('INSERT INTO printed_models (model_id, rating) VALUES (?, ?)');
             insert.run(model_id, rating || 'good');
+
+            // Remove from queue if present
+            const wasQueued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model_id);
+            if (wasQueued) {
+                db.prepare('DELETE FROM print_queue WHERE model_id = ?').run(model_id);
+            }
+
             await updateModelFinderTags(model_id);
-            res.json({ printed: true, rating: rating || 'good' });
+            res.json({ printed: true, rating: rating || 'good', removedFromQueue: !!wasQueued });
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
