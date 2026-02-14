@@ -194,6 +194,28 @@
                 </div>
               </div>
 
+              <!-- Makes (photos of printed models) -->
+              <div class="makes-section" v-if="isPrinted">
+                <h3>Makes</h3>
+                <div class="makes-gallery" v-if="makeImages.length > 0">
+                  <div v-for="img in makeImages" :key="img.id" class="make-image-wrapper">
+                    <img :src="getMakeImageUrl(img.filepath)" :alt="img.filename" />
+                    <button class="delete-make-btn" @click="deleteMakeImage(img.id)" title="Remove photo">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <p v-else class="no-makes">No make photos yet.</p>
+                <label class="upload-make-btn">
+                  <input type="file" accept="image/*" @change="uploadMakeImage" hidden />
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                  Add Photo
+                </label>
+              </div>
+
               <!-- Path -->
               <div class="path-section">
                 <span class="path-label">Location</span>
@@ -271,7 +293,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, type Model, type ModelAsset } from '../services/api';
+import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, type Model, type ModelAsset, type MakeImage } from '../services/api';
 import { useAppStore } from '../store';
 
 interface ModelFile {
@@ -325,6 +347,7 @@ const primaryImage = ref<string | null>(null);
 const editingName = ref(false);
 const editingNameValue = ref('');
 const nameInputRef = ref<HTMLInputElement | null>(null);
+const makeImages = ref<MakeImage[]>([]);
 
 const imageAssets = computed(() =>
   modelDetails.value?.assets.filter(a => a.asset_type === 'image') || []
@@ -386,6 +409,11 @@ async function loadModelDetails() {
     // Set primary image
     const primary = imageAssets.value.find(a => a.is_primary);
     primaryImage.value = primary?.filepath || imageAssets.value[0]?.filepath || null;
+
+    // Load make images if printed
+    if (modelDetails.value?.printHistory?.length) {
+      await loadMakeImages();
+    }
   } catch (error) {
     console.error('Failed to load model details:', error);
   } finally {
@@ -564,6 +592,50 @@ async function saveName() {
     editingName.value = false;
   } catch (error) {
     console.error('Failed to update model name:', error);
+  }
+}
+
+async function loadMakeImages() {
+  if (!modelDetails.value?.printHistory?.length) return;
+  try {
+    const printedId = modelDetails.value.printHistory[0].id;
+    if (printedId === 0) return; // Newly created record without real ID
+    const res = await printedApi.getImages(printedId);
+    makeImages.value = res.data.images;
+  } catch (error) {
+    console.error('Failed to load make images:', error);
+  }
+}
+
+function getMakeImageUrl(filepath: string): string {
+  const filename = filepath.split('/').pop() || filepath;
+  return printedApi.getMakeImageUrl(filename);
+}
+
+async function uploadMakeImage(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file || !modelDetails.value?.printHistory?.length) return;
+
+  const printedId = modelDetails.value.printHistory[0].id;
+  try {
+    await printedApi.uploadImage(printedId, file);
+    await loadMakeImages();
+  } catch (error) {
+    console.error('Failed to upload make image:', error);
+  }
+  // Reset input so same file can be re-selected
+  input.value = '';
+}
+
+async function deleteMakeImage(imageId: number) {
+  if (!modelDetails.value?.printHistory?.length) return;
+  const printedId = modelDetails.value.printHistory[0].id;
+  try {
+    await printedApi.deleteImage(printedId, imageId);
+    makeImages.value = makeImages.value.filter(img => img.id !== imageId);
+  } catch (error) {
+    console.error('Failed to delete make image:', error);
   }
 }
 
@@ -1211,6 +1283,106 @@ async function extractZipFile(zipFile: ZipFile) {
 
 .extract-btn svg.spinning {
   animation: spin 1s linear infinite;
+}
+
+/* Makes Section */
+.makes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.makes-section h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.makes-gallery {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.make-image-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+.make-image-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.delete-make-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all var(--transition-base);
+}
+
+.delete-make-btn svg {
+  width: 12px;
+  height: 12px;
+  color: white;
+}
+
+.make-image-wrapper:hover .delete-make-btn {
+  opacity: 1;
+}
+
+.delete-make-btn:hover {
+  background: var(--danger);
+}
+
+.no-makes {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.upload-make-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  width: fit-content;
+}
+
+.upload-make-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.upload-make-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Path Section */

@@ -117,6 +117,18 @@ function initializeDatabase(): void {
         )
     `);
 
+    // Make images - photos of printed models ("makes")
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS make_images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            printed_model_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (printed_model_id) REFERENCES printed_models(id) ON DELETE CASCADE
+        )
+    `);
+
     // Print queue
     db.exec(`
         CREATE TABLE IF NOT EXISTS print_queue (

@@ -1,6 +1,41 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import db from '../config/database.js';
 import { setFinderTags, getFinderTags, TAG_COLORS } from '../utils/finderTags.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Configure multer for make image uploads
+const makesDir = path.join(__dirname, '../../data/makes');
+if (!fs.existsSync(makesDir)) {
+    fs.mkdirSync(makesDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, makesDir),
+    filename: (_req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname);
+        cb(null, `make-${uniqueSuffix}${ext}`);
+    }
+});
+
+const upload = multer({
+    storage,
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
+    fileFilter: (_req, file, cb) => {
+        const allowed = /\.(jpg|jpeg|png|gif|webp|heic)$/i;
+        if (allowed.test(path.extname(file.originalname))) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image files are allowed'));
+        }
+    }
+});
 
 const router = express.Router();
 
@@ -242,6 +277,94 @@ router.post('/toggle', async (req, res) => {
             await updateModelFinderTags(model_id);
             res.json({ printed: true, rating: rating || 'good', removedFromQueue: !!wasQueued });
         }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Get make images for a printed record
+router.get('/:id/images', (req, res) => {
+    try {
+        const { id } = req.params;
+        const images = db.prepare('SELECT * FROM make_images WHERE printed_model_id = ? ORDER BY created_at DESC').all(id);
+        res.json({ images });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Upload make image for a printed record
+router.post('/:id/images', upload.single('image'), (req, res) => {
+    try {
+        const { id } = req.params;
+        const file = req.file;
+
+        if (!file) {
+            return res.status(400).json({ error: 'No image file provided' });
+        }
+
+        // Verify printed record exists
+        const printed = db.prepare('SELECT id FROM printed_models WHERE id = ?').get(id);
+        if (!printed) {
+            // Clean up uploaded file
+            fs.unlinkSync(file.path);
+            return res.status(404).json({ error: 'Printed record not found' });
+        }
+
+        const insert = db.prepare('INSERT INTO make_images (printed_model_id, filename, filepath) VALUES (?, ?, ?)');
+        const result = insert.run(id, file.originalname, file.path);
+
+        res.json({
+            id: result.lastInsertRowid,
+            printed_model_id: parseInt(id),
+            filename: file.originalname,
+            filepath: file.path
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Delete make image
+router.delete('/:printedId/images/:imageId', (req, res) => {
+    try {
+        const { imageId } = req.params;
+
+        // Get filepath before deleting
+        const image = db.prepare('SELECT filepath FROM make_images WHERE id = ?').get(imageId) as { filepath: string } | undefined;
+
+        if (image && fs.existsSync(image.filepath)) {
+            fs.unlinkSync(image.filepath);
+        }
+
+        db.prepare('DELETE FROM make_images WHERE id = ?').run(imageId);
+        res.json({ success: true });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Serve make image file
+router.get('/make-image/:filename', (req, res) => {
+    try {
+        const { filename } = req.params;
+        const filepath = path.join(makesDir, filename);
+
+        // Security: ensure we're serving from the makes directory
+        const resolved = path.resolve(filepath);
+        if (!resolved.startsWith(path.resolve(makesDir))) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        if (!fs.existsSync(resolved)) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        res.sendFile(resolved);
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

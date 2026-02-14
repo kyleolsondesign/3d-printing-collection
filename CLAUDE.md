@@ -423,6 +423,14 @@ The app integrates with macOS Finder tags to sync print status:
 - **Fallback strategy**: PDF extraction runs after archive extraction fails for models without images
 - **Requires**: `brew install poppler` for the `pdfimages` command
 
+### Make Photos
+- **Upload make photos**: Upload photos of printed models ("makes") via file upload in the model details modal
+- **Makes section**: Visible when a model is marked as printed, shows gallery of uploaded photos
+- **File storage**: Uploaded images stored in `backend/data/makes/` directory
+- **Database**: `make_images` table links photos to `printed_models` records
+- **Upload handling**: Uses multer middleware with 20MB limit, image-only file filter
+- **Serving**: Make images served via `/api/printed/make-image/:filename`
+
 ## Future Enhancements
 - 3D model preview (STL viewer)
 - Thumbnail generation for models (resize large images)

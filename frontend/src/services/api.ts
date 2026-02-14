@@ -103,6 +103,14 @@ export const favoritesApi = {
 };
 
 // Printed Models API
+export interface MakeImage {
+    id: number;
+    printed_model_id: number;
+    filename: string;
+    filepath: string;
+    created_at: string;
+}
+
 export const printedApi = {
     getAll: () => api.get('/printed'),
     toggle: (modelId: number, rating: 'good' | 'bad' = 'good') => api.post('/printed/toggle', { model_id: modelId, rating }),
@@ -112,7 +120,19 @@ export const printedApi = {
         api.post('/printed', data),
     update: (id: number, data: { rating?: 'good' | 'bad'; notes?: string; print_time_hours?: number; filament_used_grams?: number }) =>
         api.put(`/printed/${id}`, data),
-    delete: (id: number) => api.delete(`/printed/${id}`)
+    delete: (id: number) => api.delete(`/printed/${id}`),
+    getImages: (printedId: number) => api.get(`/printed/${printedId}/images`),
+    uploadImage: (printedId: number, file: File) => {
+        const formData = new FormData();
+        formData.append('image', file);
+        return api.post(`/printed/${printedId}/images`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+    },
+    deleteImage: (printedId: number, imageId: number) =>
+        api.delete(`/printed/${printedId}/images/${imageId}`),
+    getMakeImageUrl: (filename: string) =>
+        `/api/printed/make-image/${encodeURIComponent(filename)}`
 };
 
 // Queue API
