@@ -57,6 +57,13 @@ function initializeDatabase(): void {
         // Column already exists, ignore
     }
 
+    // Add is_hidden for hiding thumbnails without deleting files
+    try {
+        db.exec(`ALTER TABLE model_assets ADD COLUMN is_hidden INTEGER DEFAULT 0`);
+    } catch (e) {
+        // Column already exists, ignore
+    }
+
     // Model files table - stores all actual model files in a folder
     db.exec(`
         CREATE TABLE IF NOT EXISTS model_files (

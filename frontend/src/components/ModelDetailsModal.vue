@@ -55,13 +55,54 @@
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                     </svg>
                   </button>
+                  <button
+                    v-if="!asset.is_primary"
+                    class="hide-asset-btn"
+                    @click="hideAsset(asset)"
+                    title="Hide this thumbnail"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
             </div>
 
             <!-- Details Section -->
             <div class="details-section">
-              <h2>{{ modelDetails.filename }}</h2>
+              <div class="model-name-section">
+                <h2 v-if="!editingName">{{ modelDetails.filename }}</h2>
+                <input
+                  v-else
+                  v-model="editingNameValue"
+                  @keydown.enter="saveName"
+                  @keydown.escape="cancelEditName"
+                  type="text"
+                  class="name-input"
+                  ref="nameInputRef"
+                />
+                <button
+                  v-if="!editingName"
+                  @click="startEditName"
+                  class="edit-name-btn"
+                  title="Edit model name"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <div v-else class="edit-name-actions">
+                  <button @click="saveName" class="save-name-btn" title="Save">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+                  </button>
+                  <button @click="cancelEditName" class="cancel-name-btn" title="Cancel">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+              </div>
 
               <div class="meta-tags">
                 <span class="category-tag">{{ modelDetails.category }}</span>
@@ -229,7 +270,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, type Model, type ModelAsset } from '../services/api';
 import { useAppStore } from '../store';
 
@@ -281,6 +322,9 @@ const extracting = ref<string | null>(null); // filepath of ZIP being extracted
 const modelDetails = ref<ModelDetails | null>(null);
 const modelFiles = ref<ModelFile[]>([]);
 const primaryImage = ref<string | null>(null);
+const editingName = ref(false);
+const editingNameValue = ref('');
+const nameInputRef = ref<HTMLInputElement | null>(null);
 
 const imageAssets = computed(() =>
   modelDetails.value?.assets.filter(a => a.asset_type === 'image') || []
@@ -474,6 +518,52 @@ async function setPrimaryImage(asset: ModelAsset) {
     emit('updated', modelDetails.value);
   } catch (error) {
     console.error('Failed to set primary image:', error);
+  }
+}
+
+async function hideAsset(asset: ModelAsset) {
+  if (!modelDetails.value) return;
+  try {
+    await modelsApi.hideAsset(modelDetails.value.id, asset.id, true);
+    await loadModelDetails();
+    emit('updated', modelDetails.value!);
+  } catch (error) {
+    console.error('Failed to hide asset:', error);
+  }
+}
+
+function startEditName() {
+  if (!modelDetails.value) return;
+  editingName.value = true;
+  editingNameValue.value = modelDetails.value.filename;
+  nextTick(() => {
+    nameInputRef.value?.focus();
+    nameInputRef.value?.select();
+  });
+}
+
+function cancelEditName() {
+  editingName.value = false;
+  editingNameValue.value = '';
+}
+
+async function saveName() {
+  if (!modelDetails.value || !editingNameValue.value.trim()) {
+    cancelEditName();
+    return;
+  }
+  const newName = editingNameValue.value.trim();
+  if (newName === modelDetails.value.filename) {
+    editingName.value = false;
+    return;
+  }
+  try {
+    await modelsApi.updateMetadata(modelDetails.value.id, newName);
+    modelDetails.value.filename = newName;
+    emit('updated', modelDetails.value);
+    editingName.value = false;
+  } catch (error) {
+    console.error('Failed to update model name:', error);
   }
 }
 
@@ -726,6 +816,43 @@ async function extractZipFile(zipFile: ZipFile) {
   color: var(--bg-deepest);
 }
 
+.hide-asset-btn {
+  position: absolute;
+  bottom: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all var(--transition-base);
+  z-index: 5;
+}
+
+.hide-asset-btn svg {
+  width: 12px;
+  height: 12px;
+  color: var(--text-tertiary);
+}
+
+.thumbnail-wrapper:hover .hide-asset-btn {
+  opacity: 1;
+}
+
+.hide-asset-btn:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.hide-asset-btn:hover svg {
+  color: var(--bg-deepest);
+}
+
 /* Details Section */
 .details-section {
   display: flex;
@@ -733,12 +860,111 @@ async function extractZipFile(zipFile: ZipFile) {
   gap: 1.25rem;
 }
 
-.details-section h2 {
+.model-name-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.model-name-section h2 {
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.3;
+  flex: 1;
   padding-right: 2rem;
+}
+
+.name-input {
+  flex: 1;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-deep);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  padding: 0.25rem 0.5rem;
+  line-height: 1.3;
+  outline: none;
+}
+
+.edit-name-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-top: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: all var(--transition-base);
+  opacity: 0;
+}
+
+.model-name-section:hover .edit-name-btn {
+  opacity: 1;
+}
+
+.edit-name-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-default);
+  background: var(--bg-hover);
+}
+
+.edit-name-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.edit-name-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+
+.save-name-btn,
+.cancel-name-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.save-name-btn {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg-deepest);
+}
+
+.save-name-btn:hover {
+  opacity: 0.85;
+}
+
+.save-name-btn svg,
+.cancel-name-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.cancel-name-btn {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.cancel-name-btn:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--bg-deepest);
 }
 
 .meta-tags {

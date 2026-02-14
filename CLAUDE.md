@@ -405,6 +405,24 @@ The app integrates with macOS Finder tags to sync print status:
 - **Server-side filtering**: Filters use `NOT EXISTS` subqueries for accurate pagination
 - **URL persistence**: Filter state is synced to URL query params (`hidePrinted`, `hideQueued`)
 
+### Thumbnail Management
+- **Hide thumbnails**: Hide unwanted images from a model without deleting files (`is_hidden` flag on model_assets)
+- **Hide button**: Hover over non-primary thumbnail in details modal to reveal hide button (eye-slash icon)
+- **Filtered queries**: All primaryImage queries across all endpoints filter out hidden assets
+
+### Inline Model Name Editing
+- **Edit name in modal**: Click the pencil icon next to model name to edit inline
+- **Keyboard support**: Enter to save, Escape to cancel
+- **Backend endpoint**: `PATCH /api/models/:id` updates the model filename in the database
+
+### PDF Image Extraction
+- **Embedded image extraction**: Uses `pdfimages` (from poppler) to extract embedded images from PDFs
+- **First page only**: Only extracts images from the first page of each PDF
+- **Format handling**: Extracts JPEG natively, converts TIFF/PPM to JPEG via `sips`
+- **Largest image wins**: When multiple images are extracted, picks the largest one
+- **Fallback strategy**: PDF extraction runs after archive extraction fails for models without images
+- **Requires**: `brew install poppler` for the `pdfimages` command
+
 ## Future Enhancements
 - 3D model preview (STL viewer)
 - Thumbnail generation for models (resize large images)

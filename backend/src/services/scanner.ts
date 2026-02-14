@@ -1,6 +1,7 @@
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
+import { execFile } from 'child_process';
 import yauzl from 'yauzl';
 import db from '../config/database.js';
 import { isModelFile, isImageFile, isDocumentFile, isArchiveFile } from '../utils/fileTypes.js';
@@ -949,10 +950,140 @@ class Scanner {
                     return; // Stop after first successful extraction
                 }
             }
+
+            // Fallback: try to extract first page from PDFs as thumbnail
+            const extracted = await this.extractImageFromPdf(folderPath);
+            if (extracted) {
+                const insert = db.prepare(`
+                    INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
+                    VALUES (?, ?, 'image', 1)
+                `);
+                insert.run(modelId, extracted);
+                this.progress.assetsFound++;
+            }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error extracting images from archives in ${folderPath}:`, message);
         }
+    }
+
+    private async extractImageFromPdf(folderPath: string): Promise<string | null> {
+        try {
+            // Find PDFs in the folder (recursively)
+            const pdfs = this.collectPdfsRecursive(folderPath);
+            if (pdfs.length === 0) return null;
+
+            // Sort by date (earliest first)
+            pdfs.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+            // Use pdfimages (from poppler) to extract embedded images from PDFs
+            for (const pdf of pdfs) {
+                const pdfBaseName = path.basename(pdf.path, path.extname(pdf.path));
+                const tempPrefix = path.join(folderPath, `_pdfextract_${pdfBaseName}`);
+
+                try {
+                    // Extract images from first page only, using native formats
+                    // -f 1 -l 1: first page only
+                    // -j: write JPEG images as JPEG files (keep native format)
+                    // -png: write non-JPEG images as PNG
+                    await new Promise<void>((resolve, reject) => {
+                        execFile('pdfimages', ['-f', '1', '-l', '1', '-j', '-png', pdf.path, tempPrefix], { timeout: 15000 }, (error) => {
+                            if (error) reject(error);
+                            else resolve();
+                        });
+                    });
+
+                    // Find extracted files (pdfimages creates files like prefix-000.jpg, prefix-001.png, etc.)
+                    const extractedFiles: Array<{ path: string; size: number }> = [];
+                    const entries = fs.readdirSync(folderPath);
+                    const prefix = `_pdfextract_${pdfBaseName}`;
+                    for (const entry of entries) {
+                        if (entry.startsWith(prefix) && /\.(jpg|jpeg|png|ppm|tiff|tif)$/i.test(entry)) {
+                            const fullPath = path.join(folderPath, entry);
+                            const stat = fs.statSync(fullPath);
+                            extractedFiles.push({ path: fullPath, size: stat.size });
+                        }
+                    }
+
+                    if (extractedFiles.length === 0) continue;
+
+                    // Pick the largest image (most likely the main content image)
+                    extractedFiles.sort((a, b) => b.size - a.size);
+                    const bestImage = extractedFiles[0];
+
+                    // Convert to JPEG if needed (PPM/TIFF) using sips
+                    let finalPath = bestImage.path;
+                    const ext = path.extname(bestImage.path).toLowerCase();
+                    if (ext === '.ppm' || ext === '.tiff' || ext === '.tif') {
+                        const jpgPath = bestImage.path.replace(/\.[^.]+$/, '.jpg');
+                        try {
+                            await new Promise<void>((resolve, reject) => {
+                                execFile('sips', ['-s', 'format', 'jpeg', bestImage.path, '--out', jpgPath], { timeout: 15000 }, (error) => {
+                                    if (error) reject(error);
+                                    else resolve();
+                                });
+                            });
+                            fs.unlinkSync(bestImage.path);
+                            finalPath = jpgPath;
+                        } catch {
+                            // Keep original format if conversion fails
+                        }
+                    }
+
+                    // Rename to standard extracted name
+                    const finalExt = path.extname(finalPath);
+                    const outputName = `_extracted_${pdfBaseName}${finalExt}`;
+                    const outputPath = path.join(folderPath, outputName);
+                    if (finalPath !== outputPath) {
+                        fs.renameSync(finalPath, outputPath);
+                    }
+
+                    // Clean up other extracted files
+                    for (const file of extractedFiles) {
+                        if (file.path !== bestImage.path && fs.existsSync(file.path)) {
+                            try { fs.unlinkSync(file.path); } catch { /* ignore */ }
+                        }
+                    }
+
+                    return outputPath;
+                } catch {
+                    // Clean up any temp files on failure
+                    try {
+                        const entries = fs.readdirSync(folderPath);
+                        const prefix = `_pdfextract_${pdfBaseName}`;
+                        for (const entry of entries) {
+                            if (entry.startsWith(prefix)) {
+                                fs.unlinkSync(path.join(folderPath, entry));
+                            }
+                        }
+                    } catch { /* ignore */ }
+                    continue;
+                }
+            }
+        } catch {
+            // Silently fail
+        }
+        return null;
+    }
+
+    private collectPdfsRecursive(currentPath: string): Array<{ path: string; date: Date }> {
+        const pdfs: Array<{ path: string; date: Date }> = [];
+        try {
+            const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.name.startsWith('.')) continue;
+                const fullPath = path.join(currentPath, entry.name);
+                if (entry.isDirectory()) {
+                    pdfs.push(...this.collectPdfsRecursive(fullPath));
+                } else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.pdf') {
+                    try {
+                        const stat = fs.statSync(fullPath);
+                        pdfs.push({ path: fullPath, date: stat.mtime });
+                    } catch { continue; }
+                }
+            }
+        } catch { /* ignore */ }
+        return pdfs;
     }
 
     private collectArchivesRecursive(currentPath: string, archives: Array<{ path: string; type: '3mf' | 'photozip'; date: Date }>): void {

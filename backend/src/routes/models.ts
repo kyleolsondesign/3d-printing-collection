@@ -67,7 +67,7 @@ router.get('/', (req, res) => {
         const modelsWithDetails = models.map(model => {
             const primaryImage = db.prepare(`
                 SELECT filepath FROM model_assets
-                WHERE model_id = ? AND asset_type = 'image'
+                WHERE model_id = ? AND asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
                 ORDER BY is_primary DESC, id ASC
                 LIMIT 1
             `).get(model.id) as { filepath: string } | undefined;
@@ -136,8 +136,8 @@ router.get('/:id', (req, res) => {
             return res.status(404).json({ error: 'Model not found' });
         }
 
-        // Get associated assets
-        const assets = db.prepare('SELECT * FROM model_assets WHERE model_id = ? ORDER BY is_primary DESC').all(id);
+        // Get associated assets (exclude hidden)
+        const assets = db.prepare('SELECT * FROM model_assets WHERE model_id = ? AND (is_hidden = 0 OR is_hidden IS NULL) ORDER BY is_primary DESC').all(id);
 
         // Check if in favorites
         const favorite = db.prepare('SELECT * FROM favorites WHERE model_id = ?').get(id);
@@ -442,6 +442,60 @@ router.post('/bulk-delete', (req, res) => {
         }
 
         res.json({ success: true, affected });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Update model metadata (name)
+router.patch('/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        const { filename } = req.body;
+
+        if (!filename || typeof filename !== 'string' || filename.trim() === '') {
+            return res.status(400).json({ error: 'filename is required and must be non-empty' });
+        }
+
+        const model = db.prepare('SELECT * FROM models WHERE id = ?').get(id);
+        if (!model) {
+            return res.status(404).json({ error: 'Model not found' });
+        }
+
+        const cleanName = filename.trim();
+        db.prepare('UPDATE models SET filename = ? WHERE id = ?').run(cleanName, id);
+
+        const updated = db.prepare('SELECT * FROM models WHERE id = ?').get(id);
+        res.json({ success: true, model: updated });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Hide or unhide an asset (thumbnail)
+router.put('/:id/assets/:assetId/hide', (req, res) => {
+    try {
+        const { id, assetId } = req.params;
+        const { isHidden } = req.body;
+
+        if (typeof isHidden !== 'boolean') {
+            return res.status(400).json({ error: 'isHidden must be a boolean' });
+        }
+
+        const asset = db.prepare('SELECT * FROM model_assets WHERE id = ? AND model_id = ?').get(assetId, id) as any;
+        if (!asset) {
+            return res.status(404).json({ error: 'Asset not found for this model' });
+        }
+
+        if (isHidden && asset.is_primary === 1) {
+            return res.status(400).json({ error: 'Cannot hide the primary image. Set another image as primary first.' });
+        }
+
+        db.prepare('UPDATE model_assets SET is_hidden = ? WHERE id = ?').run(isHidden ? 1 : 0, assetId);
+
+        res.json({ success: true, assetId: Number(assetId), isHidden });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

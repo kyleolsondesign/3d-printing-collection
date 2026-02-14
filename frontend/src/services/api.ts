@@ -84,7 +84,13 @@ export const modelsApi = {
         api.put(`/models/${modelId}/primary-image`, { assetId }),
 
     extractZip: (modelId: number, zipPath: string) =>
-        api.post(`/models/${modelId}/extract-zip`, { zipPath }, { timeout: 120000 })
+        api.post(`/models/${modelId}/extract-zip`, { zipPath }, { timeout: 120000 }),
+
+    updateMetadata: (modelId: number, filename: string) =>
+        api.patch(`/models/${modelId}`, { filename }),
+
+    hideAsset: (modelId: number, assetId: number, isHidden: boolean) =>
+        api.put(`/models/${modelId}/assets/${assetId}/hide`, { isHidden })
 };
 
 // Favorites API

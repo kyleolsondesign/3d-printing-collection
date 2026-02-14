@@ -47,7 +47,7 @@ router.get('/', (req, res) => {
         const printedWithImages = printed.map(item => {
             const primaryImage = db.prepare(`
                 SELECT filepath FROM model_assets
-                WHERE model_id = ? AND asset_type = 'image'
+                WHERE model_id = ? AND asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
                 ORDER BY is_primary DESC, id ASC
                 LIMIT 1
             `).get(item.model_id) as { filepath: string } | undefined;
