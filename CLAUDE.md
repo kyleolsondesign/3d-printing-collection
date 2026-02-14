@@ -274,8 +274,11 @@ For models without standalone images, the scanner automatically extracts images 
 - Only extracts when no other images exist for the model
 
 ### Folder-Based Model Organization
-- **Folders = Models**: Each folder containing model files is treated as one model (at depth >= 2 from root)
-- **Category folders excluded**: Direct children of root (depth 1) are category folders, never model folders — model files there are loose
+- **Folders = Models**: Each folder containing model files is treated as one model, unless it's a "container" folder
+- **Container folders** (never treated as models, model files in them are loose):
+  - Depth 1 folders (direct children of root) are category folders (e.g., `Toys/`, `Tools/`)
+  - Folders starting with `~` are organizational containers at any depth
+  - Direct children of `Paid/` are designer folders (e.g., `Paid/DesignerName/`)
 - **Multiple files per model**: All files in a folder are indexed as alternate versions/formats
   - Example: A folder with 3 STL files → 1 model with 3 file versions
   - No "duplicates" - all files are considered part of the same model

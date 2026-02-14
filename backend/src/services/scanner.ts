@@ -472,12 +472,13 @@ class Scanner {
                 return;
             }
 
-            // Check if this folder is a model folder (contains model files directly)
-            // Don't check the root path itself, and don't treat top-level category folders
-            // (direct children of root) as model folders even if they contain model files.
-            // Category folders like "Toys", "Tools" are at depth 1 — model files there are loose.
-            const depth = path.relative(rootPath, currentPath).split(path.sep).length;
-            if (currentPath !== rootPath && depth >= 2 && this.isModelFolder(currentPath)) {
+            // Determine if this folder can be a model folder.
+            // Some folders are "container" folders that organize models but are not models themselves:
+            // - Root path: never a model
+            // - Depth 1 (category folders like "Toys", "Tools"): never a model
+            // - Folders starting with "~": organizational containers, never models
+            // - Direct children of "Paid" folder: designer/creator folders, never models
+            if (currentPath !== rootPath && !this.isContainerFolder(currentPath, rootPath) && this.isModelFolder(currentPath)) {
                 // Register this folder as a model and collect all files from it + subfolders
                 this.registerModelFolder(currentPath);
                 return; // Don't recurse further - subfolders belong to this model
@@ -522,6 +523,38 @@ class Scanner {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error scanning directory ${currentPath}:`, message);
         }
+    }
+
+    /**
+     * Check if a folder is a "container" folder that organizes models but is not a model itself.
+     * Container folders are recursed into, and any model files directly in them are treated as loose.
+     *
+     * Rules:
+     * - Depth 1 folders (direct children of root) are category folders (e.g., "Toys", "Tools")
+     * - Folders whose name starts with "~" are organizational containers
+     * - Direct children of a "Paid" folder are designer/creator folders
+     */
+    private isContainerFolder(folderPath: string, rootPath: string): boolean {
+        const relativePath = path.relative(rootPath, folderPath);
+        const parts = relativePath.split(path.sep);
+        const folderName = path.basename(folderPath);
+
+        // Depth 1: top-level category folders (e.g., root/Toys)
+        if (parts.length === 1) {
+            return true;
+        }
+
+        // Folders starting with "~" are organizational containers at any depth
+        if (folderName.startsWith('~')) {
+            return true;
+        }
+
+        // Direct children of "Paid" are designer folders (e.g., root/Paid/DesignerName)
+        if (parts.length === 2 && parts[0] === 'Paid') {
+            return true;
+        }
+
+        return false;
     }
 
     /**
