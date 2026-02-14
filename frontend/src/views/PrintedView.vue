@@ -30,6 +30,7 @@
         :key="item.id"
         class="printed-card"
         :style="{ animationDelay: `${index * 50}ms` }"
+        @click="openModal(item)"
       >
         <div class="printed-status" :class="item.rating || 'neutral'">
           <svg v-if="item.rating === 'good'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -42,6 +43,21 @@
             <circle cx="12" cy="12" r="10"/>
             <path d="M8 12h8"/>
           </svg>
+        </div>
+        <div class="card-thumbnail">
+          <img
+            v-if="item.primaryImage"
+            :src="modelsApi.getFileUrl(item.primaryImage)"
+            :alt="item.filename"
+            @error="onImageError"
+            loading="lazy"
+          />
+          <div v-else class="no-image">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+              <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>
+            </svg>
+          </div>
         </div>
         <div class="printed-content">
           <h3>{{ item.filename }}</h3>
@@ -80,15 +96,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Model Details Modal -->
+    <ModelDetailsModal
+      v-if="selectedModelId"
+      :modelId="selectedModelId"
+      @close="selectedModelId = null"
+      @updated="handleModelUpdated"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { printedApi } from '../services/api';
+import { printedApi, modelsApi } from '../services/api';
+import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 
 const printed = ref<any[]>([]);
 const loading = ref(true);
+const selectedModelId = ref<number | null>(null);
 
 onMounted(async () => {
   await loadPrinted();
@@ -112,6 +138,19 @@ async function setRating(item: any, rating: 'good' | 'bad') {
   } catch (error) {
     console.error('Failed to update rating:', error);
   }
+}
+
+function openModal(item: any) {
+  selectedModelId.value = item.model_id;
+}
+
+function handleModelUpdated() {
+  loadPrinted();
+}
+
+function onImageError(e: Event) {
+  const img = e.target as HTMLImageElement;
+  img.style.display = 'none';
 }
 
 function formatDate(dateString: string): string {
@@ -170,14 +209,15 @@ h2 {
 
 .printed-card {
   background: var(--bg-surface);
-  padding: 1.25rem;
+  padding: 1rem 1.25rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   display: flex;
   gap: 1rem;
-  align-items: flex-start;
+  align-items: center;
   transition: all var(--transition-base);
   animation: fadeIn 0.4s ease-out backwards;
+  cursor: pointer;
 }
 
 .printed-card:hover {
@@ -213,6 +253,35 @@ h2 {
 .printed-status.neutral {
   background: var(--bg-hover);
   color: var(--text-muted);
+}
+
+.card-thumbnail {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-hover);
+}
+
+.card-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-thumbnail .no-image {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.card-thumbnail .no-image svg {
+  width: 24px;
+  height: 24px;
 }
 
 .printed-content {

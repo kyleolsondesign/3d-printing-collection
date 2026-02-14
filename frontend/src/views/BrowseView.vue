@@ -29,6 +29,29 @@
           </button>
         </div>
         <div class="view-controls">
+          <div class="filter-toggles">
+            <button
+              @click="toggleHidePrinted"
+              :class="['filter-toggle-btn', { active: hidePrinted }]"
+              title="Hide printed models"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 12l2 2 4-4"/>
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+              <span>Hide Printed</span>
+            </button>
+            <button
+              @click="toggleHideQueued"
+              :class="['filter-toggle-btn', { active: hideQueued }]"
+              title="Hide queued models"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+              </svg>
+              <span>Hide Queued</span>
+            </button>
+          </div>
           <button
             @click="toggleSelectionMode"
             :class="['select-btn', { active: selectionMode }]"
@@ -394,6 +417,8 @@ const router = useRouter();
 const viewMode = ref<'grid' | 'table'>('grid');
 const sortField = ref('date_added');
 const sortOrder = ref<'asc' | 'desc'>('desc');
+const hidePrinted = ref(true);
+const hideQueued = ref(false);
 const loadMoreSentinel = ref<HTMLElement | null>(null);
 const totalModels = ref(0);
 const isSearchActive = ref(false);
@@ -436,6 +461,12 @@ function initFromQueryParams() {
       selectedModelId.value = modelId;
     }
   }
+
+  const { hidePrinted: hp, hideQueued: hq } = route.query;
+  if (hp === 'false') hidePrinted.value = false;
+  if (hp === 'true') hidePrinted.value = true;
+  if (hq === 'true') hideQueued.value = true;
+  if (hq === 'false') hideQueued.value = false;
 }
 
 // Update URL query params when state changes
@@ -459,6 +490,12 @@ function updateQueryParams() {
   if (viewMode.value !== 'grid') {
     query.view = viewMode.value;
   }
+  if (!hidePrinted.value) {
+    query.hidePrinted = 'false';
+  }
+  if (hideQueued.value) {
+    query.hideQueued = 'true';
+  }
   if (selectedModelId.value) {
     query.model = String(selectedModelId.value);
   }
@@ -481,7 +518,7 @@ onUnmounted(() => {
 });
 
 // Watch for changes that require reloading
-watch([sortField, sortOrder], () => {
+watch([sortField, sortOrder, hidePrinted, hideQueued], () => {
   if (!isSearchActive.value) {
     resetAndLoad();
   }
@@ -521,7 +558,9 @@ async function loadInitialModels() {
     category,
     limit: 50,
     sort: sortField.value,
-    order: sortOrder.value
+    order: sortOrder.value,
+    hidePrinted: hidePrinted.value,
+    hideQueued: hideQueued.value
   });
   store.models = response.data.models;
   store.currentPage = 1;
@@ -567,7 +606,9 @@ async function loadMoreModels() {
       category: store.selectedCategory,
       limit: 50,
       sort: sortField.value,
-      order: sortOrder.value
+      order: sortOrder.value,
+      hidePrinted: hidePrinted.value,
+      hideQueued: hideQueued.value
     });
 
     store.models = [...store.models, ...response.data.models];
@@ -596,7 +637,9 @@ async function filterByCategory(category: string) {
       category,
       limit: 50,
       sort: sortField.value,
-      order: sortOrder.value
+      order: sortOrder.value,
+      hidePrinted: hidePrinted.value,
+      hideQueued: hideQueued.value
     });
     store.models = response.data.models;
     store.currentPage = 1;
@@ -641,6 +684,16 @@ function handleSortChange() {
 
 function toggleSortOrder() {
   sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  // Handled by watcher
+}
+
+function toggleHidePrinted() {
+  hidePrinted.value = !hidePrinted.value;
+  // Handled by watcher
+}
+
+function toggleHideQueued() {
+  hideQueued.value = !hideQueued.value;
   // Handled by watcher
 }
 
@@ -979,6 +1032,43 @@ async function bulkAddToFavorites() {
 }
 
 .sort-order-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+/* Filter toggles */
+.filter-toggles {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.filter-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.filter-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.filter-toggle-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-secondary);
+}
+
+.filter-toggle-btn.active {
+  background: var(--accent-primary-dim);
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }

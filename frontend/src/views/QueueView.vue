@@ -68,7 +68,7 @@
         }]"
         :style="{ animationDelay: `${index * 50}ms` }"
         :draggable="!selectionMode"
-        @click="selectionMode ? toggleSelection(item.model_id) : null"
+        @click="selectionMode ? toggleSelection(item.model_id) : openModal(item)"
         @dragstart="handleDragStart(index, $event)"
         @dragend="handleDragEnd"
         @dragover.prevent="handleDragOver(index)"
@@ -90,6 +90,21 @@
             <path d="M8 6h.01M8 12h.01M8 18h.01M12 6h.01M12 12h.01M12 18h.01"/>
           </svg>
         </div>
+        <div class="card-thumbnail">
+          <img
+            v-if="item.primaryImage"
+            :src="modelsApi.getFileUrl(item.primaryImage)"
+            :alt="item.filename"
+            @error="onImageError"
+            loading="lazy"
+          />
+          <div v-else class="no-image">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+              <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>
+            </svg>
+          </div>
+        </div>
         <div class="queue-content">
           <h3>{{ item.filename }}</h3>
           <div class="queue-meta">
@@ -99,12 +114,12 @@
           <p v-if="item.notes" class="notes">{{ item.notes }}</p>
         </div>
         <div class="actions">
-          <button @click="markAsPrinted(item)" class="btn-printed" title="Mark as printed (good)">
+          <button @click.stop="markAsPrinted(item)" class="btn-printed" title="Mark as printed (good)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
             </svg>
           </button>
-          <button @click="removeFromQueue(item.id)" class="btn-remove" title="Remove from queue">
+          <button @click.stop="removeFromQueue(item.id)" class="btn-remove" title="Remove from queue">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -112,15 +127,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Model Details Modal -->
+    <ModelDetailsModal
+      v-if="selectedModelId"
+      :modelId="selectedModelId"
+      @close="selectedModelId = null"
+      @updated="handleModelUpdated"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { queueApi, printedApi } from '../services/api';
+import { queueApi, printedApi, modelsApi } from '../services/api';
+import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 
 const queue = ref<any[]>([]);
 const loading = ref(true);
+const selectedModelId = ref<number | null>(null);
 
 // Selection mode state
 const selectionMode = ref(false);
@@ -166,6 +191,19 @@ async function markAsPrinted(item: any) {
   } catch (error) {
     console.error('Failed to mark as printed:', error);
   }
+}
+
+function openModal(item: any) {
+  selectedModelId.value = item.model_id;
+}
+
+function handleModelUpdated() {
+  loadQueue();
+}
+
+function onImageError(e: Event) {
+  const img = e.target as HTMLImageElement;
+  img.style.display = 'none';
 }
 
 // Selection mode functions
@@ -312,14 +350,15 @@ h2 {
 
 .queue-card {
   background: var(--bg-surface);
-  padding: 1.25rem;
+  padding: 1rem 1.25rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   display: flex;
   gap: 1rem;
-  align-items: flex-start;
+  align-items: center;
   transition: all var(--transition-base);
   animation: fadeIn 0.4s ease-out backwards;
+  cursor: pointer;
 }
 
 .queue-card:hover {
@@ -360,6 +399,35 @@ h2 {
 
 .drag-handle:hover {
   color: var(--text-secondary);
+}
+
+.card-thumbnail {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-hover);
+}
+
+.card-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-thumbnail .no-image {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.card-thumbnail .no-image svg {
+  width: 24px;
+  height: 24px;
 }
 
 .queue-content {
@@ -448,6 +516,7 @@ h2 {
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
   transition: all var(--transition-base);
+  cursor: pointer;
 }
 
 .btn-remove svg {
@@ -707,7 +776,7 @@ h2 {
 }
 
 .queue-card[draggable="true"] {
-  cursor: grab;
+  cursor: pointer;
 }
 
 .queue-card[draggable="true"]:active {

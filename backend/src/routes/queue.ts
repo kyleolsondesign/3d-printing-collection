@@ -42,9 +42,19 @@ router.get('/', (req, res) => {
             FROM print_queue
             JOIN models ON print_queue.model_id = models.id
             ORDER BY print_queue.priority DESC, print_queue.added_at ASC
-        `).all();
+        `).all() as any[];
 
-        res.json({ queue });
+        const queueWithImages = queue.map(item => {
+            const primaryImage = db.prepare(`
+                SELECT filepath FROM model_assets
+                WHERE model_id = ? AND asset_type = 'image'
+                ORDER BY is_primary DESC, id ASC
+                LIMIT 1
+            `).get(item.model_id) as { filepath: string } | undefined;
+            return { ...item, primaryImage: primaryImage?.filepath || null };
+        });
+
+        res.json({ queue: queueWithImages });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

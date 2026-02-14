@@ -59,7 +59,7 @@ export interface Category {
 
 // Models API
 export const modelsApi = {
-    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string }) =>
+    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean }) =>
         api.get('/models', { params }),
 
     getById: (id: number) =>

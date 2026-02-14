@@ -18,6 +18,8 @@ router.get('/', (req, res) => {
         const sort = req.query.sort as string || 'date_added';
         const order = req.query.order as string || 'desc';
         const includeDeleted = req.query.includeDeleted === 'true';
+        const hidePrinted = req.query.hidePrinted === 'true';
+        const hideQueued = req.query.hideQueued === 'true';
         const offset = (page - 1) * limit;
 
         let query = 'SELECT * FROM models';
@@ -32,6 +34,14 @@ router.get('/', (req, res) => {
         if (category && category !== 'all') {
             conditions.push('category = ?');
             params.push(category);
+        }
+
+        if (hidePrinted) {
+            conditions.push('NOT EXISTS (SELECT 1 FROM printed_models WHERE printed_models.model_id = models.id)');
+        }
+
+        if (hideQueued) {
+            conditions.push('NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)');
         }
 
         if (conditions.length > 0) {
@@ -87,6 +97,12 @@ router.get('/', (req, res) => {
         if (category && category !== 'all') {
             countConditions.push('category = ?');
             countParams.push(category);
+        }
+        if (hidePrinted) {
+            countConditions.push('NOT EXISTS (SELECT 1 FROM printed_models WHERE printed_models.model_id = models.id)');
+        }
+        if (hideQueued) {
+            countConditions.push('NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)');
         }
         if (countConditions.length > 0) {
             countQuery += ' WHERE ' + countConditions.join(' AND ');

@@ -63,7 +63,7 @@
         :key="fav.id"
         :class="['favorite-card', { selected: selectedItems.has(fav.model_id) }]"
         :style="{ animationDelay: `${index * 50}ms` }"
-        @click="selectionMode ? toggleSelection(fav.model_id) : null"
+        @click="selectionMode ? toggleSelection(fav.model_id) : openModal(fav)"
       >
         <div v-if="selectionMode" class="selection-checkbox" @click.stop="toggleSelection(fav.model_id)">
           <svg v-if="selectedItems.has(fav.model_id)" viewBox="0 0 24 24" fill="currentColor">
@@ -74,10 +74,20 @@
             <rect x="3" y="3" width="18" height="18" rx="3"/>
           </svg>
         </div>
-        <div v-else class="favorite-icon">
-          <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-          </svg>
+        <div class="card-thumbnail">
+          <img
+            v-if="fav.primaryImage"
+            :src="modelsApi.getFileUrl(fav.primaryImage)"
+            :alt="fav.filename"
+            @error="onImageError"
+            loading="lazy"
+          />
+          <div v-else class="no-image">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+              <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>
+            </svg>
+          </div>
         </div>
         <div class="favorite-content">
           <h3>{{ fav.filename }}</h3>
@@ -88,7 +98,7 @@
           <p v-if="fav.notes" class="notes">{{ fav.notes }}</p>
         </div>
         <div class="actions">
-          <button @click="removeFavorite(fav.id)" class="btn-remove" title="Remove from favorites">
+          <button @click.stop="removeFavorite(fav.id)" class="btn-remove" title="Remove from favorites">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -96,15 +106,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Model Details Modal -->
+    <ModelDetailsModal
+      v-if="selectedModelId"
+      :modelId="selectedModelId"
+      @close="selectedModelId = null"
+      @updated="handleModelUpdated"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { favoritesApi } from '../services/api';
+import { favoritesApi, modelsApi } from '../services/api';
+import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 
 const favorites = ref<any[]>([]);
 const loading = ref(true);
+const selectedModelId = ref<number | null>(null);
 
 // Selection mode state
 const selectionMode = ref(false);
@@ -136,6 +156,19 @@ async function removeFavorite(id: number) {
   } catch (error) {
     console.error('Failed to remove favorite:', error);
   }
+}
+
+function openModal(fav: any) {
+  selectedModelId.value = fav.model_id;
+}
+
+function handleModelUpdated() {
+  loadFavorites();
+}
+
+function onImageError(e: Event) {
+  const img = e.target as HTMLImageElement;
+  img.style.display = 'none';
 }
 
 // Selection mode functions
@@ -229,14 +262,15 @@ h2 {
 
 .favorite-card {
   background: var(--bg-surface);
-  padding: 1.25rem;
+  padding: 1rem 1.25rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   display: flex;
   gap: 1rem;
-  align-items: flex-start;
+  align-items: center;
   transition: all var(--transition-base);
   animation: fadeIn 0.4s ease-out backwards;
+  cursor: pointer;
 }
 
 .favorite-card:hover {
@@ -244,21 +278,33 @@ h2 {
   background: var(--bg-elevated);
 }
 
-.favorite-icon {
-  width: 40px;
-  height: 40px;
+.card-thumbnail {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-hover);
+}
+
+.card-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-thumbnail .no-image {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent-primary-dim);
-  border-radius: var(--radius-md);
-  color: var(--accent-primary);
-  flex-shrink: 0;
+  color: var(--text-muted);
 }
 
-.favorite-icon svg {
-  width: 20px;
-  height: 20px;
+.card-thumbnail .no-image svg {
+  width: 24px;
+  height: 24px;
 }
 
 .favorite-content {
@@ -320,6 +366,7 @@ h2 {
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
   transition: all var(--transition-base);
+  cursor: pointer;
 }
 
 .btn-remove svg {

@@ -42,9 +42,19 @@ router.get('/', (req, res) => {
             FROM printed_models
             JOIN models ON printed_models.model_id = models.id
             ORDER BY printed_models.printed_at DESC, models.date_added DESC
-        `).all();
+        `).all() as any[];
 
-        res.json({ printed });
+        const printedWithImages = printed.map(item => {
+            const primaryImage = db.prepare(`
+                SELECT filepath FROM model_assets
+                WHERE model_id = ? AND asset_type = 'image'
+                ORDER BY is_primary DESC, id ASC
+                LIMIT 1
+            `).get(item.model_id) as { filepath: string } | undefined;
+            return { ...item, primaryImage: primaryImage?.filepath || null };
+        });
+
+        res.json({ printed: printedWithImages });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

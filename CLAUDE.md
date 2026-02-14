@@ -393,6 +393,18 @@ The app integrates with macOS Finder tags to sync print status:
 - **Clickable files in modal**: Click any model file in the details modal to reveal it in Finder
 - **Show in Finder**: Uses `open -R` to reveal and select the item in Finder (works for both files and folders)
 
+### View Consistency
+- **Thumbnails everywhere**: Favorites, Queue, Printed views all show model thumbnail images (56x56px)
+- **Clickable modal**: All secondary views (Favorites, Queue, Printed) open the model details modal when clicked
+- **Data refresh**: Modal changes (favorites, queue, printed status) trigger a reload of the current view's data
+- **Backend image support**: Favorites, Queue, and Printed API endpoints include `primaryImage` from model_assets
+
+### Browse Filters
+- **Hide Printed filter**: Toggle button to exclude printed models from browse results (default: on)
+- **Hide Queued filter**: Toggle button to exclude queued models from browse results (default: off)
+- **Server-side filtering**: Filters use `NOT EXISTS` subqueries for accurate pagination
+- **URL persistence**: Filter state is synced to URL query params (`hidePrinted`, `hideQueued`)
+
 ## Future Enhancements
 - 3D model preview (STL viewer)
 - Thumbnail generation for models (resize large images)

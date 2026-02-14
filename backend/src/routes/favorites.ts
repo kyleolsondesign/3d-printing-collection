@@ -11,9 +11,19 @@ router.get('/', (req, res) => {
             FROM favorites
             JOIN models ON favorites.model_id = models.id
             ORDER BY favorites.added_at DESC
-        `).all();
+        `).all() as any[];
 
-        res.json({ favorites });
+        const favoritesWithImages = favorites.map(fav => {
+            const primaryImage = db.prepare(`
+                SELECT filepath FROM model_assets
+                WHERE model_id = ? AND asset_type = 'image'
+                ORDER BY is_primary DESC, id ASC
+                LIMIT 1
+            `).get(fav.model_id) as { filepath: string } | undefined;
+            return { ...fav, primaryImage: primaryImage?.filepath || null };
+        });
+
+        res.json({ favorites: favoritesWithImages });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });
