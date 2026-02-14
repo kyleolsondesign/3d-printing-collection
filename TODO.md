@@ -33,3 +33,5 @@
 - [x] Rename "Open in Finder" to "Show in Finder"
 - [x] You should be able to click any file under a model in the modal view to show that file in finder
 - [x] The "printed" view should be sorted by when the model was marked as printed, if we can tell when the finder tag was added or when we marked it printed in the UI. It should secondarily be sorted by date added of the model
+
+---

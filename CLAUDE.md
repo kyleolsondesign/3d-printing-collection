@@ -50,6 +50,12 @@ npm run build
 
 # Run production build
 npm start
+
+# Run tests
+npm run test
+
+# Run tests in watch mode
+npm run test:watch
 ```
 
 ### Frontend Commands
@@ -202,9 +208,27 @@ Pinia store (frontend/src/store/index.ts) manages:
 - Toggle actions for favorites/queue
 
 ### Testing
-- Framework: Vitest with Vue Test Utils
+**Important: Always update or add tests when making changes.** When adding new features, fixing bugs, or modifying existing behavior, corresponding tests must be written or updated. Run `npm run test` in both `frontend/` and `backend/` to verify before committing.
+
+**Frontend Tests:**
+- Framework: Vitest with Vue Test Utils + happy-dom
 - Tests located in `frontend/src/__tests__/`
-- Example: Store tests with mocked API calls
+- `store.test.ts`: Pinia store initialization and computed properties
+- `api.test.ts`: API client method calls and URL construction
+- `ModelDetailsModal.test.ts`: Component rendering, user interactions, API integration
+
+**Backend Tests:**
+- Framework: Vitest with supertest for HTTP endpoint testing
+- Tests located in `backend/src/__tests__/`
+- `setup.ts`: Shared test helpers (`initSchema`, `seedTestData`) for in-memory SQLite
+- `models.test.ts`: Browse filters, inline name editing, asset hide/unhide, primaryImage filtering
+- `printed.test.ts`: Print toggle, queue removal, rating updates, make image CRUD
+
+**Test Patterns:**
+- Backend tests use `vi.hoisted` + `vi.mock` to inject an in-memory SQLite database
+- Backend tests mock `finderTags.js` (macOS-specific functionality)
+- Frontend tests mock the API module with `vi.mock('../services/api')`
+- Each `beforeEach` reinitializes schema + seeds fresh test data for isolation
 
 ## TypeScript Configuration
 

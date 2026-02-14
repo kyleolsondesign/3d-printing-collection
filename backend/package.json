@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "better-sqlite3": "^9.2.2",
@@ -26,8 +28,11 @@
     "@types/mime-types": "^2.1.4",
     "@types/multer": "^2.0.0",
     "@types/node": "^20.10.6",
+    "@types/supertest": "^6.0.3",
     "@types/yauzl": "^2.10.3",
+    "supertest": "^7.2.2",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.18"
   }
 }
