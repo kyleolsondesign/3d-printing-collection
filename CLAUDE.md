@@ -21,6 +21,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+**Important**: There is no root-level `build` command. Both backend and frontend use hot-reload in development (`npm run dev`). Build commands only exist within the `backend/` and `frontend/` subdirectories.
+
 ### Development
 ```bash
 # Install all dependencies
@@ -278,6 +280,7 @@ For models without standalone images, the scanner automatically extracts images 
 - **Container folders** (never treated as models, model files in them are loose):
   - Depth 1 folders (direct children of root) are category folders (e.g., `Toys/`, `Tools/`)
   - Folders starting with `~` are organizational containers at any depth
+  - Folders starting with `!` are completely ignored (skipped during scan)
   - Direct children of `Paid/` are designer folders (e.g., `Paid/DesignerName/`)
 - **Multiple files per model**: All files in a folder are indexed as alternate versions/formats
   - Example: A folder with 3 STL files → 1 model with 3 file versions

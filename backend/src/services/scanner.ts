@@ -467,8 +467,8 @@ class Scanner {
         try {
             const dirName = path.basename(currentPath);
 
-            // Skip hidden folders and node_modules
-            if (dirName.startsWith('.') || dirName === 'node_modules') {
+            // Skip hidden folders, node_modules, and folders starting with "!" (ignored)
+            if (dirName.startsWith('.') || dirName.startsWith('!') || dirName === 'node_modules') {
                 return;
             }
 
