@@ -174,7 +174,7 @@ The scanner service (backend/src/services/scanner.ts) recursively scans the mode
 5. Finds associated images (.jpg, .png, .gif, .webp) and PDFs in the folder
 6. First image found becomes the primary image
 
-**No Verbose Logging**: Scanner only logs summary stats at completion
+**No Verbose Logging**: Scanner only logs summary stats at completion. Model paths in logs use relative paths from the model root directory.
 
 **Category Logic**:
 - If path contains "Paid" → category = "Paid"
@@ -367,6 +367,7 @@ The app integrates with macOS Finder tags to sync print status:
 - Parent folder at depth 3 (root/category/model-folder) is the model
 - All files in nested subfolders are attributed to the parent model
 - Assets (images, PDFs) are also searched recursively in subfolders
+- **Paid folder**: `Paid/{designer}/{model}/` — depth-3 folders under Paid are always treated as models, even if model files only exist in nested subfolders
 
 ### Performance with Large Collections
 - Successfully tested with 38k+ models and 33k+ assets
@@ -377,7 +378,9 @@ The app integrates with macOS Finder tags to sync print status:
 
 ### Global Navigation & Search
 - **Global search bar**: Search input moved to navbar, accessible from any view
-- **Context-aware search**: Search results show in the current view's format
+- **Context-aware search**: Search results show in the current view's format with thumbnails and status
+- **Search clears on tab change**: Navigating between tabs clears the search field and results
+- **Dynamic placeholder**: Search placeholder reflects the current view (e.g., "Search favorites...")
 - **URL query params**: State is synced to URL for deep-linking
   - Supported params: `category`, `q` (search), `sort`, `order`, `view`, `model`
   - Example: `/?category=Toys&sort=name&order=asc&view=table`
@@ -406,6 +409,9 @@ The app integrates with macOS Finder tags to sync print status:
 - **Step tracking**: Shows current scan phase (discovering, indexing, extracting, tagging)
 - **Step descriptions**: Human-readable status messages during scan
 - **Scan prevention**: UI prevents starting new scans while one is in progress
+- **Elapsed timer**: Shows running elapsed time during scan
+- **Completion summary**: Shows scan type (Sync/Full rebuild/Add-only) and total duration on completion
+- **Polling interval**: Frontend polls scan status every 10 seconds during active scans
 
 ### Print Workflow
 - **Printed removes from queue**: Marking a model as printed automatically removes it from the print queue

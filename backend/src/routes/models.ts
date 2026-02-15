@@ -217,14 +217,38 @@ router.get('/search/query', (req, res) => {
 
         // Use FTS5 for full-text search, exclude soft-deleted models
         const models = db.prepare(`
-            SELECT models.* FROM models
+            SELECT models.*, mm.designer, mm.source_platform, mm.source_url FROM models
+            LEFT JOIN model_metadata mm ON mm.model_id = models.id
             JOIN models_fts ON models.id = models_fts.rowid
             WHERE models_fts MATCH ? AND models.deleted_at IS NULL
             ORDER BY rank
             LIMIT 100
-        `).all(query);
+        `).all(query) as any[];
 
-        res.json({ models, count: models.length });
+        // Get primary image and status for each search result
+        const modelsWithDetails = models.map(model => {
+            const primaryImage = db.prepare(`
+                SELECT filepath FROM model_assets
+                WHERE model_id = ? AND asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
+                ORDER BY is_primary DESC, id ASC
+                LIMIT 1
+            `).get(model.id) as { filepath: string } | undefined;
+
+            const favorite = db.prepare('SELECT id FROM favorites WHERE model_id = ?').get(model.id);
+            const queued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model.id);
+            const printed = db.prepare('SELECT rating FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC LIMIT 1').get(model.id) as { rating: 'good' | 'bad' | null } | undefined;
+
+            return {
+                ...model,
+                primaryImage: primaryImage?.filepath || null,
+                isFavorite: !!favorite,
+                isQueued: !!queued,
+                isPrinted: !!printed,
+                printRating: printed?.rating || null
+            };
+        });
+
+        res.json({ models: modelsWithDetails, count: modelsWithDetails.length });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

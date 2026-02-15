@@ -167,6 +167,39 @@ describe('Models Routes', () => {
         });
     });
 
+    describe('GET /api/models/search/query', () => {
+        it('returns matching models with primaryImage', async () => {
+            const res = await request(app).get('/api/models/search/query?q=Model');
+            expect(res.status).toBe(200);
+            expect(res.body.models.length).toBeGreaterThan(0);
+            const modelA = res.body.models.find((m: any) => m.id === 1);
+            expect(modelA).toBeDefined();
+            expect(modelA.primaryImage).toBe('/test/models/a/image1.jpg');
+        });
+
+        it('returns isFavorite, isQueued, isPrinted status', async () => {
+            const res = await request(app).get('/api/models/search/query?q=Model');
+            const modelA = res.body.models.find((m: any) => m.id === 1);
+            expect(modelA.isPrinted).toBe(true);
+            expect(modelA.printRating).toBe('good');
+            const modelB = res.body.models.find((m: any) => m.id === 2);
+            expect(modelB.isQueued).toBe(true);
+            const modelC = res.body.models.find((m: any) => m.id === 3);
+            expect(modelC.isFavorite).toBe(true);
+        });
+
+        it('excludes soft-deleted models', async () => {
+            testDb.prepare('UPDATE models SET deleted_at = CURRENT_TIMESTAMP WHERE id = 1').run();
+            const res = await request(app).get('/api/models/search/query?q=Model');
+            expect(res.body.models.find((m: any) => m.id === 1)).toBeUndefined();
+        });
+
+        it('returns 400 without query param', async () => {
+            const res = await request(app).get('/api/models/search/query');
+            expect(res.status).toBe(400);
+        });
+    });
+
     describe('GET /api/models/:id', () => {
         it('returns model details with filtered hidden assets', async () => {
             testDb.prepare('UPDATE model_assets SET is_hidden = 1 WHERE id = 2').run();

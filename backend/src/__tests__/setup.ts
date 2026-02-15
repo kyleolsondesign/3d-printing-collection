@@ -7,6 +7,12 @@ import Database from 'better-sqlite3';
 export function initSchema(db: InstanceType<typeof Database>): void {
     db.pragma('foreign_keys = OFF');
 
+    // Drop triggers and FTS table first
+    db.exec(`DROP TRIGGER IF EXISTS models_fts_insert`);
+    db.exec(`DROP TRIGGER IF EXISTS models_fts_delete`);
+    db.exec(`DROP TRIGGER IF EXISTS models_fts_update`);
+    db.exec(`DROP TABLE IF EXISTS models_fts`);
+
     // Drop tables in dependency order
     const tables = ['make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'print_queue', 'tags', 'config', 'models'];
     for (const table of tables) {
@@ -157,6 +163,32 @@ export function initSchema(db: InstanceType<typeof Database>): void {
         CREATE INDEX idx_favorites_model ON favorites(model_id);
         CREATE INDEX idx_printed_model ON printed_models(model_id);
         CREATE INDEX idx_queue_priority ON print_queue(priority DESC, added_at);
+    `);
+
+    // Full-text search table and triggers
+    db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS models_fts USING fts5(
+            filename, filepath, category,
+            content=models, content_rowid=id
+        )
+    `);
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS models_fts_insert AFTER INSERT ON models BEGIN
+            INSERT INTO models_fts(rowid, filename, filepath, category)
+            VALUES (new.id, new.filename, new.filepath, new.category);
+        END
+    `);
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS models_fts_delete AFTER DELETE ON models BEGIN
+            DELETE FROM models_fts WHERE rowid = old.id;
+        END
+    `);
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS models_fts_update AFTER UPDATE ON models BEGIN
+            UPDATE models_fts
+            SET filename = new.filename, filepath = new.filepath, category = new.category
+            WHERE rowid = new.id;
+        END
     `);
 }
 

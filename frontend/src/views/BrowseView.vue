@@ -445,6 +445,8 @@ function initFromQueryParams() {
   }
   if (q && typeof q === 'string') {
     store.setGlobalSearch(q);
+  } else if (store.globalSearchQuery) {
+    store.clearGlobalSearch();
   }
   if (sort && typeof sort === 'string' && ['date_added', 'date_created', 'name', 'category'].includes(sort)) {
     sortField.value = sort;

@@ -34,6 +34,8 @@ interface ScanProgress {
     modelsExtracted: number;
     overallProgress: number;
     scanStartedAt: string | null;
+    scanCompletedAt: string | null;
+    scanMode: ScanMode | null;
 }
 
 interface FolderData {
@@ -61,7 +63,9 @@ class Scanner {
         modelsToExtract: 0,
         modelsExtracted: 0,
         overallProgress: 0,
-        scanStartedAt: null
+        scanStartedAt: null,
+        scanCompletedAt: null,
+        scanMode: null
     };
     private foldersWithModels: Map<string, FolderData> = new Map();
 
@@ -95,7 +99,9 @@ class Scanner {
             modelsToExtract: 0,
             modelsExtracted: 0,
             overallProgress: 0,
-            scanStartedAt: new Date().toISOString()
+            scanStartedAt: new Date().toISOString(),
+            scanCompletedAt: null,
+            scanMode: mode
         };
         this.foldersWithModels = new Map();
 
@@ -160,6 +166,7 @@ class Scanner {
             this.progress.currentStep = 'complete';
             this.progress.stepDescription = 'Scan complete';
             this.progress.overallProgress = 100;
+            this.progress.scanCompletedAt = new Date().toISOString();
             const totalScanTime = ((Date.now() - scanStartTime) / 1000).toFixed(1);
             console.log(`Scan complete! (${totalScanTime}s total)`);
             console.log(`- Mode: ${mode}`);
@@ -282,7 +289,7 @@ class Scanner {
                 await this.extractImageFromArchives(modelId, folderPath);
             }
 
-            console.log(`Indexed single folder: ${cleanedName}`);
+            console.log(`Indexed single folder: ${path.relative(rootPath, folderPath)}`);
             return { modelId, filename: cleanedName };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -788,7 +795,7 @@ class Scanner {
                 }
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
-                console.error(`Error indexing folder ${folderPath}:`, message);
+                console.error(`Error indexing folder ${path.relative(rootPath, folderPath)}:`, message);
                 indexedCount++;
             }
         }

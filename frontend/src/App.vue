@@ -81,7 +81,7 @@
             v-model="searchInput"
             @keyup.enter="handleSearch"
             type="text"
-            placeholder="Search all models..."
+            :placeholder="searchPlaceholder"
             class="search-input"
           />
           <button v-if="searchInput" @click="clearSearch" class="search-clear">
@@ -100,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAppStore } from './store';
 import { systemApi } from './services/api';
@@ -145,6 +145,25 @@ function clearSearch() {
 watch(() => store.globalSearchQuery, (newVal) => {
   searchInput.value = newVal;
 }, { immediate: true });
+
+// Clear search when navigating between tabs
+watch(() => route.name, () => {
+  if (searchInput.value) {
+    searchInput.value = '';
+    store.clearGlobalSearch();
+  }
+});
+
+const searchPlaceholder = computed(() => {
+  const placeholders: Record<string, string> = {
+    browse: 'Search models...',
+    favorites: 'Search favorites...',
+    queue: 'Search queue...',
+    printed: 'Search printed...',
+    'loose-files': 'Search loose files...',
+  };
+  return placeholders[route.name as string] || 'Search models...';
+});
 </script>
 
 <style scoped>

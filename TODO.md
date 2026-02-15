@@ -36,7 +36,16 @@
 
 ---
 
-- [ ] When logging a model name, use the full path from the 3d model root folder
-- [ ] Reduce the polling time for the scan status updates in the frontend. Once every 10 seconds is enough
+- [x] Some of the models in the Paid folder are actually nested folders of a single parent model. For example `Shared 3D Models/Paid/OriginalToys3D/Original Toys 3D_D Rex/Files for printing and assembling (STL)/Color_D (red color)` and `Shared 3D Models/Paid/OriginalToys3D/Original Toys 3D_D Rex/Files for printing and assembling (STL)/Color_C (brown color)` are both nested folders under a single model. The structure for the `Shared 3D Models/Paid` should be: `Shared 3D Models/Paid/{designer}/{model folder}` and anything nested underneath should be part of that model. Some models might be directly under the designer folder and not nested.
+- [x] When logging a model name, use the full path from the 3d model root folder
+- [x] Reduce the polling time for the scan status updates in the frontend. Once every 10 seconds is enough
 - [ ] When using 3mf file to find images, prefer the images under "Auxiliaries" if it exists. Extract multiple images if they are high scoring
 - [ ] When marking as printed from views that don't show a "good" and "bad" separately, make it a 3-state toggle, with the states in order of: not printed, good print, bad print
+- [x] After a scan, display how long the scan took in total, and which type of scan was run
+- [ ] When in the modal view, use the right/left arrow keys to switch to the next or previous model in the current list on the underlying page. Add UI on hover of the right or left edge of the screen with the same behavior
+- [x] Images don't load in the search results view
+- [x] Clicking the "browse" button when in the search results view clears the query param in the URL but does not reset the results to the unfiltered browse page
+- [x] The search field should clear when changing between tabs (e.g. "browse" vs. "favorites"), and should always be a way to filter the current view. For example, if you're on the favorites tab, it should search within the favorites. The placeholder text within it should reflect this behavior as well. It should only be a global search of models when on the browse tab.
+- [ ] On the "loose-files" view, clicking on the ".file-card" outside of a button within the file card should toggle the batch checkbox for that item
+- [ ] After organizing loose files, it should show a summary of every change made, within the "Organized N of N files" box. It should also give status updates as it is organizing in batch.
+- [ ] All tabs except "loose files" should use the same card and table view, with the option to switch between. Clicking the name, date added, date created, and category table headers in the table view should update the sorting and query param. Clicking the active sort header should toggle the sort direction.

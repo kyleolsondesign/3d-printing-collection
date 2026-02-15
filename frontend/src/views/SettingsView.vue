@@ -233,7 +233,9 @@ const scanStatus = ref({
   overallProgress: 0,
   modelsToExtract: 0,
   modelsExtracted: 0,
-  scanStartedAt: null as string | null
+  scanStartedAt: null as string | null,
+  scanCompletedAt: null as string | null,
+  scanMode: null as string | null
 });
 const stats = ref({
   totalModels: 0,
@@ -316,11 +318,25 @@ async function checkScanStatus() {
 
     if (scanStatus.value.scanning) {
       startTimer();
-      setTimeout(checkScanStatus, 500);
+      setTimeout(checkScanStatus, 10000);
     } else if (wasScanning && !scanStatus.value.scanning) {
       stopTimer();
       await loadStats();
-      showMessage('Scan completed successfully!', 'success');
+      const modeLabels: Record<string, string> = {
+        full: 'Full rebuild',
+        full_sync: 'Sync',
+        add_only: 'Add-only'
+      };
+      const modeLabel = modeLabels[scanStatus.value.scanMode || ''] || 'Scan';
+      let completionMsg = `${modeLabel} scan completed`;
+      if (scanStatus.value.scanStartedAt && scanStatus.value.scanCompletedAt) {
+        const durationMs = new Date(scanStatus.value.scanCompletedAt).getTime() - new Date(scanStatus.value.scanStartedAt).getTime();
+        const totalSeconds = Math.floor(durationMs / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        completionMsg += minutes > 0 ? ` in ${minutes}m ${seconds.toString().padStart(2, '0')}s` : ` in ${seconds}s`;
+      }
+      showMessage(completionMsg, 'success');
     }
   } catch (error) {
     console.error('Failed to check scan status:', error);
