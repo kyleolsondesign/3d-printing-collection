@@ -8,7 +8,7 @@ export function initSchema(db: InstanceType<typeof Database>): void {
     db.pragma('foreign_keys = OFF');
 
     // Drop tables in dependency order
-    const tables = ['make_images', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'print_queue', 'tags', 'config', 'models'];
+    const tables = ['make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'print_queue', 'tags', 'config', 'models'];
     for (const table of tables) {
         db.exec(`DROP TABLE IF EXISTS ${table}`);
     }
@@ -112,6 +112,21 @@ export function initSchema(db: InstanceType<typeof Database>): void {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE model_metadata (
+            model_id INTEGER PRIMARY KEY,
+            source_platform TEXT,
+            source_url TEXT,
+            designer TEXT,
+            designer_url TEXT,
+            description TEXT,
+            license TEXT,
+            license_url TEXT,
+            extracted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
         )
     `);
 

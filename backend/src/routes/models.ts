@@ -22,7 +22,7 @@ router.get('/', (req, res) => {
         const hideQueued = req.query.hideQueued === 'true';
         const offset = (page - 1) * limit;
 
-        let query = 'SELECT * FROM models';
+        let query = 'SELECT models.*, mm.designer, mm.source_platform, mm.source_url FROM models LEFT JOIN model_metadata mm ON mm.model_id = models.id';
         const params: any[] = [];
         const conditions: string[] = [];
 
@@ -179,13 +179,26 @@ router.get('/:id', (req, res) => {
 
         findZipsRecursive(model.filepath);
 
+        // Get metadata from PDF extraction
+        const metadata = db.prepare('SELECT * FROM model_metadata WHERE model_id = ?').get(id) || null;
+
+        // Get tags
+        const tags = db.prepare(`
+            SELECT t.name FROM tags t
+            JOIN model_tags mt ON mt.tag_id = t.id
+            WHERE mt.model_id = ?
+            ORDER BY t.name
+        `).all(id) as Array<{ name: string }>;
+
         res.json({
             ...model,
             assets,
             zipFiles,
             isFavorite: !!favorite,
             isQueued: !!queued,
-            printHistory: printed
+            printHistory: printed,
+            metadata,
+            tags: tags.map(t => t.name)
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

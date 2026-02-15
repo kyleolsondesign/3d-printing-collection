@@ -83,7 +83,7 @@
         </div>
         <div>
           <h4>{{ scanStatus.stepDescription || 'Scan in Progress' }}</h4>
-          <p>{{ scanProgressPercent }}% complete</p>
+          <p>{{ scanProgressPercent }}% complete<span v-if="elapsedTime" class="elapsed-time"> &middot; {{ elapsedTime }}</span></p>
         </div>
       </div>
       <div class="progress-bar">
@@ -209,7 +209,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { systemApi, type ScanMode } from '../services/api';
 
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');
@@ -232,7 +232,8 @@ const scanStatus = ref({
   stepDescription: '',
   overallProgress: 0,
   modelsToExtract: 0,
-  modelsExtracted: 0
+  modelsExtracted: 0,
+  scanStartedAt: null as string | null
 });
 const stats = ref({
   totalModels: 0,
@@ -243,14 +244,48 @@ const stats = ref({
   totalLooseFiles: 0
 });
 
+const now = ref(Date.now());
+let timerInterval: ReturnType<typeof setInterval> | null = null;
+
+function startTimer() {
+  if (!timerInterval) {
+    timerInterval = setInterval(() => { now.value = Date.now(); }, 1000);
+  }
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
 const scanProgressPercent = computed(() => {
   return scanStatus.value.overallProgress || 0;
+});
+
+const elapsedTime = computed(() => {
+  if (!scanStatus.value.scanStartedAt) return '';
+  const startMs = new Date(scanStatus.value.scanStartedAt).getTime();
+  const elapsedMs = now.value - startMs;
+  if (elapsedMs < 0) return '0s';
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+  }
+  return `${seconds}s`;
 });
 
 onMounted(async () => {
   await loadConfig();
   await loadStats();
   await checkScanStatus();
+});
+
+onUnmounted(() => {
+  stopTimer();
 });
 
 async function loadConfig() {
@@ -280,8 +315,10 @@ async function checkScanStatus() {
     scanStatus.value = response.data;
 
     if (scanStatus.value.scanning) {
+      startTimer();
       setTimeout(checkScanStatus, 500);
     } else if (wasScanning && !scanStatus.value.scanning) {
+      stopTimer();
       await loadStats();
       showMessage('Scan completed successfully!', 'success');
     }
@@ -515,6 +552,10 @@ h2 {
   font-size: 0.85rem;
   color: var(--accent-primary);
   font-family: var(--font-mono);
+}
+
+.elapsed-time {
+  color: var(--text-secondary);
 }
 
 .progress-bar {

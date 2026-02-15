@@ -7,6 +7,7 @@ import db from '../config/database.js';
 import { isModelFile, isImageFile, isDocumentFile, isArchiveFile } from '../utils/fileTypes.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
 import { getFinderTags, parseModelStateFromTags } from '../utils/finderTags.js';
+import { extractMetadataFromPdf } from '../utils/pdfMetadata.js';
 
 export type ScanMode = 'full' | 'full_sync' | 'add_only';
 
@@ -14,7 +15,7 @@ export type ScanMode = 'full' | 'full_sync' | 'add_only';
 // This prevents the scanner from blocking API requests
 const yieldToEventLoop = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
-type ScanStep = 'idle' | 'discovering' | 'indexing' | 'extracting' | 'tagging' | 'cleanup' | 'complete';
+type ScanStep = 'idle' | 'discovering' | 'indexing' | 'extracting' | 'metadata' | 'tagging' | 'cleanup' | 'complete';
 
 interface ScanProgress {
     totalFiles: number;
@@ -32,6 +33,7 @@ interface ScanProgress {
     modelsToExtract: number;
     modelsExtracted: number;
     overallProgress: number;
+    scanStartedAt: string | null;
 }
 
 interface FolderData {
@@ -58,7 +60,8 @@ class Scanner {
         indexedFolders: 0,
         modelsToExtract: 0,
         modelsExtracted: 0,
-        overallProgress: 0
+        overallProgress: 0,
+        scanStartedAt: null
     };
     private foldersWithModels: Map<string, FolderData> = new Map();
 
@@ -91,7 +94,8 @@ class Scanner {
             indexedFolders: 0,
             modelsToExtract: 0,
             modelsExtracted: 0,
-            overallProgress: 0
+            overallProgress: 0,
+            scanStartedAt: new Date().toISOString()
         };
         this.foldersWithModels = new Map();
 
@@ -111,6 +115,8 @@ class Scanner {
 
             console.log(`Directory verified. Starting recursive scan...`);
 
+            const scanStartTime = Date.now();
+
             // Only clear data in 'full' mode (destructive)
             if (mode === 'full') {
                 this.clearExistingModels();
@@ -121,17 +127,21 @@ class Scanner {
 
             // Phase 1: Recursively scan and collect model files by folder
             // Discovery is very fast (~1% of total time)
+            const discoveryStart = Date.now();
             await this.scanDirectoryRecursive(modelDirectory, modelDirectory);
 
             // Set totalFolders for progress tracking
             this.progress.totalFolders = this.foldersWithModels.size;
             this.progress.overallProgress = 1; // Discovery complete (1%)
+            console.log(`Discovery complete: ${this.foldersWithModels.size} model folders, ${this.progress.totalFiles} files (${((Date.now() - discoveryStart) / 1000).toFixed(1)}s)`);
 
             // Phase 2: Index folders as models
             // Indexing is ~29% of total (1-30%)
+            const indexStart = Date.now();
             this.progress.currentStep = 'indexing';
             this.progress.stepDescription = 'Indexing model folders...';
             await this.indexFoldersAsModels(modelDirectory);
+            console.log(`Indexing complete (${((Date.now() - indexStart) / 1000).toFixed(1)}s)`);
 
             // Phase 3: In full mode, restore saved user data (favorites, queue, printed)
             if (mode === 'full') {
@@ -150,7 +160,8 @@ class Scanner {
             this.progress.currentStep = 'complete';
             this.progress.stepDescription = 'Scan complete';
             this.progress.overallProgress = 100;
-            console.log(`Scan complete!`);
+            const totalScanTime = ((Date.now() - scanStartTime) / 1000).toFixed(1);
+            console.log(`Scan complete! (${totalScanTime}s total)`);
             console.log(`- Mode: ${mode}`);
             console.log(`- Models added: ${this.progress.modelsFound}`);
             if (mode === 'full_sync') {
@@ -752,7 +763,12 @@ class Scanner {
                 // Update indexing progress: 1-30% of overall progress
                 indexedCount++;
                 this.progress.indexedFolders = indexedCount;
-                this.progress.overallProgress = 1 + Math.round((indexedCount / totalFolders) * 29);
+                this.progress.overallProgress = 1 + Math.round((indexedCount / totalFolders) * 24);
+
+                // Log progress every 500 models
+                if (indexedCount % 500 === 0) {
+                    console.log(`  Indexed ${indexedCount}/${totalFolders} model folders...`);
+                }
 
                 // Yield control every 50 models to keep API responsive
                 if (indexedCount % 50 === 0) {
@@ -772,14 +788,45 @@ class Scanner {
             this.progress.modelsToExtract = modelsNeedingImages.length;
             this.progress.modelsExtracted = 0;
             this.progress.stepDescription = `Extracting images (0 of ${modelsNeedingImages.length})...`;
-            this.progress.overallProgress = 30;
+            this.progress.overallProgress = 25;
             console.log(`Extracting images from archives for ${modelsNeedingImages.length} models...`);
 
+            const extractionStart = Date.now();
+            let successCount = 0;
+            let failCount = 0;
+            let slowCount = 0;
+
             for (const { modelId, folderPath } of modelsNeedingImages) {
+                const modelStart = Date.now();
+                const folderName = path.basename(folderPath);
+
                 await this.extractImageFromArchives(modelId, folderPath);
+
+                const elapsed = Date.now() - modelStart;
                 this.progress.modelsExtracted++;
+
+                // Check if extraction found an image
+                if (this.hasPrimaryImage(modelId)) {
+                    successCount++;
+                }
+
+                // Log slow extractions (>5s) and periodic progress
+                if (elapsed > 5000) {
+                    slowCount++;
+                    console.warn(`  Slow extraction (${(elapsed / 1000).toFixed(1)}s): ${folderName}`);
+                }
+
+                // Log progress every 100 models
+                if (this.progress.modelsExtracted % 100 === 0) {
+                    const totalElapsed = ((Date.now() - extractionStart) / 1000).toFixed(0);
+                    const rate = (this.progress.modelsExtracted / ((Date.now() - extractionStart) / 1000)).toFixed(1);
+                    const remaining = modelsNeedingImages.length - this.progress.modelsExtracted;
+                    const eta = remaining / parseFloat(rate);
+                    console.log(`  Extraction progress: ${this.progress.modelsExtracted}/${modelsNeedingImages.length} (${totalElapsed}s elapsed, ${rate}/s, ~${Math.ceil(eta)}s remaining, ${successCount} images found)`);
+                }
+
                 // Update progress: 30-95% based on extraction progress
-                this.progress.overallProgress = 30 + Math.round((this.progress.modelsExtracted / this.progress.modelsToExtract) * 65);
+                this.progress.overallProgress = 25 + Math.round((this.progress.modelsExtracted / this.progress.modelsToExtract) * 40);
                 this.progress.stepDescription = `Extracting images (${this.progress.modelsExtracted} of ${this.progress.modelsToExtract})...`;
 
                 // Yield control every 10 extractions to keep API responsive
@@ -787,10 +834,114 @@ class Scanner {
                     await yieldToEventLoop();
                 }
             }
+
+            const totalTime = ((Date.now() - extractionStart) / 1000).toFixed(1);
+            console.log(`Extraction complete: ${successCount} images extracted, ${modelsNeedingImages.length - successCount} models without images (${totalTime}s total, ${slowCount} slow operations)`);
         } else {
-            // No extraction needed, jump to 95%
-            this.progress.overallProgress = 95;
+            // No extraction needed, jump to 65%
+            this.progress.overallProgress = 65;
         }
+
+        // Phase: Extract metadata from PDFs
+        await this.extractMetadataFromPdfs();
+    }
+
+    /**
+     * Extract metadata from PDF assets for models that don't already have metadata.
+     * Uses pdftohtml to extract links (source URLs, designer profiles, tags, licenses)
+     * and pdftotext for description text.
+     */
+    private async extractMetadataFromPdfs(): Promise<void> {
+        // Find models with PDF assets but no metadata record
+        const modelsWithPdfs = db.prepare(`
+            SELECT DISTINCT m.id as model_id, ma.filepath as pdf_path
+            FROM models m
+            JOIN model_assets ma ON ma.model_id = m.id AND ma.asset_type = 'pdf'
+            LEFT JOIN model_metadata mm ON mm.model_id = m.id
+            WHERE mm.model_id IS NULL AND m.deleted_at IS NULL
+            GROUP BY m.id
+        `).all() as Array<{ model_id: number; pdf_path: string }>;
+
+        if (modelsWithPdfs.length === 0) {
+            this.progress.overallProgress = 95;
+            return;
+        }
+
+        this.progress.currentStep = 'metadata';
+        this.progress.modelsToExtract = modelsWithPdfs.length;
+        this.progress.modelsExtracted = 0;
+        this.progress.stepDescription = `Extracting metadata (0 of ${modelsWithPdfs.length})...`;
+        this.progress.overallProgress = 65;
+        console.log(`Extracting metadata from PDFs for ${modelsWithPdfs.length} models...`);
+
+        const metadataStart = Date.now();
+        let successCount = 0;
+        let tagCount = 0;
+
+        const insertMetadata = db.prepare(`
+            INSERT OR REPLACE INTO model_metadata (model_id, source_platform, source_url, designer, designer_url, description, license, license_url, extracted_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        const insertTag = db.prepare(`INSERT OR IGNORE INTO tags (name) VALUES (?)`);
+        const getTagId = db.prepare(`SELECT id FROM tags WHERE name = ?`);
+        const insertModelTag = db.prepare(`INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)`);
+
+        for (const { model_id, pdf_path } of modelsWithPdfs) {
+            try {
+                const metadata = await extractMetadataFromPdf(pdf_path);
+
+                insertMetadata.run(
+                    model_id,
+                    metadata.source_platform,
+                    metadata.source_url,
+                    metadata.designer,
+                    metadata.designer_url,
+                    metadata.description,
+                    metadata.license,
+                    metadata.license_url,
+                    new Date().toISOString()
+                );
+
+                // Insert tags
+                for (const tag of metadata.tags) {
+                    insertTag.run(tag);
+                    const tagRow = getTagId.get(tag) as { id: number } | undefined;
+                    if (tagRow) {
+                        insertModelTag.run(model_id, tagRow.id);
+                        tagCount++;
+                    }
+                }
+
+                if (metadata.source_platform || metadata.designer || metadata.tags.length > 0) {
+                    successCount++;
+                }
+            } catch (error) {
+                // Insert empty metadata record to avoid re-processing on next scan
+                insertMetadata.run(model_id, null, null, null, null, null, null, null, new Date().toISOString());
+            }
+
+            this.progress.modelsExtracted++;
+            this.progress.overallProgress = 65 + Math.round((this.progress.modelsExtracted / this.progress.modelsToExtract) * 30);
+            this.progress.stepDescription = `Extracting metadata (${this.progress.modelsExtracted} of ${this.progress.modelsToExtract})...`;
+
+            // Log progress every 100 models
+            if (this.progress.modelsExtracted % 100 === 0) {
+                const elapsed = ((Date.now() - metadataStart) / 1000).toFixed(0);
+                const rate = (this.progress.modelsExtracted / ((Date.now() - metadataStart) / 1000)).toFixed(1);
+                const remaining = modelsWithPdfs.length - this.progress.modelsExtracted;
+                const eta = remaining / parseFloat(rate);
+                console.log(`  Metadata progress: ${this.progress.modelsExtracted}/${modelsWithPdfs.length} (${elapsed}s elapsed, ${rate}/s, ~${Math.ceil(eta)}s remaining, ${successCount} enriched, ${tagCount} tags)`);
+            }
+
+            // Yield every 10 to keep API responsive
+            if (this.progress.modelsExtracted % 10 === 0) {
+                await yieldToEventLoop();
+            }
+        }
+
+        const totalTime = ((Date.now() - metadataStart) / 1000).toFixed(1);
+        console.log(`Metadata extraction complete: ${successCount} models enriched, ${tagCount} tags added (${totalTime}s total)`);
+        this.progress.overallProgress = 95;
     }
 
     private trackLooseFile(filepath: string): void {
@@ -923,47 +1074,63 @@ class Scanner {
     }
 
     private async extractImageFromArchives(modelId: number, folderPath: string): Promise<void> {
+        const PER_MODEL_TIMEOUT = 30000; // 30 second max per model
+
         try {
-            // Collect .3mf files and photo zips with their dates (recursively)
-            const archives: Array<{ path: string; type: '3mf' | 'photozip'; date: Date }> = [];
-            this.collectArchivesRecursive(folderPath, archives);
-
-            // Sort by date (earliest first) - 3mf files prioritized
-            archives.sort((a, b) => {
-                // Prioritize 3mf files over photo zips
-                if (a.type === '3mf' && b.type !== '3mf') return -1;
-                if (a.type !== '3mf' && b.type === '3mf') return 1;
-                return a.date.getTime() - b.date.getTime();
-            });
-
-            // Try to extract an image from each archive
-            for (const archive of archives) {
-                const extracted = await this.extractImageFromZip(archive.path, folderPath, archive.type);
-                if (extracted) {
-                    // Index the extracted image
-                    const insert = db.prepare(`
-                        INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
-                        VALUES (?, ?, 'image', 1)
-                    `);
-                    insert.run(modelId, extracted);
-                    this.progress.assetsFound++;
-                    return; // Stop after first successful extraction
-                }
+            // Wrap entire extraction in a timeout to prevent any single model from blocking
+            await Promise.race([
+                this.extractImageFromArchivesInner(modelId, folderPath),
+                new Promise<void>((_, reject) =>
+                    setTimeout(() => reject(new Error('Per-model extraction timeout')), PER_MODEL_TIMEOUT)
+                )
+            ]);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes('timeout')) {
+                console.warn(`  Extraction timed out (${PER_MODEL_TIMEOUT / 1000}s): ${path.basename(folderPath)}`);
+            } else {
+                console.error(`  Error extracting images: ${path.basename(folderPath)}: ${message}`);
             }
+        }
+    }
 
-            // Fallback: try to extract first page from PDFs as thumbnail
-            const extracted = await this.extractImageFromPdf(folderPath);
+    private async extractImageFromArchivesInner(modelId: number, folderPath: string): Promise<void> {
+        // Collect .3mf files and photo zips with their dates (recursively)
+        const archives: Array<{ path: string; type: '3mf' | 'photozip'; date: Date }> = [];
+        this.collectArchivesRecursive(folderPath, archives);
+
+        // Sort by date (earliest first) - 3mf files prioritized
+        archives.sort((a, b) => {
+            // Prioritize 3mf files over photo zips
+            if (a.type === '3mf' && b.type !== '3mf') return -1;
+            if (a.type !== '3mf' && b.type === '3mf') return 1;
+            return a.date.getTime() - b.date.getTime();
+        });
+
+        // Try to extract an image from each archive
+        for (const archive of archives) {
+            const extracted = await this.extractImageFromZip(archive.path, folderPath, archive.type);
             if (extracted) {
+                // Index the extracted image
                 const insert = db.prepare(`
                     INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
                     VALUES (?, ?, 'image', 1)
                 `);
                 insert.run(modelId, extracted);
                 this.progress.assetsFound++;
+                return; // Stop after first successful extraction
             }
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            console.error(`Error extracting images from archives in ${folderPath}:`, message);
+        }
+
+        // Fallback: try to extract first page from PDFs as thumbnail
+        const extracted = await this.extractImageFromPdf(folderPath);
+        if (extracted) {
+            const insert = db.prepare(`
+                INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
+                VALUES (?, ?, 'image', 1)
+            `);
+            insert.run(modelId, extracted);
+            this.progress.assetsFound++;
         }
     }
 
@@ -1125,21 +1292,37 @@ class Scanner {
     }
 
     private extractImageFromZip(zipPath: string, outputDir: string, type: '3mf' | 'photozip'): Promise<string | null> {
+        const TIMEOUT_MS = 10000; // 10 second timeout per archive
+
         return new Promise((resolve) => {
+            let resolved = false;
+            const safeResolve = (value: string | null) => {
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timer);
+                    resolve(value);
+                }
+            };
+
+            const timer = setTimeout(() => {
+                console.warn(`  ZIP extraction timed out after ${TIMEOUT_MS / 1000}s: ${path.basename(zipPath)}`);
+                safeResolve(null);
+            }, TIMEOUT_MS);
+
             yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
                 if (err || !zipfile) {
-                    resolve(null);
+                    safeResolve(null);
                     return;
                 }
 
-                let foundImage: string | null = null;
                 const candidates: Array<{ name: string; score: number }> = [];
 
                 zipfile.on('error', () => {
-                    resolve(null);
+                    safeResolve(null);
                 });
 
                 zipfile.on('entry', (entry: yauzl.Entry) => {
+                    if (resolved) return; // Stop processing if timed out
                     const entryName = entry.fileName;
                     const ext = path.extname(entryName).toLowerCase();
 
@@ -1170,9 +1353,10 @@ class Scanner {
                 });
 
                 zipfile.on('end', () => {
+                    if (resolved) return;
                     if (candidates.length === 0) {
                         zipfile.close();
-                        resolve(null);
+                        safeResolve(null);
                         return;
                     }
 
@@ -1183,15 +1367,16 @@ class Scanner {
                     // Re-open to extract the specific file
                     yauzl.open(zipPath, { lazyEntries: true }, (err2, zipfile2) => {
                         if (err2 || !zipfile2) {
-                            resolve(null);
+                            safeResolve(null);
                             return;
                         }
 
                         zipfile2.on('error', () => {
-                            resolve(null);
+                            safeResolve(null);
                         });
 
                         zipfile2.on('entry', (entry: yauzl.Entry) => {
+                            if (resolved) return;
                             if (entry.fileName === bestCandidate) {
                                 zipfile2.openReadStream(entry, (streamErr, readStream) => {
                                     if (streamErr || !readStream) {
@@ -1209,8 +1394,8 @@ class Scanner {
                                     readStream.pipe(writeStream);
 
                                     writeStream.on('finish', () => {
-                                        foundImage = outputPath;
                                         zipfile2.close();
+                                        safeResolve(outputPath);
                                     });
 
                                     writeStream.on('error', () => {
@@ -1224,7 +1409,7 @@ class Scanner {
 
                         zipfile2.on('end', () => {
                             zipfile2.close();
-                            resolve(foundImage);
+                            safeResolve(null);
                         });
 
                         zipfile2.readEntry();

@@ -23,6 +23,21 @@ export interface Model {
     isQueued?: boolean;
     isPrinted?: boolean;
     printRating?: 'good' | 'bad' | null;
+    designer?: string | null;
+    source_platform?: string | null;
+    source_url?: string | null;
+}
+
+export interface ModelMetadata {
+    model_id: number;
+    source_platform: string | null;
+    source_url: string | null;
+    designer: string | null;
+    designer_url: string | null;
+    description: string | null;
+    license: string | null;
+    license_url: string | null;
+    extracted_at: string | null;
 }
 
 export interface ModelAsset {

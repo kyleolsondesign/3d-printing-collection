@@ -165,6 +165,22 @@ function initializeDatabase(): void {
         )
     `);
 
+    // Model metadata - extracted from PDFs (source URL, designer, tags, etc.)
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS model_metadata (
+            model_id INTEGER PRIMARY KEY,
+            source_platform TEXT,
+            source_url TEXT,
+            designer TEXT,
+            designer_url TEXT,
+            description TEXT,
+            license TEXT,
+            license_url TEXT,
+            extracted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
+        )
+    `);
+
     // Tags table - for categorizing models with multiple tags
     db.exec(`
         CREATE TABLE IF NOT EXISTS tags (
@@ -195,6 +211,8 @@ function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_favorites_model ON favorites(model_id);
         CREATE INDEX IF NOT EXISTS idx_printed_model ON printed_models(model_id);
         CREATE INDEX IF NOT EXISTS idx_queue_priority ON print_queue(priority DESC, added_at);
+        CREATE INDEX IF NOT EXISTS idx_metadata_platform ON model_metadata(source_platform);
+        CREATE INDEX IF NOT EXISTS idx_metadata_designer ON model_metadata(designer);
     `);
 
     // Create full-text search virtual table

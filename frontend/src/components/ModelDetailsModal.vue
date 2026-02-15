@@ -122,6 +122,38 @@
                 </div>
               </div>
 
+              <!-- Metadata from PDF -->
+              <div class="metadata-section" v-if="modelDetails.metadata && hasMetadata">
+                <div class="metadata-row" v-if="modelDetails.metadata.designer">
+                  <span class="metadata-label">Designer</span>
+                  <a v-if="modelDetails.metadata.designer_url" :href="modelDetails.metadata.designer_url" target="_blank" rel="noopener" class="metadata-link">{{ modelDetails.metadata.designer }}</a>
+                  <span v-else class="metadata-value">{{ modelDetails.metadata.designer }}</span>
+                </div>
+                <div class="metadata-row" v-if="modelDetails.metadata.source_platform">
+                  <span class="metadata-label">Source</span>
+                  <a v-if="modelDetails.metadata.source_url" :href="modelDetails.metadata.source_url" target="_blank" rel="noopener" class="metadata-link">
+                    <span :class="['platform-badge', modelDetails.metadata.source_platform]">{{ platformName(modelDetails.metadata.source_platform) }}</span>
+                  </a>
+                  <span v-else :class="['platform-badge', modelDetails.metadata.source_platform]">{{ platformName(modelDetails.metadata.source_platform) }}</span>
+                </div>
+                <div class="metadata-row" v-if="modelDetails.metadata.license">
+                  <span class="metadata-label">License</span>
+                  <a v-if="modelDetails.metadata.license_url" :href="modelDetails.metadata.license_url" target="_blank" rel="noopener" class="metadata-link license-text">{{ modelDetails.metadata.license }}</a>
+                  <span v-else class="metadata-value license-text">{{ modelDetails.metadata.license }}</span>
+                </div>
+                <div class="metadata-row" v-if="modelDetails.metadata.description">
+                  <span class="metadata-label">Description</span>
+                  <span class="metadata-value description-text">{{ modelDetails.metadata.description }}</span>
+                </div>
+              </div>
+
+              <!-- Tags -->
+              <div class="tags-section" v-if="modelDetails.tags && modelDetails.tags.length > 0">
+                <div class="tags-list">
+                  <span v-for="tag in modelDetails.tags" :key="tag" class="tag-chip">{{ tag }}</span>
+                </div>
+              </div>
+
               <!-- Model Files -->
               <div class="files-section" v-if="modelFiles.length > 0">
                 <h3>Model Files</h3>
@@ -293,7 +325,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, type Model, type ModelAsset, type MakeImage } from '../services/api';
+import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, type Model, type ModelAsset, type ModelMetadata, type MakeImage } from '../services/api';
 import { useAppStore } from '../store';
 
 interface ModelFile {
@@ -325,6 +357,8 @@ interface ModelDetails extends Model {
   isFavorite: boolean;
   isQueued: boolean;
   printHistory: PrintRecord[];
+  metadata?: ModelMetadata | null;
+  tags?: string[];
 }
 
 const props = defineProps<{
@@ -364,6 +398,21 @@ const currentPrintRating = computed(() =>
 const pdfAssets = computed(() =>
   modelDetails.value?.assets.filter(a => a.asset_type === 'pdf') || []
 );
+
+const hasMetadata = computed(() => {
+  const m = modelDetails.value?.metadata;
+  if (!m) return false;
+  return m.designer || m.source_platform || m.license || m.description;
+});
+
+function platformName(platform: string): string {
+  const names: Record<string, string> = {
+    makerworld: 'MakerWorld',
+    printables: 'Printables',
+    thangs: 'Thangs'
+  };
+  return names[platform] || platform;
+}
 
 const relativePath = computed(() => {
   if (!modelDetails.value?.filepath) return '';
@@ -1466,5 +1515,98 @@ async function extractZipFile(zipFile: ZipFile) {
 
 .action-btn svg.spinning {
   animation: spin 1s linear infinite;
+}
+
+/* Metadata Section */
+.metadata-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.75rem;
+}
+
+.metadata-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.metadata-label {
+  color: var(--text-secondary);
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.metadata-value {
+  color: var(--text-primary);
+}
+
+.metadata-link {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.metadata-link:hover {
+  text-decoration: underline;
+}
+
+.platform-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.platform-badge.makerworld {
+  background: #1a7a3a20;
+  color: #1a7a3a;
+}
+
+.platform-badge.printables {
+  background: #e6650020;
+  color: #e66500;
+}
+
+.platform-badge.thangs {
+  background: #3b82f620;
+  color: #3b82f6;
+}
+
+.license-text {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.description-text {
+  color: var(--text-secondary);
+  line-height: 1.4;
+  font-size: 0.85rem;
+}
+
+/* Tags Section */
+.tags-section {
+  margin-bottom: 0.75rem;
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.tag-chip {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }
 </style>
