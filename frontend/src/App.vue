@@ -129,7 +129,8 @@ async function loadLooseFilesCount() {
 function handleSearch() {
   if (searchInput.value.trim()) {
     if (route.name === 'settings') {
-      router.push('/');
+      router.push({ path: '/', query: { q: searchInput.value.trim() } });
+      return;
     }
     store.setGlobalSearch(searchInput.value.trim());
   }
