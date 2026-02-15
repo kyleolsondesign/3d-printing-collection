@@ -185,7 +185,7 @@ export const systemApi = {
 // Ingestion API
 export const ingestionApi = {
     getConfig: () => api.get('/ingestion/config'),
-    setConfig: (data: { directory?: string; apiKey?: string }) => api.post('/ingestion/config', data),
+    setConfig: (data: { directory?: string; apiKey?: string; prompt?: string }) => api.post('/ingestion/config', data),
     scan: () => api.get('/ingestion/scan'),
     importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean }>) =>
         api.post('/ingestion/import', { items })

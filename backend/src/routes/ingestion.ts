@@ -7,7 +7,7 @@ import scanner from '../services/scanner.js';
 import { isModelFile, isArchiveFile, isDocumentFile } from '../utils/fileTypes.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
 import {
-    extractDescriptionFromPdf,
+    extractRawTextFromPdf,
     extractLinksFromPdf,
     classifyLinks,
     detectPlatform,
@@ -17,6 +17,20 @@ import {
 const router = express.Router();
 
 const DEFAULT_INGESTION_DIR = '/Users/kyle/Downloads';
+
+const DEFAULT_PROMPT = `You are categorizing 3D printing model files into an existing collection. The existing categories are:
+
+{categories}
+
+For each item below, suggest the best matching category from the list above. Use ALL available context (model filenames, PDF text, tags, designer info) to make your decision. If none of the existing categories fit well, use "Uncategorized". Rate your confidence: "high" if you're quite sure, "medium" if it's a reasonable guess, "low" if you're unsure.
+
+Items to categorize:
+{items}
+
+Respond with ONLY a JSON array, one entry per item, in order:
+[{"category": "...", "confidence": "high|medium|low"}, ...]
+
+No explanation, just the JSON array.`;
 
 // Common noise words to ignore in fuzzy matching
 const NOISE_WORDS = new Set([
@@ -44,7 +58,8 @@ interface ScannedItem {
     fileSize: number;
     // Rich context for AI categorization
     modelFileNames: string[];
-    pdfDescription: string | null;
+    pdfFilename: string | null;
+    pdfText: string | null;
     pdfTags: string[];
     designer: string | null;
     readmeText: string | null;
@@ -151,8 +166,11 @@ async function suggestCategoriesWithClaude(
         if (item.modelFileNames.length > 0 && item.isFolder) {
             lines.push(`   Model files: ${item.modelFileNames.join(', ')}`);
         }
-        if (item.pdfDescription) {
-            lines.push(`   PDF description: "${item.pdfDescription}"`);
+        if (item.pdfFilename) {
+            lines.push(`   PDF filename: "${item.pdfFilename}"`);
+        }
+        if (item.pdfText) {
+            lines.push(`   PDF text: "${item.pdfText}"`);
         }
         if (item.pdfTags.length > 0) {
             lines.push(`   Tags from PDF: ${item.pdfTags.join(', ')}`);
@@ -168,24 +186,18 @@ async function suggestCategoriesWithClaude(
 
     const categoryList = categories.join(', ');
 
+    // Use custom prompt or default
+    const promptTemplate = getConfig('ingestion_prompt') || DEFAULT_PROMPT;
+    const prompt = promptTemplate
+        .replace('{categories}', categoryList)
+        .replace('{items}', itemList);
+
     const response = await client.messages.create({
         model: 'claude-sonnet-4-5-20250929',
         max_tokens: 2048,
         messages: [{
             role: 'user',
-            content: `You are categorizing 3D printing model files into an existing collection. The existing categories are:
-
-${categoryList}
-
-For each item below, suggest the best matching category from the list above. Use ALL available context (model filenames, PDF descriptions, tags, designer info) to make your decision. If none of the existing categories fit well, use "Uncategorized". Rate your confidence: "high" if you're quite sure, "medium" if it's a reasonable guess, "low" if you're unsure.
-
-Items to categorize:
-${itemList}
-
-Respond with ONLY a JSON array, one entry per item, in order:
-[{"category": "...", "confidence": "high|medium|low"}, ...]
-
-No explanation, just the JSON array.`
+            content: prompt
         }]
     });
 
@@ -269,12 +281,14 @@ function scanFolderContents(dirPath: string): FolderScanResult {
 }
 
 async function extractFolderContext(scanResult: FolderScanResult): Promise<{
-    pdfDescription: string | null;
+    pdfFilename: string | null;
+    pdfText: string | null;
     pdfTags: string[];
     designer: string | null;
     readmeText: string | null;
 }> {
-    let pdfDescription: string | null = null;
+    let pdfFilename: string | null = null;
+    let pdfText: string | null = null;
     let pdfTags: string[] = [];
     let designer: string | null = null;
     let readmeText: string | null = null;
@@ -282,10 +296,13 @@ async function extractFolderContext(scanResult: FolderScanResult): Promise<{
     // Extract from first PDF
     if (scanResult.pdfPaths.length > 0) {
         const pdfPath = scanResult.pdfPaths[0];
-        const pdfFilename = path.basename(pdfPath);
+        pdfFilename = path.basename(pdfPath);
 
-        // Get description via pdftotext
-        pdfDescription = await extractDescriptionFromPdf(pdfPath);
+        // Get raw first-page text (capped at 1000 chars)
+        const rawText = await extractRawTextFromPdf(pdfPath);
+        if (rawText) {
+            pdfText = rawText.substring(0, 1000);
+        }
 
         // Get links, tags, designer from PDF
         try {
@@ -305,7 +322,7 @@ async function extractFolderContext(scanResult: FolderScanResult): Promise<{
         } catch { /* ignore */ }
     }
 
-    return { pdfDescription, pdfTags, designer, readmeText };
+    return { pdfFilename, pdfText, pdfTags, designer, readmeText };
 }
 
 async function scanIngestionDir(ingestionDir: string): Promise<ScannedItem[]> {
@@ -342,7 +359,8 @@ async function scanIngestionDir(ingestionDir: string): Promise<ScannedItem[]> {
                 fileCount: 1,
                 fileSize,
                 modelFileNames: [entry.name],
-                pdfDescription: null,
+                pdfFilename: null,
+                pdfText: null,
                 pdfTags: [],
                 designer: null,
                 readmeText: null
@@ -365,12 +383,13 @@ async function scanIngestionDir(ingestionDir: string): Promise<ScannedItem[]> {
 router.get('/config', (req, res) => {
     const directory = getConfig('ingestion_directory') || DEFAULT_INGESTION_DIR;
     const hasApiKey = !!getConfig('anthropic_api_key');
-    res.json({ directory, hasApiKey });
+    const prompt = getConfig('ingestion_prompt') || DEFAULT_PROMPT;
+    res.json({ directory, hasApiKey, prompt });
 });
 
 // POST /api/ingestion/config
 router.post('/config', (req, res) => {
-    const { directory, apiKey } = req.body;
+    const { directory, apiKey, prompt } = req.body;
 
     if (directory !== undefined) {
         if (!directory || typeof directory !== 'string') {
@@ -384,16 +403,25 @@ router.post('/config', (req, res) => {
 
     if (apiKey !== undefined) {
         if (apiKey === '') {
-            // Clear the API key
             db.prepare('DELETE FROM config WHERE key = ?').run('anthropic_api_key');
         } else {
             setConfig('anthropic_api_key', apiKey);
         }
     }
 
+    if (prompt !== undefined) {
+        if (prompt === '') {
+            // Reset to default
+            db.prepare('DELETE FROM config WHERE key = ?').run('ingestion_prompt');
+        } else {
+            setConfig('ingestion_prompt', prompt);
+        }
+    }
+
     const currentDir = getConfig('ingestion_directory') || DEFAULT_INGESTION_DIR;
     const hasApiKey = !!getConfig('anthropic_api_key');
-    res.json({ success: true, directory: currentDir, hasApiKey });
+    const currentPrompt = getConfig('ingestion_prompt') || DEFAULT_PROMPT;
+    res.json({ success: true, directory: currentDir, hasApiKey, prompt: currentPrompt });
 });
 
 // GET /api/ingestion/scan

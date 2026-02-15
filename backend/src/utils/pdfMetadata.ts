@@ -77,9 +77,9 @@ export async function extractLinksFromPdf(pdfPath: string): Promise<string[]> {
 }
 
 /**
- * Run pdftotext and extract a description from the output.
+ * Run pdftotext and return the raw first-page text.
  */
-export async function extractDescriptionFromPdf(pdfPath: string): Promise<string | null> {
+export async function extractRawTextFromPdf(pdfPath: string): Promise<string | null> {
     try {
         const text = await new Promise<string>((resolve, reject) => {
             execFile('pdftotext', ['-l', '1', pdfPath, '-'], {
@@ -90,11 +90,19 @@ export async function extractDescriptionFromPdf(pdfPath: string): Promise<string
                 else resolve(stdout);
             });
         });
-
-        return parseDescription(text);
+        return text?.trim() || null;
     } catch {
         return null;
     }
+}
+
+/**
+ * Run pdftotext and extract a description from the output.
+ */
+export async function extractDescriptionFromPdf(pdfPath: string): Promise<string | null> {
+    const text = await extractRawTextFromPdf(pdfPath);
+    if (!text) return null;
+    return parseDescription(text);
 }
 
 /**

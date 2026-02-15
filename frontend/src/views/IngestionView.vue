@@ -73,6 +73,32 @@
             </template>
           </div>
         </div>
+        <div class="config-row">
+          <button @click="showPromptEditor = !showPromptEditor" class="prompt-toggle" :class="{ active: showPromptEditor }">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+            <label class="config-label" style="margin-bottom: 0; cursor: pointer;">
+              Categorization prompt
+              <span class="config-hint">(customize how Claude categorizes models)</span>
+            </label>
+          </button>
+          <div v-if="showPromptEditor" class="prompt-editor-wrapper">
+            <textarea
+              v-model="promptValue"
+              class="prompt-textarea"
+              rows="12"
+              placeholder="Enter categorization prompt..."
+            ></textarea>
+            <div class="prompt-help">
+              Use <code>{categories}</code> for the category list and <code>{items}</code> for the items to categorize.
+            </div>
+            <div class="prompt-actions">
+              <button @click="savePrompt" class="btn-sm btn-primary" :disabled="!promptDirty">Save Prompt</button>
+              <button @click="resetPrompt" class="btn-sm btn-ghost">Reset to Default</button>
+            </div>
+          </div>
+        </div>
       </div>
       <button @click="scanFolder" class="btn-scan" :disabled="scanning || !ingestionDir">
         <svg v-if="scanning" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -299,6 +325,9 @@ const editingPath = ref(false);
 const editPathValue = ref('');
 const editingApiKey = ref(false);
 const editApiKeyValue = ref('');
+const showPromptEditor = ref(false);
+const promptValue = ref('');
+const savedPromptValue = ref('');
 const pathInputRef = ref<HTMLInputElement | null>(null);
 const items = ref<IngestionItem[]>([]);
 const categories = ref<string[]>([]);
@@ -309,6 +338,10 @@ const usedClaude = ref(false);
 const selectedIds = ref<Set<string>>(new Set());
 const importingPaths = ref<Set<string>>(new Set());
 const lastResults = ref<ImportResults | null>(null);
+
+const promptDirty = computed(() =>
+  promptValue.value !== savedPromptValue.value
+);
 
 const isAllSelected = computed(() =>
   items.value.length > 0 && selectedIds.value.size === items.value.length
@@ -331,6 +364,8 @@ async function loadConfig() {
     const response = await ingestionApi.getConfig();
     ingestionDir.value = response.data.directory || '';
     hasApiKey.value = response.data.hasApiKey || false;
+    promptValue.value = response.data.prompt || '';
+    savedPromptValue.value = response.data.prompt || '';
   } catch (error) {
     console.error('Failed to load ingestion config:', error);
   }
@@ -396,6 +431,27 @@ async function clearApiKey() {
     hasApiKey.value = response.data.hasApiKey;
   } catch (error) {
     console.error('Failed to clear API key:', error);
+  }
+}
+
+async function savePrompt() {
+  try {
+    const response = await ingestionApi.setConfig({ prompt: promptValue.value });
+    savedPromptValue.value = response.data.prompt || '';
+    promptValue.value = savedPromptValue.value;
+  } catch (error: any) {
+    console.error('Failed to save prompt:', error);
+    alert(error.response?.data?.error || 'Failed to save prompt');
+  }
+}
+
+async function resetPrompt() {
+  try {
+    const response = await ingestionApi.setConfig({ prompt: '' });
+    savedPromptValue.value = response.data.prompt || '';
+    promptValue.value = savedPromptValue.value;
+  } catch (error: any) {
+    console.error('Failed to reset prompt:', error);
   }
 }
 
@@ -692,6 +748,75 @@ h2 {
 .btn-scan svg {
   width: 18px;
   height: 18px;
+}
+
+/* Prompt Editor */
+.prompt-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.prompt-toggle svg {
+  width: 16px;
+  height: 16px;
+  transition: transform var(--transition-base);
+  flex-shrink: 0;
+}
+
+.prompt-toggle.active svg {
+  transform: rotate(90deg);
+}
+
+.prompt-editor-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.prompt-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 100px;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-dim);
+}
+
+.prompt-help {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.prompt-help code {
+  background: var(--bg-hover);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-primary);
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 /* Claude Badge */
