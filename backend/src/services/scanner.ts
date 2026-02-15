@@ -490,7 +490,8 @@ class Scanner {
             // - Depth 1 (category folders like "Toys", "Tools"): never a model
             // - Folders starting with "~": organizational containers, never models
             // - Direct children of "Paid" folder: designer/creator folders, never models
-            if (currentPath !== rootPath && !this.isContainerFolder(currentPath, rootPath) && this.isModelFolder(currentPath)) {
+            if (currentPath !== rootPath && !this.isContainerFolder(currentPath, rootPath) &&
+                (this.isModelFolder(currentPath) || this.isPaidModelFolder(currentPath, rootPath))) {
                 // Register this folder as a model and collect all files from it + subfolders
                 this.registerModelFolder(currentPath);
                 return; // Don't recurse further - subfolders belong to this model
@@ -567,6 +568,17 @@ class Scanner {
         }
 
         return false;
+    }
+
+    /**
+     * Check if a folder is a model folder under Paid/{designer}/.
+     * Depth-3 folders under Paid are always treated as models, even if they
+     * don't directly contain model files (files may be in nested subfolders).
+     */
+    private isPaidModelFolder(folderPath: string, rootPath: string): boolean {
+        const relativePath = path.relative(rootPath, folderPath);
+        const parts = relativePath.split(path.sep);
+        return parts.length === 3 && parts[0] === 'Paid';
     }
 
     /**
