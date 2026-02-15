@@ -4,8 +4,15 @@ import path from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 import db from '../config/database.js';
 import scanner from '../services/scanner.js';
-import { isModelFile, isArchiveFile } from '../utils/fileTypes.js';
+import { isModelFile, isArchiveFile, isDocumentFile } from '../utils/fileTypes.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
+import {
+    extractDescriptionFromPdf,
+    extractLinksFromPdf,
+    classifyLinks,
+    detectPlatform,
+    extractDesignerFromFilename
+} from '../utils/pdfMetadata.js';
 
 const router = express.Router();
 
@@ -35,6 +42,12 @@ interface ScannedItem {
     isFolder: boolean;
     fileCount: number;
     fileSize: number;
+    // Rich context for AI categorization
+    modelFileNames: string[];
+    pdfDescription: string | null;
+    pdfTags: string[];
+    designer: string | null;
+    readmeText: string | null;
 }
 
 function getConfig(key: string): string | null {
@@ -132,22 +145,39 @@ async function suggestCategoriesWithClaude(
 
     const client = new Anthropic({ apiKey });
 
-    const itemList = items.map((item, i) =>
-        `${i + 1}. "${item.filename}" (${item.isFolder ? 'folder' : 'file'}, ${item.fileCount} model file${item.fileCount > 1 ? 's' : ''})`
-    ).join('\n');
+    const itemList = items.map((item, i) => {
+        const lines = [`${i + 1}. "${item.filename}"`];
+        lines.push(`   Type: ${item.isFolder ? 'folder' : 'file'}, ${item.fileCount} model file${item.fileCount > 1 ? 's' : ''}`);
+        if (item.modelFileNames.length > 0 && item.isFolder) {
+            lines.push(`   Model files: ${item.modelFileNames.join(', ')}`);
+        }
+        if (item.pdfDescription) {
+            lines.push(`   PDF description: "${item.pdfDescription}"`);
+        }
+        if (item.pdfTags.length > 0) {
+            lines.push(`   Tags from PDF: ${item.pdfTags.join(', ')}`);
+        }
+        if (item.designer) {
+            lines.push(`   Designer: ${item.designer}`);
+        }
+        if (item.readmeText) {
+            lines.push(`   Readme: "${item.readmeText}"`);
+        }
+        return lines.join('\n');
+    }).join('\n\n');
 
     const categoryList = categories.join(', ');
 
     const response = await client.messages.create({
         model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 1024,
+        max_tokens: 2048,
         messages: [{
             role: 'user',
             content: `You are categorizing 3D printing model files into an existing collection. The existing categories are:
 
 ${categoryList}
 
-For each item below, suggest the best matching category from the list above. If none fit well, use "Uncategorized". Also rate your confidence: "high" if you're quite sure, "medium" if it's a reasonable guess, "low" if you're unsure.
+For each item below, suggest the best matching category from the list above. Use ALL available context (model filenames, PDF descriptions, tags, designer info) to make your decision. If none of the existing categories fit well, use "Uncategorized". Rate your confidence: "high" if you're quite sure, "medium" if it's a reasonable guess, "low" if you're unsure.
 
 Items to categorize:
 ${itemList}
@@ -188,30 +218,97 @@ No explanation, just the JSON array.`
 
 // --- File scanning ---
 
-function countModelFiles(dirPath: string): { count: number; totalSize: number } {
-    let count = 0;
-    let totalSize = 0;
+const TEXT_EXTENSIONS = ['.txt', '.md', '.readme'];
+
+interface FolderScanResult {
+    count: number;
+    totalSize: number;
+    modelFileNames: string[];
+    pdfPaths: string[];
+    textFilePaths: string[];
+}
+
+function scanFolderContents(dirPath: string): FolderScanResult {
+    const result: FolderScanResult = {
+        count: 0,
+        totalSize: 0,
+        modelFileNames: [],
+        pdfPaths: [],
+        textFilePaths: []
+    };
 
     function walk(dir: string) {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
+            if (entry.name.startsWith('.')) continue;
             const fullPath = path.join(dir, entry.name);
             if (entry.isDirectory()) {
                 walk(fullPath);
             } else if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
-                count++;
+                result.count++;
+                if (result.modelFileNames.length < 10) {
+                    result.modelFileNames.push(entry.name);
+                }
                 try {
-                    totalSize += fs.statSync(fullPath).size;
+                    result.totalSize += fs.statSync(fullPath).size;
                 } catch { /* ignore */ }
+            } else if (isDocumentFile(fullPath)) {
+                if (result.pdfPaths.length < 3) {
+                    result.pdfPaths.push(fullPath);
+                }
+            } else if (TEXT_EXTENSIONS.includes(path.extname(fullPath).toLowerCase())) {
+                if (result.textFilePaths.length < 1) {
+                    result.textFilePaths.push(fullPath);
+                }
             }
         }
     }
 
     walk(dirPath);
-    return { count, totalSize };
+    return result;
 }
 
-function scanIngestionDir(ingestionDir: string): ScannedItem[] {
+async function extractFolderContext(scanResult: FolderScanResult): Promise<{
+    pdfDescription: string | null;
+    pdfTags: string[];
+    designer: string | null;
+    readmeText: string | null;
+}> {
+    let pdfDescription: string | null = null;
+    let pdfTags: string[] = [];
+    let designer: string | null = null;
+    let readmeText: string | null = null;
+
+    // Extract from first PDF
+    if (scanResult.pdfPaths.length > 0) {
+        const pdfPath = scanResult.pdfPaths[0];
+        const pdfFilename = path.basename(pdfPath);
+
+        // Get description via pdftotext
+        pdfDescription = await extractDescriptionFromPdf(pdfPath);
+
+        // Get links, tags, designer from PDF
+        try {
+            const links = await extractLinksFromPdf(pdfPath);
+            const platform = detectPlatform(pdfFilename);
+            const classified = classifyLinks(links, platform);
+            pdfTags = classified.tags || [];
+            designer = classified.designer || extractDesignerFromFilename(pdfFilename, platform);
+        } catch { /* ignore link extraction failures */ }
+    }
+
+    // Read first text file
+    if (scanResult.textFilePaths.length > 0) {
+        try {
+            const content = fs.readFileSync(scanResult.textFilePaths[0], 'utf-8');
+            readmeText = content.substring(0, 500).trim() || null;
+        } catch { /* ignore */ }
+    }
+
+    return { pdfDescription, pdfTags, designer, readmeText };
+}
+
+async function scanIngestionDir(ingestionDir: string): Promise<ScannedItem[]> {
     const items: ScannedItem[] = [];
     const entries = fs.readdirSync(ingestionDir, { withFileTypes: true });
 
@@ -221,14 +318,17 @@ function scanIngestionDir(ingestionDir: string): ScannedItem[] {
         const fullPath = path.join(ingestionDir, entry.name);
 
         if (entry.isDirectory()) {
-            const { count, totalSize } = countModelFiles(fullPath);
-            if (count > 0) {
+            const scanResult = scanFolderContents(fullPath);
+            if (scanResult.count > 0) {
+                const context = await extractFolderContext(scanResult);
                 items.push({
                     filename: entry.name,
                     filepath: fullPath,
                     isFolder: true,
-                    fileCount: count,
-                    fileSize: totalSize
+                    fileCount: scanResult.count,
+                    fileSize: scanResult.totalSize,
+                    modelFileNames: scanResult.modelFileNames,
+                    ...context
                 });
             }
         } else if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
@@ -240,7 +340,12 @@ function scanIngestionDir(ingestionDir: string): ScannedItem[] {
                 filepath: fullPath,
                 isFolder: false,
                 fileCount: 1,
-                fileSize
+                fileSize,
+                modelFileNames: [entry.name],
+                pdfDescription: null,
+                pdfTags: [],
+                designer: null,
+                readmeText: null
             });
         }
     }
@@ -300,7 +405,7 @@ router.get('/scan', async (req, res) => {
         }
 
         const categories = getExistingCategories();
-        const scannedItems = scanIngestionDir(ingestionDir);
+        const scannedItems = await scanIngestionDir(ingestionDir);
 
         if (scannedItems.length === 0) {
             return res.json({ items: [], usedClaude: false });
@@ -321,16 +426,31 @@ router.get('/scan', async (req, res) => {
 
         const items: IngestionItem[] = scannedItems.map(item => {
             const claudeSuggestion = claudeSuggestions?.get(item.filepath);
+            let suggestedCategory: string;
+            let confidence: 'high' | 'medium' | 'low';
+
             if (claudeSuggestion) {
-                return { ...item, ...claudeSuggestion, suggestedCategory: claudeSuggestion.category };
+                suggestedCategory = claudeSuggestion.category;
+                confidence = claudeSuggestion.confidence;
+            } else {
+                // Fuzzy fallback
+                const nameForMatch = item.isFolder
+                    ? item.filename
+                    : path.basename(item.filename, path.extname(item.filename));
+                const fuzzy = suggestCategoryFuzzy(nameForMatch, categories);
+                suggestedCategory = fuzzy.category;
+                confidence = fuzzy.confidence;
             }
 
-            // Fuzzy fallback
-            const nameForMatch = item.isFolder
-                ? item.filename
-                : path.basename(item.filename, path.extname(item.filename));
-            const fuzzy = suggestCategoryFuzzy(nameForMatch, categories);
-            return { ...item, suggestedCategory: fuzzy.category, confidence: fuzzy.confidence };
+            return {
+                filename: item.filename,
+                filepath: item.filepath,
+                isFolder: item.isFolder,
+                fileCount: item.fileCount,
+                fileSize: item.fileSize,
+                suggestedCategory,
+                confidence
+            };
         });
 
         res.json({ items, usedClaude });

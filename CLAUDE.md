@@ -475,7 +475,7 @@ The app integrates with macOS Finder tags to sync print status:
 - **Ingestion view**: Dedicated "Import" tab for importing models from an external folder (e.g., Downloads)
 - **Configurable directory**: Ingestion folder path stored in config table (default: `/Users/kyle/Downloads`)
 - **Auto-scan**: Scans ingestion folder for model files and folders containing model files
-- **AI-powered categorization**: When an Anthropic API key is configured, uses Claude (Sonnet) to suggest categories based on item names and existing collection categories
+- **AI-powered categorization**: When an Anthropic API key is configured, uses Claude (Sonnet) to suggest categories with rich context: nested model filenames, PDF descriptions/tags/designer info (via `pdftotext`/`pdftohtml`), and README text
 - **Fuzzy matching fallback**: When no API key is set or Claude fails, falls back to fuzzy word-matching with noise word filtering (common 3D printing terms like "free", "3d", "print", "model" are excluded)
 - **API key management**: Anthropic API key can be configured, updated, or cleared from the ingestion view; stored in config table
 - **Confidence indicators**: Each suggestion shows a colored dot (green=high, yellow=medium, gray=low) indicating match confidence
