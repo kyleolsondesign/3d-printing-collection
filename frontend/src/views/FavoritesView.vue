@@ -57,9 +57,14 @@
       <p>Star models from the Browse page to add them here.</p>
     </div>
 
+    <div v-else-if="filteredFavorites.length === 0" class="empty">
+      <h3>No matches</h3>
+      <p>No favorites match your search.</p>
+    </div>
+
     <div v-else class="favorites-list">
       <div
-        v-for="(fav, index) in favorites"
+        v-for="(fav, index) in filteredFavorites"
         :key="fav.id"
         :class="['favorite-card', { selected: selectedItems.has(fav.model_id) }]"
         :style="{ animationDelay: `${index * 50}ms` }"
@@ -118,11 +123,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { favoritesApi, modelsApi } from '../services/api';
+import { useAppStore } from '../store';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 
+const store = useAppStore();
 const favorites = ref<any[]>([]);
+
+const filteredFavorites = computed(() => {
+  const q = store.globalSearchQuery.toLowerCase();
+  if (!q) return favorites.value;
+  return favorites.value.filter((f: any) => f.filename?.toLowerCase().includes(q));
+});
+
+onUnmounted(() => {
+  if (store.globalSearchQuery) store.clearGlobalSearch();
+});
 const loading = ref(true);
 const selectedModelId = ref<number | null>(null);
 

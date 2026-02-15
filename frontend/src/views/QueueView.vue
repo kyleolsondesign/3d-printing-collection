@@ -57,9 +57,14 @@
       <p>Add models to your print queue from the Browse page.</p>
     </div>
 
+    <div v-else-if="filteredQueue.length === 0" class="empty">
+      <h3>No matches</h3>
+      <p>No queue items match your search.</p>
+    </div>
+
     <div v-else class="queue-list">
       <div
-        v-for="(item, index) in queue"
+        v-for="(item, index) in filteredQueue"
         :key="item.id"
         :class="['queue-card', {
           selected: selectedItems.has(item.model_id),
@@ -139,11 +144,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { queueApi, printedApi, modelsApi } from '../services/api';
+import { useAppStore } from '../store';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 
+const store = useAppStore();
 const queue = ref<any[]>([]);
+
+const filteredQueue = computed(() => {
+  const q = store.globalSearchQuery.toLowerCase();
+  if (!q) return queue.value;
+  return queue.value.filter((item: any) => item.filename?.toLowerCase().includes(q));
+});
+
+onUnmounted(() => {
+  if (store.globalSearchQuery) store.clearGlobalSearch();
+});
 const loading = ref(true);
 const selectedModelId = ref<number | null>(null);
 

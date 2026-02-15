@@ -513,7 +513,18 @@ onMounted(async () => {
   isInitialized.value = true;
 });
 
+// Re-initialize when URL query params change (e.g., clicking Browse nav link clears ?q=...)
+watch(() => route.query, () => {
+  if (isInitialized.value) {
+    initFromQueryParams();
+  }
+});
+
 onUnmounted(() => {
+  // Clear search state when leaving browse
+  if (store.globalSearchQuery) {
+    store.clearGlobalSearch();
+  }
   if (observer) {
     observer.disconnect();
   }

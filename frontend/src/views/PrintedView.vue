@@ -24,9 +24,14 @@
       <p>Your print history will appear here once you start tracking prints.</p>
     </div>
 
+    <div v-else-if="filteredPrinted.length === 0" class="empty">
+      <h3>No matches</h3>
+      <p>No printed models match your search.</p>
+    </div>
+
     <div v-else class="printed-list">
       <div
-        v-for="(item, index) in printed"
+        v-for="(item, index) in filteredPrinted"
         :key="item.id"
         class="printed-card"
         :style="{ animationDelay: `${index * 50}ms` }"
@@ -108,11 +113,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { printedApi, modelsApi } from '../services/api';
+import { useAppStore } from '../store';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 
+const store = useAppStore();
 const printed = ref<any[]>([]);
+
+const filteredPrinted = computed(() => {
+  const q = store.globalSearchQuery.toLowerCase();
+  if (!q) return printed.value;
+  return printed.value.filter((item: any) => item.filename?.toLowerCase().includes(q));
+});
+
+onUnmounted(() => {
+  if (store.globalSearchQuery) store.clearGlobalSearch();
+});
 const loading = ref(true);
 const selectedModelId = ref<number | null>(null);
 

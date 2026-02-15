@@ -129,10 +129,6 @@ async function loadLooseFilesCount() {
 function handleSearch() {
   if (searchInput.value.trim()) {
     store.setGlobalSearch(searchInput.value.trim());
-    // Navigate to browse if not already there
-    if (route.name !== 'browse') {
-      router.push('/');
-    }
   }
 }
 
@@ -145,14 +141,6 @@ function clearSearch() {
 watch(() => store.globalSearchQuery, (newVal) => {
   searchInput.value = newVal;
 }, { immediate: true });
-
-// Clear search when navigating between tabs
-watch(() => route.name, () => {
-  if (searchInput.value) {
-    searchInput.value = '';
-    store.clearGlobalSearch();
-  }
-});
 
 const searchPlaceholder = computed(() => {
   const placeholders: Record<string, string> = {
