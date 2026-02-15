@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
     "better-sqlite3": "^9.2.2",
     "cors": "^2.8.5",
     "express": "^4.18.2",

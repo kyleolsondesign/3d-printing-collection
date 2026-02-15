@@ -53,6 +53,8 @@
 - [ ] When clicking on image preview in model view, allow full-size viewing of the images, taking over left/right keyboard navigation to look through the images. Escape should return to the modal view.
 - [ ] Detect duplicate images for a single model and hide duplicates. These might have the same visual content but not the same size, filetype or compression. Always choose to keep the highest quality image.
 - [x] Create a new ingestion view, which scans an ingestion folder that can be configured (default: `/Users/kyle/Downloads`) for models that are uncategorized. The ingestion tool should propose existing categories for the models into automatically. There should UI to accept the suggestions, which will also move the models into the appropriate category folder.
+- [ ] Give me an overall progress indicator when batch importing
+- [ ] Rescanning a model or extracting zip breaks the link from the page to launch the modal and breaks the deep-linking to the modal on refresh, because the ID changes. Can we either keep the original ID or update the view to reflect the new ID both in the links and the query params? After extracting a zip file from the modal view for a model, refresh the modal view. While extracting, give a progress indicator
 
 ---
 

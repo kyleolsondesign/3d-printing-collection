@@ -10,30 +10,68 @@
 
     <!-- Config Bar -->
     <div class="config-bar">
-      <div class="config-left">
-        <label class="config-label">Ingestion folder</label>
-        <div class="config-path-row">
-          <template v-if="editingPath">
-            <input
-              v-model="editPathValue"
-              class="path-input"
-              @keydown.enter="savePath"
-              @keydown.escape="editingPath = false"
-              ref="pathInputRef"
-              placeholder="/path/to/folder"
-            />
-            <button @click="savePath" class="btn-sm btn-primary">Save</button>
-            <button @click="editingPath = false" class="btn-sm btn-ghost">Cancel</button>
-          </template>
-          <template v-else>
-            <span class="config-path">{{ ingestionDir || 'Not configured' }}</span>
-            <button @click="startEditPath" class="btn-sm btn-ghost" title="Change folder">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
-          </template>
+      <div class="config-sections">
+        <div class="config-row">
+          <label class="config-label">Ingestion folder</label>
+          <div class="config-path-row">
+            <template v-if="editingPath">
+              <input
+                v-model="editPathValue"
+                class="path-input"
+                @keydown.enter="savePath"
+                @keydown.escape="editingPath = false"
+                ref="pathInputRef"
+                placeholder="/path/to/folder"
+              />
+              <button @click="savePath" class="btn-sm btn-primary">Save</button>
+              <button @click="editingPath = false" class="btn-sm btn-ghost">Cancel</button>
+            </template>
+            <template v-else>
+              <span class="config-path">{{ ingestionDir || 'Not configured' }}</span>
+              <button @click="startEditPath" class="btn-sm btn-ghost" title="Change folder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+            </template>
+          </div>
+        </div>
+        <div class="config-row">
+          <label class="config-label">
+            Claude API key
+            <span class="config-hint">(enables AI-powered category suggestions)</span>
+          </label>
+          <div class="config-path-row">
+            <template v-if="editingApiKey">
+              <input
+                v-model="editApiKeyValue"
+                class="path-input"
+                type="password"
+                @keydown.enter="saveApiKey"
+                @keydown.escape="editingApiKey = false"
+                placeholder="sk-ant-..."
+              />
+              <button @click="saveApiKey" class="btn-sm btn-primary">Save</button>
+              <button @click="editingApiKey = false" class="btn-sm btn-ghost">Cancel</button>
+            </template>
+            <template v-else>
+              <span class="config-path" :class="{ configured: hasApiKey, unconfigured: !hasApiKey }">
+                {{ hasApiKey ? 'Configured' : 'Not set' }}
+              </span>
+              <button @click="editingApiKey = true; editApiKeyValue = ''" class="btn-sm btn-ghost" :title="hasApiKey ? 'Change API key' : 'Set API key'">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+              <button v-if="hasApiKey" @click="clearApiKey" class="btn-sm btn-ghost" title="Remove API key">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </template>
+          </div>
         </div>
       </div>
       <button @click="scanFolder" class="btn-scan" :disabled="scanning || !ingestionDir">
@@ -46,6 +84,15 @@
         </svg>
         {{ scanning ? 'Scanning...' : 'Scan' }}
       </button>
+    </div>
+
+    <!-- Claude indicator -->
+    <div v-if="usedClaude && items.length > 0" class="claude-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2a7 7 0 017 7c0 3-2 5.5-5 7-.5.25-1 .5-1.5.5H11.5c-.5 0-1-.25-1.5-.5-3-1.5-5-4-5-7a7 7 0 017-7z"/>
+        <path d="M9 22h6M12 18v4"/>
+      </svg>
+      Categories suggested by Claude
     </div>
 
     <!-- Results Panel -->
@@ -247,14 +294,18 @@ interface ImportResults {
 }
 
 const ingestionDir = ref('');
+const hasApiKey = ref(false);
 const editingPath = ref(false);
 const editPathValue = ref('');
+const editingApiKey = ref(false);
+const editApiKeyValue = ref('');
 const pathInputRef = ref<HTMLInputElement | null>(null);
 const items = ref<IngestionItem[]>([]);
 const categories = ref<string[]>([]);
 const scanning = ref(false);
 const importing = ref(false);
 const hasScanned = ref(false);
+const usedClaude = ref(false);
 const selectedIds = ref<Set<string>>(new Set());
 const importingPaths = ref<Set<string>>(new Set());
 const lastResults = ref<ImportResults | null>(null);
@@ -279,6 +330,7 @@ async function loadConfig() {
   try {
     const response = await ingestionApi.getConfig();
     ingestionDir.value = response.data.directory || '';
+    hasApiKey.value = response.data.hasApiKey || false;
   } catch (error) {
     console.error('Failed to load ingestion config:', error);
   }
@@ -307,8 +359,9 @@ async function savePath() {
   if (!newPath) return;
 
   try {
-    await ingestionApi.setConfig(newPath);
-    ingestionDir.value = newPath;
+    const response = await ingestionApi.setConfig({ directory: newPath });
+    ingestionDir.value = response.data.directory;
+    hasApiKey.value = response.data.hasApiKey;
     editingPath.value = false;
     // Auto-scan after changing path
     await scanFolder();
@@ -318,10 +371,39 @@ async function savePath() {
   }
 }
 
+async function saveApiKey() {
+  const key = editApiKeyValue.value.trim();
+  if (!key) return;
+
+  try {
+    const response = await ingestionApi.setConfig({ apiKey: key });
+    hasApiKey.value = response.data.hasApiKey;
+    editingApiKey.value = false;
+    editApiKeyValue.value = '';
+    // Re-scan to get Claude suggestions
+    if (items.value.length > 0 || hasScanned.value) {
+      await scanFolder();
+    }
+  } catch (error: any) {
+    console.error('Failed to save API key:', error);
+    alert(error.response?.data?.error || 'Failed to save API key');
+  }
+}
+
+async function clearApiKey() {
+  try {
+    const response = await ingestionApi.setConfig({ apiKey: '' });
+    hasApiKey.value = response.data.hasApiKey;
+  } catch (error) {
+    console.error('Failed to clear API key:', error);
+  }
+}
+
 async function scanFolder() {
   scanning.value = true;
   hasScanned.value = false;
   items.value = [];
+  usedClaude.value = false;
   selectedIds.value.clear();
 
   try {
@@ -330,6 +412,7 @@ async function scanFolder() {
       ...item,
       selectedCategory: item.suggestedCategory
     }));
+    usedClaude.value = response.data.usedClaude || false;
     hasScanned.value = true;
   } catch (error: any) {
     console.error('Failed to scan:', error);
@@ -483,9 +566,26 @@ h2 {
   gap: 1rem;
 }
 
-.config-left {
+.config-sections {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.config-hint {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .config-label {
@@ -592,6 +692,37 @@ h2 {
 .btn-scan svg {
   width: 18px;
   height: 18px;
+}
+
+/* Claude Badge */
+.claude-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: var(--radius-md);
+  color: rgb(167, 139, 250);
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+
+.claude-badge svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Config state indicators */
+.config-path.configured {
+  color: var(--success);
+}
+
+.config-path.unconfigured {
+  color: var(--text-tertiary);
+  font-style: italic;
 }
 
 /* Results Panel */
