@@ -47,12 +47,14 @@
 - [x] Clicking the "browse" button when in the search results view clears the query param in the URL but does not reset the results to the unfiltered browse page
 - [x] The search field should clear when changing between tabs (e.g. "browse" vs. "favorites"), and should always be a way to filter the current view. For example, if you're on the favorites tab, it should search within the favorites. The placeholder text within it should reflect this behavior as well. It should only be a global search of models when on the browse tab.
 - [x] On the "loose-files" view, clicking on the ".file-card" outside of a button within the file card should toggle the batch checkbox for that item
-- [ ] After organizing loose files, it should show a summary of every change made, within the "Organized N of N files" box. It should also give status updates as it is organizing in batch.
+- [x] After organizing loose files, it should show a summary of every change made, within the "Organized N of N files" box. It should also give status updates as it is organizing in batch.
 - [ ] All tabs except "loose files" should use the same card and table view, with the option to switch between. Clicking the name, date added, date created, and category table headers in the table view should update the sorting and query param. Clicking the active sort header should toggle the sort direction.
-- [ ] Search bar does not work on loose files tab. Should search amongst the loose files. Does not work on settings tab. For settings tab it should bring you to browse and then search within browse when you submit a search query
+- [x] Search bar does not work on loose files tab. Should search amongst the loose files. Does not work on settings tab. For settings tab it should bring you to browse and then search within browse when you submit a search query
+- [ ] When clicking on image preview in model view, allow full-size viewing of the images, taking over left/right keyboard navigation to look through the images. Escape should return to the modal view.
 
 ---
 
+- [ ] Designer browsing: A dedicated view or filter to browse models grouped by designer (extracted from PDF metadata). Show designer name, model count, and link to their profile URL if available. Add a full record for designers. Use the folder structure under "Shared 3D Models/Paid/{designer}" to infer the designer name for paid models and create those relationships for the models as well. Allow editing/adding attributes for the designer record within the designer page view
 - [ ] Duplicate detection: Find potential duplicate models based on filename similarity (fuzzy matching) and/or file hashes. Show a dedicated review page where you can compare duplicates side-by-side and choose to merge or delete.
 - [ ] Custom tags: Allow users to create and assign custom tags to models (beyond the auto-detected category). Tags should be searchable and filterable from the browse view. The database schema already supports this via the `tags` and `model_tags` tables.
 - [ ] Statistics dashboard: A dedicated stats page showing collection insights — total storage used, models per category (bar chart), prints over time (line chart), good vs bad print ratio, most-printed categories, average files per model, etc.
@@ -60,9 +62,10 @@
 - [ ] Lazy loading / virtual scrolling for images: Only load thumbnail images that are currently visible in the viewport. For large collections, loading all 50 card images at once causes unnecessary network traffic and slow initial render.
 - [ ] Batch category reassignment: Allow selecting multiple models on the browse page and moving them to a different category. This would involve renaming the parent folder on disk and updating the database.
 - [ ] Model notes: Add a free-text notes field to any model (not just printed ones). Useful for recording slicer settings, material recommendations, or assembly instructions. Editable from the details modal.
-- [ ] Designer browsing: A dedicated view or filter to browse models grouped by designer (extracted from PDF metadata). Show designer name, model count, and link to their profile URL if available.
-- [ ] Saved searches / smart collections: Allow saving search queries + filter combinations as named collections (e.g., "Unpainted toys", "Large prints to try"). These would appear as quick-access buttons or a sidebar section.
-- [ ] Image gallery mode: A full-screen, image-focused browsing mode with larger thumbnails in a masonry or justified grid layout. Clicking opens the model details. Good for visual browsing when you know what something looks like but not its name.
-- [ ] Print time and filament tracking: The `printed_models` table already has `print_time_hours` and `filament_used_grams` columns. Add UI in the printed view and modal to record and display these, with totals in the stats dashboard.
+- [x] Saved searches / smart collections: Allow saving search queries + filter combinations as named collections (e.g., "Unpainted toys", "Large prints to try"). These would appear as quick-access buttons or a sidebar section.
+- [x] Image gallery mode: A full-screen, image-focused browsing mode with larger thumbnails in a masonry or justified grid layout. Clicking opens the model details. Good for visual browsing when you know what something looks like but not its name.
+- [x] Print time and filament tracking: The `printed_models` table already has `print_time_hours` and `filament_used_grams` columns. Add UI in the printed view and modal to record and display these, with totals in the stats dashboard.
 - [ ] File system watcher: Use `fs.watch` or `chokidar` to monitor the model directory for changes and automatically trigger incremental scans when files are added, moved, or deleted. Eliminates the need for manual re-scans.
 - [ ] Keyboard shortcuts for browse: Add hotkeys for common actions while browsing — `f` to toggle favorite, `q` to toggle queue, `p` to cycle printed, `s` to toggle selection mode, `/` to focus search bar. Show a keyboard shortcut help overlay with `?`.
+
+---

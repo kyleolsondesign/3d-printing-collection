@@ -313,6 +313,8 @@ For models without standalone images, the scanner automatically extracts images 
   - Example: `Toys/model.stl` is loose (needs a folder), `Toys/MyModel/model.stl` is indexed
 - **Loose files review page**: Dedicated page to review and organize unorganized files
   - Click anywhere on a file card to toggle selection (buttons use `@click.stop`)
+  - Search filtering: Global search bar filters loose files by filename, file type, and category
+  - Organize summary: After organizing files, a detailed per-file results panel shows each file's outcome (success with new folder name, or failure with error message)
 - **Show in Finder**: Button on each model card to quickly open the containing folder
 - **Multi-tag support**: Models can have multiple tags/categories (database schema ready, UI pending)
 
@@ -380,6 +382,7 @@ The app integrates with macOS Finder tags to sync print status:
 ### Global Navigation & Search
 - **Global search bar**: Search input moved to navbar, accessible from any view
 - **Context-aware search**: Search results show in the current view's format with thumbnails and status
+- **Settings search redirect**: Searching from the settings tab redirects to browse and applies the search there
 - **Search clears on tab change**: Navigating between tabs clears the search field and results
 - **Dynamic placeholder**: Search placeholder reflects the current view (e.g., "Search favorites...")
 - **URL query params**: State is synced to URL for deep-linking

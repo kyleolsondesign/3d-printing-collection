@@ -3,7 +3,7 @@
     <div class="header">
       <div class="header-left">
         <h2>Loose Files</h2>
-        <span class="count-badge warning" v-if="looseFiles.length > 0">{{ looseFiles.length }}</span>
+        <span class="count-badge warning" v-if="looseFiles.length > 0">{{ store.globalSearchQuery ? filteredLooseFiles.length : looseFiles.length }}</span>
       </div>
       <p class="subtitle">Model files that need to be organized into folders</p>
     </div>
@@ -60,23 +60,47 @@
 
       <!-- Results Panel -->
       <div v-if="lastResults" class="results-panel" :class="{ success: lastResults.succeeded > 0, error: lastResults.failed > 0 && lastResults.succeeded === 0 }">
-        <div class="results-header">
-          <svg v-if="lastResults.succeeded > 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 12l2 2 4-4"/>
-            <circle cx="12" cy="12" r="10"/>
-          </svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M15 9l-6 6M9 9l6 6"/>
-          </svg>
-          <span>
-            Organized {{ lastResults.succeeded }} of {{ lastResults.total }} file{{ lastResults.total > 1 ? 's' : '' }}
-            <template v-if="lastResults.failed > 0">
-              ({{ lastResults.failed }} failed)
-            </template>
-          </span>
+        <div class="results-content">
+          <div class="results-header">
+            <svg v-if="lastResults.succeeded > 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 12l2 2 4-4"/>
+              <circle cx="12" cy="12" r="10"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M15 9l-6 6M9 9l6 6"/>
+            </svg>
+            <span>
+              Organized {{ lastResults.succeeded }} of {{ lastResults.total }} file{{ lastResults.total > 1 ? 's' : '' }}
+              <template v-if="lastResults.failed > 0">
+                ({{ lastResults.failed }} failed)
+              </template>
+            </span>
+            <button @click="lastResults = null" class="dismiss-btn">Dismiss</button>
+          </div>
+          <div v-if="lastResults.details && lastResults.details.length > 0" class="results-details">
+            <div
+              v-for="(detail, i) in lastResults.details"
+              :key="i"
+              class="result-item"
+              :class="{ success: detail.success, error: !detail.success }"
+            >
+              <svg v-if="detail.success" class="result-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 12l2 2 4-4"/>
+              </svg>
+              <svg v-else class="result-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+              <span class="result-filename">{{ detail.filename }}</span>
+              <span v-if="detail.success && detail.folderName" class="result-folder">
+                &rarr; {{ detail.folderName }}/
+              </span>
+              <span v-if="!detail.success && detail.error" class="result-error">
+                {{ detail.error }}
+              </span>
+            </div>
+          </div>
         </div>
-        <button @click="lastResults = null" class="dismiss-btn">Dismiss</button>
       </div>
 
       <div class="info-box">
@@ -92,9 +116,20 @@
         </div>
       </div>
 
-      <div class="loose-files-list">
+      <div v-if="filteredLooseFiles.length === 0 && store.globalSearchQuery" class="empty">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+        </div>
+        <h3>No matching files</h3>
+        <p>No loose files match "{{ store.globalSearchQuery }}"</p>
+      </div>
+
+      <div v-else class="loose-files-list">
         <div
-          v-for="(file, index) in looseFiles"
+          v-for="(file, index) in filteredLooseFiles"
           :key="file.id"
           class="file-card"
           :class="{ selected: selectedIds.has(file.id), organizing: organizingIds.has(file.id) }"
@@ -153,8 +188,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { systemApi } from '../services/api';
+import { useAppStore } from '../store';
 
 interface LooseFile {
   id: number;
@@ -166,12 +202,21 @@ interface LooseFile {
   discovered_at: string;
 }
 
+interface OrganizeDetail {
+  filename: string;
+  success: boolean;
+  error?: string;
+  folderName?: string;
+}
+
 interface OrganizeResults {
   total: number;
   succeeded: number;
   failed: number;
+  details: OrganizeDetail[];
 }
 
+const store = useAppStore();
 const looseFiles = ref<LooseFile[]>([]);
 const loading = ref(true);
 const organizing = ref(false);
@@ -179,16 +224,30 @@ const selectedIds = ref<Set<number>>(new Set());
 const organizingIds = ref<Set<number>>(new Set());
 const lastResults = ref<OrganizeResults | null>(null);
 
+const filteredLooseFiles = computed(() => {
+  const query = store.globalSearchQuery.toLowerCase();
+  if (!query) return looseFiles.value;
+  return looseFiles.value.filter(f =>
+    f.filename.toLowerCase().includes(query) ||
+    f.file_type.toLowerCase().includes(query) ||
+    (f.category && f.category.toLowerCase().includes(query))
+  );
+});
+
 const isAllSelected = computed(() =>
-  looseFiles.value.length > 0 && selectedIds.value.size === looseFiles.value.length
+  filteredLooseFiles.value.length > 0 && selectedIds.value.size === filteredLooseFiles.value.length
 );
 
 const isPartiallySelected = computed(() =>
-  selectedIds.value.size > 0 && selectedIds.value.size < looseFiles.value.length
+  selectedIds.value.size > 0 && selectedIds.value.size < filteredLooseFiles.value.length
 );
 
 onMounted(async () => {
   await loadLooseFiles();
+});
+
+onUnmounted(() => {
+  store.clearGlobalSearch();
 });
 
 async function loadLooseFiles() {
@@ -219,21 +278,30 @@ function toggleSelectAll() {
   if (isAllSelected.value) {
     selectedIds.value = new Set();
   } else {
-    selectedIds.value = new Set(looseFiles.value.map(f => f.id));
+    selectedIds.value = new Set(filteredLooseFiles.value.map(f => f.id));
   }
 }
 
 async function organizeFile(file: LooseFile) {
   organizingIds.value.add(file.id);
   try {
-    await systemApi.organizeLooseFile(file.id);
-    lastResults.value = { total: 1, succeeded: 1, failed: 0 };
+    const response = await systemApi.organizeLooseFile(file.id);
+    const folderName = response.data.organized?.newFolderPath
+      ? response.data.organized.newFolderPath.split('/').pop()
+      : undefined;
+    lastResults.value = {
+      total: 1, succeeded: 1, failed: 0,
+      details: [{ filename: file.filename, success: true, folderName }]
+    };
     // Remove from local list
     looseFiles.value = looseFiles.value.filter(f => f.id !== file.id);
     selectedIds.value.delete(file.id);
   } catch (error) {
     console.error('Failed to organize file:', error);
-    lastResults.value = { total: 1, succeeded: 0, failed: 1 };
+    lastResults.value = {
+      total: 1, succeeded: 0, failed: 1,
+      details: [{ filename: file.filename, success: false, error: 'Organization failed' }]
+    };
   } finally {
     organizingIds.value.delete(file.id);
   }
@@ -245,18 +313,33 @@ async function organizeSelected() {
   organizing.value = true;
   const idsToOrganize = [...selectedIds.value];
 
+  // Build a lookup of filenames before the request
+  const filenameLookup = new Map<number, string>();
+  looseFiles.value.forEach(f => filenameLookup.set(f.id, f.filename));
+
   // Mark all as organizing
   idsToOrganize.forEach(id => organizingIds.value.add(id));
 
   try {
     const response = await systemApi.organizeLooseFiles(idsToOrganize);
-    lastResults.value = response.data.summary;
+    const details: OrganizeDetail[] = (response.data.results || []).map((r: any) => ({
+      filename: filenameLookup.get(r.looseFileId) || `File #${r.looseFileId}`,
+      success: r.success,
+      error: r.error,
+      folderName: r.model?.filename
+    }));
+    lastResults.value = { ...response.data.summary, details };
 
     // Reload the list
     await loadLooseFiles();
   } catch (error) {
     console.error('Failed to organize files:', error);
-    lastResults.value = { total: idsToOrganize.length, succeeded: 0, failed: idsToOrganize.length };
+    const details: OrganizeDetail[] = idsToOrganize.map(id => ({
+      filename: filenameLookup.get(id) || `File #${id}`,
+      success: false,
+      error: 'Request failed'
+    }));
+    lastResults.value = { total: idsToOrganize.length, succeeded: 0, failed: idsToOrganize.length, details };
   } finally {
     organizing.value = false;
     organizingIds.value.clear();
@@ -399,13 +482,16 @@ h2 {
 
 /* Results Panel */
 .results-panel {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 1rem 1.25rem;
   border-radius: var(--radius-lg);
   margin-bottom: 1rem;
   animation: slideIn 0.3s ease-out;
+}
+
+.results-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .results-panel.success {
@@ -436,9 +522,11 @@ h2 {
 .results-header svg {
   width: 20px;
   height: 20px;
+  flex-shrink: 0;
 }
 
 .dismiss-btn {
+  margin-left: auto;
   padding: 0.375rem 0.75rem;
   background: transparent;
   border: 1px solid currentColor;
@@ -448,10 +536,60 @@ h2 {
   cursor: pointer;
   opacity: 0.7;
   transition: opacity var(--transition-base);
+  flex-shrink: 0;
 }
 
 .dismiss-btn:hover {
   opacity: 1;
+}
+
+.results-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-left: 2rem;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.result-item.success {
+  color: var(--success);
+}
+
+.result-item.error {
+  color: var(--danger);
+}
+
+.result-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.result-filename {
+  font-weight: 500;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.result-folder {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.result-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-style: italic;
 }
 
 @keyframes slideIn {
