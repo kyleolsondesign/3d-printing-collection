@@ -51,6 +51,8 @@
 - [ ] All tabs except "loose files" should use the same card and table view, with the option to switch between. Clicking the name, date added, date created, and category table headers in the table view should update the sorting and query param. Clicking the active sort header should toggle the sort direction.
 - [x] Search bar does not work on loose files tab. Should search amongst the loose files. Does not work on settings tab. For settings tab it should bring you to browse and then search within browse when you submit a search query
 - [ ] When clicking on image preview in model view, allow full-size viewing of the images, taking over left/right keyboard navigation to look through the images. Escape should return to the modal view.
+- [ ] Detect duplicate images for a single model and hide duplicates. These might have the same visual content but not the same size, filetype or compression. Always choose to keep the highest quality image.
+- [x] Create a new ingestion view, which scans an ingestion folder that can be configured (default: `/Users/kyle/Downloads`) for models that are uncategorized. The ingestion tool should propose existing categories for the models into automatically. There should UI to accept the suggestions, which will also move the models into the appropriate category folder.
 
 ---
 

@@ -91,6 +91,7 @@ backend/
       printed.ts          # Print history tracking
       queue.ts            # Print queue management
       system.ts           # Config, scanning, stats
+      ingestion.ts        # Model ingestion from external folders
     services/
       scanner.ts          # Directory scanning and indexing
     utils/
@@ -110,6 +111,7 @@ frontend/
       PrintedView.vue     # Print history
       QueueView.vue       # Print queue
       LooseFilesView.vue  # Review and organize loose files
+      IngestionView.vue   # Import models from external folder
       SettingsView.vue    # Configuration and scanning
     router/
       index.ts            # Vue Router setup
@@ -196,6 +198,7 @@ All API endpoints are in `/api/*`:
 - `/api/system` - Config, scanning, statistics, loose files
 - `/api/system/loose-files` - Get all loose files that need organizing
 - `/api/system/open-folder` - Open a folder in macOS Finder
+- `/api/ingestion` - Model ingestion from external folders (scan, config, import)
 
 File serving uses secure path validation to prevent directory traversal attacks (backend/src/routes/models.ts).
 
@@ -467,6 +470,17 @@ The app integrates with macOS Finder tags to sync print status:
 - **Database**: `make_images` table links photos to `printed_models` records
 - **Upload handling**: Uses multer middleware with 20MB limit, image-only file filter
 - **Serving**: Make images served via `/api/printed/make-image/:filename`
+
+### Model Ingestion
+- **Ingestion view**: Dedicated "Import" tab for importing models from an external folder (e.g., Downloads)
+- **Configurable directory**: Ingestion folder path stored in config table (default: `/Users/kyle/Downloads`)
+- **Auto-scan**: Scans ingestion folder for model files and folders containing model files
+- **Category suggestion**: Fuzzy-matches item names against existing categories with confidence indicators (high/medium/low)
+- **Editable categories**: Users can accept, change, or type new category names before importing
+- **Bulk import**: Select multiple items and import them all at once with per-item results
+- **File organization**: Single files get wrapped in cleaned-up folders; existing folders are moved as-is into the category directory
+- **Auto-indexing**: After moving files, calls `scanner.scanSingleFolder()` to index the new model
+- **API endpoints**: `GET/POST /api/ingestion/config`, `GET /api/ingestion/scan`, `POST /api/ingestion/import`
 
 ## Future Enhancements
 - 3D model preview (STL viewer)

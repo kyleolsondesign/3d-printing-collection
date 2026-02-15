@@ -182,4 +182,13 @@ export const systemApi = {
     organizeLooseFiles: (looseFileIds: number[]) => api.post('/system/organize-loose-files', { looseFileIds })
 };
 
+// Ingestion API
+export const ingestionApi = {
+    getConfig: () => api.get('/ingestion/config'),
+    setConfig: (directory: string) => api.post('/ingestion/config', { directory }),
+    scan: () => api.get('/ingestion/scan'),
+    importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean }>) =>
+        api.post('/ingestion/import', { items })
+};
+
 export default api;

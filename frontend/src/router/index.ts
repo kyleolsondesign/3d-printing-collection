@@ -4,6 +4,7 @@ import FavoritesView from '../views/FavoritesView.vue';
 import PrintedView from '../views/PrintedView.vue';
 import QueueView from '../views/QueueView.vue';
 import LooseFilesView from '../views/LooseFilesView.vue';
+import IngestionView from '../views/IngestionView.vue';
 import SettingsView from '../views/SettingsView.vue';
 
 const router = createRouter({
@@ -33,6 +34,11 @@ const router = createRouter({
             path: '/loose-files',
             name: 'loose-files',
             component: LooseFilesView
+        },
+        {
+            path: '/ingestion',
+            name: 'ingestion',
+            component: IngestionView
         },
         {
             path: '/settings',

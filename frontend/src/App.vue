@@ -59,6 +59,16 @@
           <span class="nav-label">Loose</span>
           <span v-if="looseFilesCount > 0" class="badge badge-warning">{{ looseFilesCount }}</span>
         </router-link>
+        <router-link to="/ingestion" :class="{ active: $route.name === 'ingestion' }">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              <path d="M7 10l5 5 5-5"/>
+              <path d="M12 15V3"/>
+            </svg>
+          </span>
+          <span class="nav-label">Import</span>
+        </router-link>
         <router-link to="/settings" :class="{ active: $route.name === 'settings' }">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -128,7 +138,7 @@ async function loadLooseFilesCount() {
 
 function handleSearch() {
   if (searchInput.value.trim()) {
-    if (route.name === 'settings') {
+    if (route.name === 'settings' || route.name === 'ingestion') {
       router.push({ path: '/', query: { q: searchInput.value.trim() } });
       return;
     }
@@ -153,6 +163,7 @@ const searchPlaceholder = computed(() => {
     queue: 'Search queue...',
     printed: 'Search printed...',
     'loose-files': 'Search loose files...',
+    ingestion: 'Search models...',
   };
   return placeholders[route.name as string] || 'Search models...';
 });
