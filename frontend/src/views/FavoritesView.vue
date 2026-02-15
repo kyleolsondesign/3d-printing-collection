@@ -116,8 +116,10 @@
     <ModelDetailsModal
       v-if="selectedModelId"
       :modelId="selectedModelId"
+      :modelIds="filteredFavorites.map((f: any) => f.model_id)"
       @close="selectedModelId = null"
       @updated="handleModelUpdated"
+      @navigate="selectedModelId = $event"
     />
   </div>
 </template>

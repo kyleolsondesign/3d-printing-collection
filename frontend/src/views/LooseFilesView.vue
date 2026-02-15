@@ -99,8 +99,9 @@
           class="file-card"
           :class="{ selected: selectedIds.has(file.id), organizing: organizingIds.has(file.id) }"
           :style="{ animationDelay: `${index * 40}ms` }"
+          @click="toggleSelect(file.id)"
         >
-          <label class="checkbox-wrapper">
+          <label class="checkbox-wrapper" @click.stop>
             <input
               type="checkbox"
               :checked="selectedIds.has(file.id)"
@@ -128,7 +129,7 @@
           </div>
           <div class="file-actions">
             <button
-              @click="organizeFile(file)"
+              @click.stop="organizeFile(file)"
               class="btn-organize"
               :disabled="organizingIds.has(file.id)"
               title="Create folder and move file"
@@ -139,7 +140,7 @@
               </svg>
               Organize
             </button>
-            <button @click="openInFinder(file)" class="btn-secondary" title="Show in Finder">
+            <button @click.stop="openInFinder(file)" class="btn-secondary" title="Show in Finder">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
               </svg>
@@ -525,6 +526,7 @@ h2 {
   gap: 1rem;
   transition: all var(--transition-base);
   animation: fadeIn 0.4s ease-out backwards;
+  cursor: pointer;
 }
 
 .file-card:hover {

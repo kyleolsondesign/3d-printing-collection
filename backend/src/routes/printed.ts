@@ -283,6 +283,43 @@ router.post('/toggle', async (req, res) => {
     }
 });
 
+// Cycle printed status: not printed → good → bad → not printed
+router.post('/cycle', async (req, res) => {
+    try {
+        const { model_id } = req.body;
+
+        if (!model_id) {
+            return res.status(400).json({ error: 'model_id is required' });
+        }
+
+        const existing = db.prepare('SELECT * FROM printed_models WHERE model_id = ?').get(model_id) as any;
+
+        if (!existing) {
+            // Not printed → good
+            db.prepare('INSERT INTO printed_models (model_id, rating) VALUES (?, ?)').run(model_id, 'good');
+            const wasQueued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model_id);
+            if (wasQueued) {
+                db.prepare('DELETE FROM print_queue WHERE model_id = ?').run(model_id);
+            }
+            await updateModelFinderTags(model_id);
+            res.json({ printed: true, rating: 'good', removedFromQueue: !!wasQueued });
+        } else if (existing.rating === 'good') {
+            // Good → bad
+            db.prepare('UPDATE printed_models SET rating = ? WHERE model_id = ?').run('bad', model_id);
+            await updateModelFinderTags(model_id);
+            res.json({ printed: true, rating: 'bad' });
+        } else {
+            // Bad (or null) → not printed
+            db.prepare('DELETE FROM printed_models WHERE model_id = ?').run(model_id);
+            await updateModelFinderTags(model_id);
+            res.json({ printed: false, rating: null });
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 // Get make images for a printed record
 router.get('/:id/images', (req, res) => {
     try {

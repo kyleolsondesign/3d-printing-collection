@@ -241,9 +241,9 @@
               </svg>
             </button>
             <button
-              @click="store.togglePrinted(model.id)"
+              @click="store.cyclePrinted(model.id)"
               :class="['action-btn', { active: model.isPrinted, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]"
-              :title="model.isPrinted ? 'Remove from printed' : 'Mark as printed'"
+              :title="model.isPrinted && model.printRating === 'good' ? 'Mark as bad print' : model.isPrinted ? 'Remove from printed' : 'Mark as printed'"
             >
               <svg viewBox="0 0 24 24" :fill="model.isPrinted ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
                 <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
@@ -357,7 +357,7 @@
                   </svg>
                 </button>
                 <button
-                  @click="store.togglePrinted(model.id)"
+                  @click="store.cyclePrinted(model.id)"
                   :class="['action-btn-small', { active: model.isPrinted, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]"
                   title="Printed"
                 >
@@ -397,8 +397,10 @@
     <ModelDetailsModal
       v-if="selectedModelId"
       :modelId="selectedModelId"
+      :modelIds="store.models.map(m => m.id)"
       @close="selectedModelId = null"
       @updated="handleModelUpdated"
+      @navigate="selectedModelId = $event"
     />
   </div>
 </template>

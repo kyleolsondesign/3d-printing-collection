@@ -1,6 +1,18 @@
 <template>
   <Teleport to="body">
     <div class="modal-overlay" @click.self="$emit('close')">
+      <!-- Navigation arrows -->
+      <button v-if="canNavigatePrev" class="nav-arrow nav-arrow-left" @click="navigatePrev" title="Previous model (Left arrow)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+      <button v-if="canNavigateNext" class="nav-arrow nav-arrow-right" @click="navigateNext" title="Next model (Right arrow)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+      </button>
+
       <div class="modal-container" @click.stop>
         <button class="close-btn" @click="$emit('close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -363,12 +375,42 @@ interface ModelDetails extends Model {
 
 const props = defineProps<{
   modelId: number;
+  modelIds?: number[];
 }>();
 
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'updated', model: ModelDetails): void;
+  (e: 'navigate', modelId: number): void;
 }>();
+
+const canNavigatePrev = computed(() => {
+  if (!props.modelIds?.length) return false;
+  const idx = props.modelIds.indexOf(props.modelId);
+  return idx > 0;
+});
+
+const canNavigateNext = computed(() => {
+  if (!props.modelIds?.length) return false;
+  const idx = props.modelIds.indexOf(props.modelId);
+  return idx >= 0 && idx < props.modelIds.length - 1;
+});
+
+function navigatePrev() {
+  if (!props.modelIds?.length) return;
+  const idx = props.modelIds.indexOf(props.modelId);
+  if (idx > 0) {
+    emit('navigate', props.modelIds[idx - 1]);
+  }
+}
+
+function navigateNext() {
+  if (!props.modelIds?.length) return;
+  const idx = props.modelIds.indexOf(props.modelId);
+  if (idx >= 0 && idx < props.modelIds.length - 1) {
+    emit('navigate', props.modelIds[idx + 1]);
+  }
+}
 
 const store = useAppStore();
 
@@ -428,6 +470,10 @@ const relativePath = computed(() => {
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     emit('close');
+  } else if (event.key === 'ArrowLeft') {
+    navigatePrev();
+  } else if (event.key === 'ArrowRight') {
+    navigateNext();
   }
 }
 
@@ -722,6 +768,50 @@ async function extractZipFile(zipFile: ZipFile) {
   z-index: 1000;
   padding: 2rem;
   animation: fadeIn 0.2s ease-out;
+}
+
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 32, 36, 0.8);
+  border: 1px solid var(--border-default);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  cursor: pointer;
+  z-index: 10;
+  transition: all var(--transition-base);
+  opacity: 0;
+  padding: 0;
+}
+
+.modal-overlay:hover .nav-arrow {
+  opacity: 1;
+}
+
+.nav-arrow:hover {
+  color: var(--text-primary);
+  background: rgba(30, 32, 36, 0.95);
+  border-color: var(--border-strong);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.nav-arrow svg {
+  width: 24px;
+  height: 24px;
+}
+
+.nav-arrow-left {
+  left: 1rem;
+}
+
+.nav-arrow-right {
+  right: 1rem;
 }
 
 .modal-container {

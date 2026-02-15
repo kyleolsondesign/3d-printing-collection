@@ -215,6 +215,78 @@ describe('ModelDetailsModal', () => {
         expect(api.printedApi.toggle).toHaveBeenCalledWith(1, 'good');
     });
 
+    it('emits navigate on ArrowRight key when modelIds provided', async () => {
+        const wrapper = mount(ModelDetailsModal, {
+            props: { modelId: 2, modelIds: [1, 2, 3] },
+            global: {
+                plugins: [createPinia()],
+                stubs: { Teleport: true }
+            }
+        });
+        await flushPromises();
+
+        const event = new KeyboardEvent('keydown', { key: 'ArrowRight' });
+        document.dispatchEvent(event);
+
+        expect(wrapper.emitted('navigate')).toBeTruthy();
+        expect(wrapper.emitted('navigate')![0]).toEqual([3]);
+    });
+
+    it('emits navigate on ArrowLeft key when modelIds provided', async () => {
+        const wrapper = mount(ModelDetailsModal, {
+            props: { modelId: 2, modelIds: [1, 2, 3] },
+            global: {
+                plugins: [createPinia()],
+                stubs: { Teleport: true }
+            }
+        });
+        await flushPromises();
+
+        const event = new KeyboardEvent('keydown', { key: 'ArrowLeft' });
+        document.dispatchEvent(event);
+
+        expect(wrapper.emitted('navigate')).toBeTruthy();
+        expect(wrapper.emitted('navigate')![0]).toEqual([1]);
+    });
+
+    it('does not emit navigate at list boundaries', async () => {
+        const wrapper = mount(ModelDetailsModal, {
+            props: { modelId: 1, modelIds: [1, 2, 3] },
+            global: {
+                plugins: [createPinia()],
+                stubs: { Teleport: true }
+            }
+        });
+        await flushPromises();
+
+        const event = new KeyboardEvent('keydown', { key: 'ArrowLeft' });
+        document.dispatchEvent(event);
+
+        expect(wrapper.emitted('navigate')).toBeFalsy();
+    });
+
+    it('shows nav arrows when modelIds provided', async () => {
+        const wrapper = mount(ModelDetailsModal, {
+            props: { modelId: 2, modelIds: [1, 2, 3] },
+            global: {
+                plugins: [createPinia()],
+                stubs: { Teleport: true }
+            }
+        });
+        await flushPromises();
+
+        expect(wrapper.find('.nav-arrow-left').exists()).toBe(true);
+        expect(wrapper.find('.nav-arrow-right').exists()).toBe(true);
+    });
+
+    it('hides nav arrows when no modelIds provided', async () => {
+        const wrapper = mountModal();
+        await flushPromises();
+
+        expect(wrapper.find('.nav-arrow-left').exists()).toBe(false);
+        expect(wrapper.find('.nav-arrow-right').exists()).toBe(false);
+    });
+
     it('displays model files with file type badges', async () => {
         const wrapper = mountModal();
         await flushPromises();

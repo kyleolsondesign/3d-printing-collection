@@ -129,6 +129,7 @@ export interface MakeImage {
 export const printedApi = {
     getAll: () => api.get('/printed'),
     toggle: (modelId: number, rating: 'good' | 'bad' = 'good') => api.post('/printed/toggle', { model_id: modelId, rating }),
+    cycle: (modelId: number) => api.post('/printed/cycle', { model_id: modelId }),
     bulk: (modelIds: number[], action: 'add' | 'remove', rating: 'good' | 'bad' = 'good') =>
         api.post('/printed/bulk', { model_ids: modelIds, action, rating }),
     add: (data: { model_id: number; rating?: 'good' | 'bad'; notes?: string; print_time_hours?: number; filament_used_grams?: number }) =>

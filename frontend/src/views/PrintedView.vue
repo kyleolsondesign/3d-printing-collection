@@ -106,8 +106,10 @@
     <ModelDetailsModal
       v-if="selectedModelId"
       :modelId="selectedModelId"
+      :modelIds="filteredPrinted.map((p: any) => p.model_id)"
       @close="selectedModelId = null"
       @updated="handleModelUpdated"
+      @navigate="selectedModelId = $event"
     />
   </div>
 </template>

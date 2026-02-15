@@ -137,8 +137,10 @@
     <ModelDetailsModal
       v-if="selectedModelId"
       :modelId="selectedModelId"
+      :modelIds="filteredQueue.map((q: any) => q.model_id)"
       @close="selectedModelId = null"
       @updated="handleModelUpdated"
+      @navigate="selectedModelId = $event"
     />
   </div>
 </template>

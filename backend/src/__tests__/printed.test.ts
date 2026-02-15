@@ -96,6 +96,56 @@ describe('Printed Routes', () => {
         });
     });
 
+    describe('POST /api/printed/cycle', () => {
+        it('cycles from not printed to good', async () => {
+            const res = await request(app)
+                .post('/api/printed/cycle')
+                .send({ model_id: 2 });
+            expect(res.status).toBe(200);
+            expect(res.body.printed).toBe(true);
+            expect(res.body.rating).toBe('good');
+        });
+
+        it('removes from queue when cycling to good', async () => {
+            const res = await request(app)
+                .post('/api/printed/cycle')
+                .send({ model_id: 2 });
+            expect(res.body.removedFromQueue).toBe(true);
+
+            const queueItem = testDb.prepare('SELECT id FROM print_queue WHERE model_id = 2').get();
+            expect(queueItem).toBeUndefined();
+        });
+
+        it('cycles from good to bad', async () => {
+            // Model 1 is already printed with 'good' rating from seed data
+            const res = await request(app)
+                .post('/api/printed/cycle')
+                .send({ model_id: 1 });
+            expect(res.status).toBe(200);
+            expect(res.body.printed).toBe(true);
+            expect(res.body.rating).toBe('bad');
+        });
+
+        it('cycles from bad to not printed', async () => {
+            // First set to bad
+            testDb.prepare('UPDATE printed_models SET rating = ? WHERE model_id = ?').run('bad', 1);
+
+            const res = await request(app)
+                .post('/api/printed/cycle')
+                .send({ model_id: 1 });
+            expect(res.status).toBe(200);
+            expect(res.body.printed).toBe(false);
+            expect(res.body.rating).toBeNull();
+        });
+
+        it('requires model_id', async () => {
+            const res = await request(app)
+                .post('/api/printed/cycle')
+                .send({});
+            expect(res.status).toBe(400);
+        });
+    });
+
     describe('PUT /api/printed/:id', () => {
         it('updates rating on a printed record', async () => {
             const res = await request(app)

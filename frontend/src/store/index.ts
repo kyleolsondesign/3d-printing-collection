@@ -105,6 +105,22 @@ export const useAppStore = defineStore('app', () => {
         }
     }
 
+    async function cyclePrinted(modelId: number) {
+        try {
+            const response = await printedApi.cycle(modelId);
+            const model = models.value.find(m => m.id === modelId);
+            if (model) {
+                model.isPrinted = response.data.printed;
+                model.printRating = response.data.rating || null;
+                if (response.data.removedFromQueue) {
+                    model.isQueued = false;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to cycle printed:', error);
+        }
+    }
+
     async function loadConfig() {
         try {
             const response = await systemApi.getConfig();
@@ -154,6 +170,7 @@ export const useAppStore = defineStore('app', () => {
         toggleFavorite,
         toggleQueue,
         togglePrinted,
+        cyclePrinted,
         loadConfig,
         startScan,
         setGlobalSearch,

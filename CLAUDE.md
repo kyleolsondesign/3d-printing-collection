@@ -312,6 +312,7 @@ For models without standalone images, the scanner automatically extracts images 
 - **Loose files management**: Files in root OR directly in category folders are tracked separately
   - Example: `Toys/model.stl` is loose (needs a folder), `Toys/MyModel/model.stl` is indexed
 - **Loose files review page**: Dedicated page to review and organize unorganized files
+  - Click anywhere on a file card to toggle selection (buttons use `@click.stop`)
 - **Show in Finder**: Button on each model card to quickly open the containing folder
 - **Multi-tag support**: Models can have multiple tags/categories (database schema ready, UI pending)
 
@@ -419,7 +420,10 @@ The app integrates with macOS Finder tags to sync print status:
 - **Mark as printed from queue**: Queue items have a thumbs-up button to mark as printed (removes from queue)
 - **Rating toggle on printed view**: Printed view shows clickable good/bad rating buttons to change rating
 - **Printed view sorting**: Sorted by print date (descending), secondary sort by model date_added
+- **3-state print cycle**: `POST /printed/cycle` endpoint cycles: not printed → good → bad → not printed
+- **Cycle from browse**: Browse view uses `cyclePrinted()` store action for single-button print toggle
 - **Escape key closes modal**: Press Escape to close the model details modal
+- **Arrow key navigation**: Left/Right arrow keys navigate between models in the modal; hover arrows on screen edges
 - **Clickable files in modal**: Click any model file in the details modal to reveal it in Finder
 - **Show in Finder**: Uses `open -R` to reveal and select the item in Finder (works for both files and folders)
 
