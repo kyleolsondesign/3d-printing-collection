@@ -35,3 +35,8 @@
 - [x] The "printed" view should be sorted by when the model was marked as printed, if we can tell when the finder tag was added or when we marked it printed in the UI. It should secondarily be sorted by date added of the model
 
 ---
+
+- [ ] When logging a model name, use the full path from the 3d model root folder
+- [ ] Reduce the polling time for the scan status updates in the frontend. Once every 10 seconds is enough
+- [ ] When using 3mf file to find images, prefer the images under "Auxiliaries" if it exists. Extract multiple images if they are high scoring
+- [ ] When marking as printed from views that don't show a "good" and "bad" separately, make it a 3-state toggle, with the states in order of: not printed, good print, bad print
