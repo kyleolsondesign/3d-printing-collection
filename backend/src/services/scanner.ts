@@ -569,23 +569,35 @@ class Scanner {
             return true;
         }
 
-        // Direct children of "Paid" are designer folders (e.g., root/Paid/DesignerName)
-        if (parts.length === 2 && parts[0] === 'Paid') {
-            return true;
+        // Direct children of "Paid" are designer folders at any depth
+        // e.g., root/Paid/DesignerName OR root/Shared 3D Models/Paid/DesignerName
+        const paidIndex = parts.indexOf('Paid');
+        if (paidIndex >= 0) {
+            const depthAfterPaid = parts.length - paidIndex;
+            // "Paid" itself (depthAfterPaid=1) is handled as a category container by depth-1 check
+            // or will be recursed into. Designer folders are direct children of Paid (depthAfterPaid=2).
+            if (depthAfterPaid === 2) {
+                return true;
+            }
         }
 
         return false;
     }
 
     /**
-     * Check if a folder is a model folder under Paid/{designer}/.
-     * Depth-3 folders under Paid are always treated as models, even if they
-     * don't directly contain model files (files may be in nested subfolders).
+     * Check if a folder is a model folder under .../Paid/{designer}/.
+     * Folders that are 2 levels below a "Paid" directory are always treated as models,
+     * even if they don't directly contain model files (files may be in nested subfolders).
+     * Works regardless of where "Paid" appears in the path hierarchy.
+     * e.g., root/Paid/Designer/Model or root/Shared 3D Models/Paid/Designer/Model
      */
     private isPaidModelFolder(folderPath: string, rootPath: string): boolean {
         const relativePath = path.relative(rootPath, folderPath);
         const parts = relativePath.split(path.sep);
-        return parts.length === 3 && parts[0] === 'Paid';
+        const paidIndex = parts.indexOf('Paid');
+        if (paidIndex < 0) return false;
+        const depthAfterPaid = parts.length - paidIndex;
+        return depthAfterPaid === 3;
     }
 
     /**

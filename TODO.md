@@ -52,3 +52,17 @@
 - [ ] Search bar does not work on loose files tab. Should search amongst the loose files. Does not work on settings tab. For settings tab it should bring you to browse and then search within browse when you submit a search query
 
 ---
+
+- [ ] Duplicate detection: Find potential duplicate models based on filename similarity (fuzzy matching) and/or file hashes. Show a dedicated review page where you can compare duplicates side-by-side and choose to merge or delete.
+- [ ] Custom tags: Allow users to create and assign custom tags to models (beyond the auto-detected category). Tags should be searchable and filterable from the browse view. The database schema already supports this via the `tags` and `model_tags` tables.
+- [ ] Statistics dashboard: A dedicated stats page showing collection insights — total storage used, models per category (bar chart), prints over time (line chart), good vs bad print ratio, most-printed categories, average files per model, etc.
+- [ ] Recently viewed models: Track which models were opened in the details modal and show a "Recently Viewed" section or tab, ordered by last viewed timestamp. Useful for finding models you were just looking at.
+- [ ] Lazy loading / virtual scrolling for images: Only load thumbnail images that are currently visible in the viewport. For large collections, loading all 50 card images at once causes unnecessary network traffic and slow initial render.
+- [ ] Batch category reassignment: Allow selecting multiple models on the browse page and moving them to a different category. This would involve renaming the parent folder on disk and updating the database.
+- [ ] Model notes: Add a free-text notes field to any model (not just printed ones). Useful for recording slicer settings, material recommendations, or assembly instructions. Editable from the details modal.
+- [ ] Designer browsing: A dedicated view or filter to browse models grouped by designer (extracted from PDF metadata). Show designer name, model count, and link to their profile URL if available.
+- [ ] Saved searches / smart collections: Allow saving search queries + filter combinations as named collections (e.g., "Unpainted toys", "Large prints to try"). These would appear as quick-access buttons or a sidebar section.
+- [ ] Image gallery mode: A full-screen, image-focused browsing mode with larger thumbnails in a masonry or justified grid layout. Clicking opens the model details. Good for visual browsing when you know what something looks like but not its name.
+- [ ] Print time and filament tracking: The `printed_models` table already has `print_time_hours` and `filament_used_grams` columns. Add UI in the printed view and modal to record and display these, with totals in the stats dashboard.
+- [ ] File system watcher: Use `fs.watch` or `chokidar` to monitor the model directory for changes and automatically trigger incremental scans when files are added, moved, or deleted. Eliminates the need for manual re-scans.
+- [ ] Keyboard shortcuts for browse: Add hotkeys for common actions while browsing — `f` to toggle favorite, `q` to toggle queue, `p` to cycle printed, `s` to toggle selection mode, `/` to focus search bar. Show a keyboard shortcut help overlay with `?`.
