@@ -281,10 +281,23 @@
               </div>
             </th>
             <th class="col-image"></th>
-            <th class="col-name">Name</th>
-            <th class="col-category">Category</th>
+            <th class="col-name sortable-header" @click="handleHeaderSort('name')">
+              <span>Name</span>
+              <span v-if="sortField === 'name'" class="sort-indicator">{{ sortOrder === 'asc' ? '\u25B2' : '\u25BC' }}</span>
+            </th>
+            <th class="col-category sortable-header" @click="handleHeaderSort('category')">
+              <span>Category</span>
+              <span v-if="sortField === 'category'" class="sort-indicator">{{ sortOrder === 'asc' ? '\u25B2' : '\u25BC' }}</span>
+            </th>
             <th class="col-files">Files</th>
-            <th class="col-date">Date Added</th>
+            <th class="col-date sortable-header" @click="handleHeaderSort('date_added')">
+              <span>Date Added</span>
+              <span v-if="sortField === 'date_added'" class="sort-indicator">{{ sortOrder === 'asc' ? '\u25B2' : '\u25BC' }}</span>
+            </th>
+            <th class="col-date sortable-header" @click="handleHeaderSort('date_created')">
+              <span>Date Created</span>
+              <span v-if="sortField === 'date_created'" class="sort-indicator">{{ sortOrder === 'asc' ? '\u25B2' : '\u25BC' }}</span>
+            </th>
             <th class="col-actions">Actions</th>
           </tr>
         </thead>
@@ -333,6 +346,7 @@
             </td>
             <td class="col-files">{{ model.file_count }}</td>
             <td class="col-date">{{ formatDate(model.date_added) }}</td>
+            <td class="col-date">{{ formatDate(model.date_created) }}</td>
             <td class="col-actions" @click.stop>
               <div class="table-actions">
                 <button
@@ -699,6 +713,16 @@ function handleSortChange() {
 
 function toggleSortOrder() {
   sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  // Handled by watcher
+}
+
+function handleHeaderSort(field: string) {
+  if (sortField.value === field) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortField.value = field;
+    sortOrder.value = (field === 'name' || field === 'category') ? 'asc' : 'desc';
+  }
   // Handled by watcher
 }
 
@@ -1383,6 +1407,22 @@ async function bulkAddToFavorites() {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid var(--border-default);
+}
+
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--transition-fast);
+}
+
+.sortable-header:hover {
+  color: var(--text-primary);
+}
+
+.sort-indicator {
+  margin-left: 4px;
+  font-size: 0.6rem;
+  color: var(--accent-primary);
 }
 
 .models-table td {
