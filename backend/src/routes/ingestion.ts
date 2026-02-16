@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
 import db from '../config/database.js';
 import scanner from '../services/scanner.js';
@@ -17,7 +18,9 @@ import {
 const router = express.Router();
 
 const DEFAULT_INGESTION_DIR = '/Users/kyle/Downloads';
-const CATEGORIES_FILE = path.join(import.meta.dirname, '../../data/categories.md');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CATEGORIES_FILE = path.join(__dirname, '../../data/categories.md');
 
 const DEFAULT_PROMPT = `You are categorizing 3D printing model files into an existing collection. The existing categories are:
 
