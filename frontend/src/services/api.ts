@@ -104,6 +104,9 @@ export const modelsApi = {
     updateMetadata: (modelId: number, filename: string) =>
         api.patch(`/models/${modelId}`, { filename }),
 
+    updateNotes: (modelId: number, notes: string) =>
+        api.patch(`/models/${modelId}`, { notes }),
+
     hideAsset: (modelId: number, assetId: number, isHidden: boolean) =>
         api.put(`/models/${modelId}/assets/${assetId}/hide`, { isHidden })
 };

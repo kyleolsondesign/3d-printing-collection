@@ -57,6 +57,13 @@ function initializeDatabase(): void {
         // Column already exists, ignore
     }
 
+    // Add notes column for free-text notes on any model
+    try {
+        db.exec(`ALTER TABLE models ADD COLUMN notes TEXT`);
+    } catch (e) {
+        // Column already exists, ignore
+    }
+
     // Add is_hidden for hiding thumbnails without deleting files
     try {
         db.exec(`ALTER TABLE model_assets ADD COLUMN is_hidden INTEGER DEFAULT 0`);

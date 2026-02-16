@@ -341,7 +341,7 @@ class Scanner {
     }
 
     /**
-     * Rescan an existing model folder (delete and re-index)
+     * Rescan an existing model folder (update in place, preserving model ID)
      */
     async rescanModel(modelId: number): Promise<{ modelId: number; filename: string } | null> {
         try {
@@ -357,13 +357,82 @@ class Scanner {
                 throw new Error('Model directory not configured');
             }
 
-            // Delete existing model data
+            const folderPath = model.filepath;
+            if (!fs.existsSync(folderPath)) {
+                throw new Error(`Folder does not exist: ${folderPath}`);
+            }
+
+            // Collect model files recursively
+            const modelFiles: string[] = [];
+            const dateTracker = { earliestAdded: null as Date | null, earliestCreated: null as Date | null };
+            this.collectModelFilesRecursive(folderPath, modelFiles, dateTracker);
+
+            if (modelFiles.length === 0) {
+                return null;
+            }
+
+            const folderName = path.basename(folderPath);
+            const cleanedName = cleanupFolderName(folderName);
+            const rootPath = configResult.value;
+            const category = this.extractCategory(folderPath, rootPath);
+            const isPaid = this.isInFolder(folderPath, rootPath, 'Paid');
+            const isOriginal = this.isInFolder(folderPath, rootPath, 'Original Creations');
+
+            let dateAdded: string | null = null;
+            let dateCreated: string | null = null;
+            try {
+                const folderStat = fs.statSync(folderPath);
+                const folderMtime = folderStat.mtime;
+                const folderBirthtime = folderStat.birthtime;
+                if (dateTracker.earliestAdded && dateTracker.earliestAdded < folderMtime) {
+                    dateAdded = dateTracker.earliestAdded.toISOString();
+                } else {
+                    dateAdded = folderMtime.toISOString();
+                }
+                if (dateTracker.earliestCreated && dateTracker.earliestCreated < folderBirthtime) {
+                    dateCreated = dateTracker.earliestCreated.toISOString();
+                } else {
+                    dateCreated = folderBirthtime.toISOString();
+                }
+            } catch (e) {
+                dateAdded = dateTracker.earliestAdded?.toISOString() || null;
+                dateCreated = dateTracker.earliestCreated?.toISOString() || null;
+            }
+
+            // Update existing model record (preserves ID, favorites, queue, printed history)
+            db.prepare(`
+                UPDATE models SET filename = ?, category = ?, is_paid = ?, is_original = ?,
+                file_count = ?, date_added = ?, date_created = ?, last_scanned = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `).run(cleanedName, category, isPaid ? 1 : 0, isOriginal ? 1 : 0,
+                modelFiles.length, dateAdded, dateCreated, modelId);
+
+            // Clear and re-insert child records
             db.prepare('DELETE FROM model_files WHERE model_id = ?').run(modelId);
             db.prepare('DELETE FROM model_assets WHERE model_id = ?').run(modelId);
-            db.prepare('DELETE FROM models WHERE id = ?').run(modelId);
 
-            // Re-scan the folder
-            return await this.scanSingleFolder(model.filepath, configResult.value);
+            // Insert model files
+            const insertFile = db.prepare(`
+                INSERT INTO model_files (model_id, filename, filepath, file_size, file_type)
+                VALUES (?, ?, ?, ?, ?)
+            `);
+            for (const filePath of modelFiles) {
+                const fileStats = fs.statSync(filePath);
+                const filename = path.basename(filePath);
+                const ext = path.extname(filePath).toLowerCase().replace('.', '');
+                insertFile.run(modelId, filename, filePath, fileStats.size, ext);
+            }
+
+            // Index assets
+            this.indexAssets(modelId, folderPath);
+
+            // Extract images from archives if no primary image
+            if (!this.hasPrimaryImage(modelId)) {
+                await this.extractImageFromArchives(modelId, folderPath);
+            }
+
+            console.log(`Rescanned model: ${path.relative(rootPath, folderPath)}`);
+            return { modelId, filename: cleanedName };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error rescanning model ${modelId}:`, message);

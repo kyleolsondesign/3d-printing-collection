@@ -439,12 +439,13 @@ router.post('/:id/extract-zip', async (req, res) => {
         });
 
         // Rescan the model folder to update the database
-        const result = await scanner.rescanModel(parseInt(id));
+        const modelId = parseInt(id);
+        const result = await scanner.rescanModel(modelId);
 
-        // Return the updated model data
-        const updatedModel = db.prepare('SELECT * FROM models WHERE id = ?').get(id);
-        const assets = db.prepare('SELECT * FROM model_assets WHERE model_id = ? ORDER BY is_primary DESC').all(id);
-        const files = db.prepare('SELECT * FROM model_files WHERE model_id = ?').all(id);
+        // Return the updated model data (ID is preserved by rescanModel)
+        const updatedModel = db.prepare('SELECT * FROM models WHERE id = ?').get(modelId);
+        const assets = db.prepare('SELECT * FROM model_assets WHERE model_id = ? ORDER BY is_primary DESC').all(modelId);
+        const files = db.prepare('SELECT * FROM model_files WHERE model_id = ?').all(modelId);
 
         res.json({
             success: true,
@@ -489,19 +490,23 @@ router.post('/bulk-delete', (req, res) => {
 router.patch('/:id', (req, res) => {
     try {
         const { id } = req.params;
-        const { filename } = req.body;
-
-        if (!filename || typeof filename !== 'string' || filename.trim() === '') {
-            return res.status(400).json({ error: 'filename is required and must be non-empty' });
-        }
+        const { filename, notes } = req.body;
 
         const model = db.prepare('SELECT * FROM models WHERE id = ?').get(id);
         if (!model) {
             return res.status(404).json({ error: 'Model not found' });
         }
 
-        const cleanName = filename.trim();
-        db.prepare('UPDATE models SET filename = ? WHERE id = ?').run(cleanName, id);
+        if (filename !== undefined) {
+            if (typeof filename !== 'string' || filename.trim() === '') {
+                return res.status(400).json({ error: 'filename must be non-empty' });
+            }
+            db.prepare('UPDATE models SET filename = ? WHERE id = ?').run(filename.trim(), id);
+        }
+
+        if (notes !== undefined) {
+            db.prepare('UPDATE models SET notes = ? WHERE id = ?').run(notes || null, id);
+        }
 
         const updated = db.prepare('SELECT * FROM models WHERE id = ?').get(id);
         res.json({ success: true, model: updated });

@@ -50,7 +50,7 @@
 - [x] After organizing loose files, it should show a summary of every change made, within the "Organized N of N files" box. It should also give status updates as it is organizing in batch.
 - [x] All tabs except "loose files" should use the same card and table view, with the option to switch between. Clicking the name, date added, date created, and category table headers in the table view should update the sorting and query param. Clicking the active sort header should toggle the sort direction.
 - [x] Search bar does not work on loose files tab. Should search amongst the loose files. Does not work on settings tab. For settings tab it should bring you to browse and then search within browse when you submit a search query
-- [ ] When clicking on image preview in model view, allow full-size viewing of the images, taking over left/right keyboard navigation to look through the images. Escape should return to the modal view.
+- [x] When clicking on image preview in model view, allow full-size viewing of the images, taking over left/right keyboard navigation to look through the images. Escape should return to the modal view.
 - [ ] Detect duplicate images for a single model and hide duplicates. These might have the same visual content but not the same size, filetype or compression. Always choose to keep the highest quality image.
 - [x] Create a new ingestion view, which scans an ingestion folder that can be configured (default: `/Users/kyle/Downloads`) for models that are uncategorized. The ingestion tool should propose existing categories for the models into automatically. There should UI to accept the suggestions, which will also move the models into the appropriate category folder.
 - [x] Give me an overall progress indicator when batch importing
@@ -59,7 +59,7 @@
 - [x] After manually selecting a category in the ingestion view, select the row for that model
 - [x] Allow batch assigning of categories in the ingestion view by setting all the selected items to the same category
 - [x] Make the "select all" and "import" box sticky at the top of the screen when you scroll past it on the ingestion view
-- [ ] Rescanning a model or extracting zip breaks the link from the page to launch the modal and breaks the deep-linking to the modal on refresh, because the ID changes. Can we either keep the original ID or update the view to reflect the new ID both in the links and the query params? After extracting a zip file from the modal view for a model, refresh the modal view. While extracting, give a progress indicator
+- [x] Rescanning a model or extracting zip breaks the link from the page to launch the modal and breaks the deep-linking to the modal on refresh, because the ID changes. Can we either keep the original ID or update the view to reflect the new ID both in the links and the query params? After extracting a zip file from the modal view for a model, refresh the modal view. While extracting, give a progress indicator
 
 ---
 
@@ -70,7 +70,7 @@
 - [ ] Recently viewed models: Track which models were opened in the details modal and show a "Recently Viewed" section or tab, ordered by last viewed timestamp. Useful for finding models you were just looking at.
 - [ ] Lazy loading / virtual scrolling for images: Only load thumbnail images that are currently visible in the viewport. For large collections, loading all 50 card images at once causes unnecessary network traffic and slow initial render.
 - [ ] Batch category reassignment: Allow selecting multiple models on the browse page and moving them to a different category. This would involve renaming the parent folder on disk and updating the database.
-- [ ] Model notes: Add a free-text notes field to any model (not just printed ones). Useful for recording slicer settings, material recommendations, or assembly instructions. Editable from the details modal.
+- [x] Model notes: Add a free-text notes field to any model (not just printed ones). Useful for recording slicer settings, material recommendations, or assembly instructions. Editable from the details modal.
 - [x] Saved searches / smart collections: Allow saving search queries + filter combinations as named collections (e.g., "Unpainted toys", "Large prints to try"). These would appear as quick-access buttons or a sidebar section.
 - [x] Image gallery mode: A full-screen, image-focused browsing mode with larger thumbnails in a masonry or justified grid layout. Clicking opens the model details. Good for visual browsing when you know what something looks like but not its name.
 - [x] Print time and filament tracking: The `printed_models` table already has `print_time_hours` and `filament_used_grams` columns. Add UI in the printed view and modal to record and display these, with totals in the stats dashboard.

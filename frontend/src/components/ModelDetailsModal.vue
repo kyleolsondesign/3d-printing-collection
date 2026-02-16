@@ -1,5 +1,32 @@
 <template>
   <Teleport to="body">
+    <!-- Lightbox overlay -->
+    <div v-if="lightboxOpen && imageAssets.length > 0" class="lightbox-overlay" @click.self="closeLightbox">
+      <button class="lightbox-close" @click="closeLightbox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+      <button v-if="imageAssets.length > 1" class="lightbox-nav lightbox-prev" @click="lightboxPrev">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+      <button v-if="imageAssets.length > 1" class="lightbox-nav lightbox-next" @click="lightboxNext">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+      </button>
+      <img
+        :src="getFileUrl(imageAssets[lightboxIndex]?.filepath)"
+        :alt="'Image ' + (lightboxIndex + 1)"
+        class="lightbox-image"
+      />
+      <div v-if="imageAssets.length > 1" class="lightbox-counter">
+        {{ lightboxIndex + 1 }} / {{ imageAssets.length }}
+      </div>
+    </div>
+
     <div class="modal-overlay" @click.self="$emit('close')">
       <!-- Navigation arrows -->
       <button v-if="canNavigatePrev" class="nav-arrow nav-arrow-left" @click="navigatePrev" title="Previous model (Left arrow)">
@@ -29,7 +56,7 @@
           <div class="modal-content">
             <!-- Image Section -->
             <div class="image-section">
-              <div class="primary-image">
+              <div class="primary-image" :class="{ clickable: primaryImage }" @click="primaryImage && openLightbox()">
                 <img
                   v-if="primaryImage"
                   :src="getFileUrl(primaryImage)"
@@ -164,6 +191,18 @@
                 <div class="tags-list">
                   <span v-for="tag in modelDetails.tags" :key="tag" class="tag-chip">{{ tag }}</span>
                 </div>
+              </div>
+
+              <!-- Notes -->
+              <div class="notes-section">
+                <h3>Notes</h3>
+                <textarea
+                  v-model="notesValue"
+                  class="notes-textarea"
+                  placeholder="Add notes about this model (slicer settings, materials, assembly tips...)"
+                  rows="3"
+                  @blur="saveNotes"
+                ></textarea>
               </div>
 
               <!-- Model Files -->
@@ -424,6 +463,10 @@ const editingName = ref(false);
 const editingNameValue = ref('');
 const nameInputRef = ref<HTMLInputElement | null>(null);
 const makeImages = ref<MakeImage[]>([]);
+const lightboxOpen = ref(false);
+const lightboxIndex = ref(0);
+const notesValue = ref('');
+const savedNotes = ref('');
 
 const imageAssets = computed(() =>
   modelDetails.value?.assets.filter(a => a.asset_type === 'image') || []
@@ -467,7 +510,38 @@ const relativePath = computed(() => {
   return fullPath;
 });
 
+function openLightbox() {
+  if (imageAssets.value.length === 0) return;
+  const currentIndex = imageAssets.value.findIndex(a => a.filepath === primaryImage.value);
+  lightboxIndex.value = currentIndex >= 0 ? currentIndex : 0;
+  lightboxOpen.value = true;
+}
+
+function closeLightbox() {
+  lightboxOpen.value = false;
+}
+
+function lightboxPrev() {
+  if (imageAssets.value.length <= 1) return;
+  lightboxIndex.value = (lightboxIndex.value - 1 + imageAssets.value.length) % imageAssets.value.length;
+}
+
+function lightboxNext() {
+  if (imageAssets.value.length <= 1) return;
+  lightboxIndex.value = (lightboxIndex.value + 1) % imageAssets.value.length;
+}
+
 function handleKeydown(event: KeyboardEvent) {
+  if (lightboxOpen.value) {
+    if (event.key === 'Escape') {
+      closeLightbox();
+    } else if (event.key === 'ArrowLeft') {
+      lightboxPrev();
+    } else if (event.key === 'ArrowRight') {
+      lightboxNext();
+    }
+    return;
+  }
   if (event.key === 'Escape') {
     emit('close');
   } else if (event.key === 'ArrowLeft') {
@@ -504,6 +578,10 @@ async function loadModelDetails() {
     // Set primary image
     const primary = imageAssets.value.find(a => a.is_primary);
     primaryImage.value = primary?.filepath || imageAssets.value[0]?.filepath || null;
+
+    // Set notes
+    notesValue.value = modelDetails.value?.notes || '';
+    savedNotes.value = notesValue.value;
 
     // Load make images if printed
     if (modelDetails.value?.printHistory?.length) {
@@ -687,6 +765,17 @@ async function saveName() {
     editingName.value = false;
   } catch (error) {
     console.error('Failed to update model name:', error);
+  }
+}
+
+async function saveNotes() {
+  if (!modelDetails.value || notesValue.value === savedNotes.value) return;
+  try {
+    await modelsApi.updateNotes(modelDetails.value.id, notesValue.value);
+    savedNotes.value = notesValue.value;
+    modelDetails.value.notes = notesValue.value;
+  } catch (error) {
+    console.error('Failed to save notes:', error);
   }
 }
 
@@ -916,6 +1005,10 @@ async function extractZipFile(zipFile: ZipFile) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.primary-image.clickable {
+  cursor: zoom-in;
 }
 
 .primary-image img {
@@ -1237,6 +1330,46 @@ async function extractZipFile(zipFile: ZipFile) {
 .info-value {
   font-size: 0.9rem;
   color: var(--text-primary);
+}
+
+/* Notes Section */
+.notes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.notes-section h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.notes-textarea {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 60px;
+  transition: border-color var(--transition-fast);
+}
+
+.notes-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-dim);
+}
+
+.notes-textarea::placeholder {
+  color: var(--text-muted);
 }
 
 /* Files Section */
@@ -1698,5 +1831,99 @@ async function extractZipFile(zipFile: ZipFile) {
   border-radius: var(--radius-sm);
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+/* Lightbox */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.lightbox-image {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  z-index: 1;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.lightbox-close svg {
+  width: 24px;
+  height: 24px;
+}
+
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  z-index: 1;
+}
+
+.lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.lightbox-nav svg {
+  width: 28px;
+  height: 28px;
+}
+
+.lightbox-prev {
+  left: 1rem;
+}
+
+.lightbox-next {
+  right: 1rem;
+}
+
+.lightbox-counter {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.375rem 1rem;
+  border-radius: var(--radius-md);
 }
 </style>

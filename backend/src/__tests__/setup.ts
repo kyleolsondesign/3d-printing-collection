@@ -35,7 +35,8 @@ export function initSchema(db: InstanceType<typeof Database>): void {
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             last_scanned TEXT DEFAULT CURRENT_TIMESTAMP,
-            deleted_at TEXT
+            deleted_at TEXT,
+            notes TEXT
         )
     `);
 

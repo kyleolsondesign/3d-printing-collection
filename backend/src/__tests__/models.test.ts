@@ -113,11 +113,19 @@ describe('Models Routes', () => {
             expect(res.status).toBe(400);
         });
 
-        it('rejects missing filename', async () => {
+        it('allows no-op update with empty body', async () => {
             const res = await request(app)
                 .patch('/api/models/1')
                 .send({});
-            expect(res.status).toBe(400);
+            expect(res.status).toBe(200);
+        });
+
+        it('updates model notes', async () => {
+            const res = await request(app)
+                .patch('/api/models/1')
+                .send({ notes: 'Test notes for this model' });
+            expect(res.status).toBe(200);
+            expect(res.body.model.notes).toBe('Test notes for this model');
         });
 
         it('returns 404 for non-existent model', async () => {
