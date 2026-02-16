@@ -449,6 +449,8 @@ class Scanner {
         favorites: Array<{ filepath: string; added_at: string; notes: string | null }>;
         queue: Array<{ filepath: string; added_at: string; priority: number; notes: string | null; estimated_time_hours: number | null }>;
         printed: Array<{ filepath: string; printed_at: string; rating: string | null; notes: string | null; print_time_hours: number | null; filament_used_grams: number | null }>;
+        modelNotes: Array<{ filepath: string; notes: string }>;
+        modelTags: Array<{ filepath: string; tag_name: string }>;
     } | null = null;
 
     private clearExistingModels(): void {
@@ -465,10 +467,17 @@ class Scanner {
             printed: db.prepare(`
                 SELECT m.filepath, p.printed_at, p.rating, p.notes, p.print_time_hours, p.filament_used_grams
                 FROM printed_models p JOIN models m ON p.model_id = m.id
+            `).all() as any[],
+            modelNotes: db.prepare(`
+                SELECT filepath, notes FROM models WHERE notes IS NOT NULL AND notes != ''
+            `).all() as any[],
+            modelTags: db.prepare(`
+                SELECT m.filepath, t.name as tag_name
+                FROM model_tags mt JOIN models m ON mt.model_id = m.id JOIN tags t ON mt.tag_id = t.id
             `).all() as any[]
         };
 
-        console.log(`Saved user data: ${this.savedUserData.favorites.length} favorites, ${this.savedUserData.queue.length} queue items, ${this.savedUserData.printed.length} printed records`);
+        console.log(`Saved user data: ${this.savedUserData.favorites.length} favorites, ${this.savedUserData.queue.length} queue items, ${this.savedUserData.printed.length} printed records, ${this.savedUserData.modelNotes.length} notes, ${this.savedUserData.modelTags.length} tags`);
 
         db.prepare('DELETE FROM models').run();
         db.prepare('DELETE FROM model_files').run();
@@ -516,7 +525,32 @@ class Scanner {
             }
         }
 
-        console.log(`Restored user data: ${restored.favorites} favorites, ${restored.queue} queue items, ${restored.printed} printed records`);
+        // Restore model notes
+        let restoredNotes = 0;
+        for (const n of this.savedUserData.modelNotes) {
+            const model = db.prepare('SELECT id FROM models WHERE filepath = ?').get(n.filepath) as { id: number } | undefined;
+            if (model) {
+                db.prepare('UPDATE models SET notes = ? WHERE id = ?').run(n.notes, model.id);
+                restoredNotes++;
+            }
+        }
+
+        // Restore model tags
+        let restoredTags = 0;
+        const insertTag = db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+        const getTagId = db.prepare('SELECT id FROM tags WHERE name = ?');
+        const insertModelTag = db.prepare('INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)');
+        for (const mt of this.savedUserData.modelTags) {
+            const model = db.prepare('SELECT id FROM models WHERE filepath = ?').get(mt.filepath) as { id: number } | undefined;
+            if (model) {
+                insertTag.run(mt.tag_name);
+                const tag = getTagId.get(mt.tag_name) as { id: number };
+                insertModelTag.run(model.id, tag.id);
+                restoredTags++;
+            }
+        }
+
+        console.log(`Restored user data: ${restored.favorites} favorites, ${restored.queue} queue items, ${restored.printed} printed records, ${restoredNotes} notes, ${restoredTags} tags`);
         this.savedUserData = null;
     }
 
