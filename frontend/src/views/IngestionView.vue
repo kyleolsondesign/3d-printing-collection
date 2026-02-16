@@ -91,7 +91,7 @@
               placeholder="Enter categorization prompt..."
             ></textarea>
             <div class="prompt-help">
-              Use <code>{categories}</code> for the category list and <code>{items}</code> for the items to categorize.
+              Placeholders: <code>{categories}</code> = category list, <code>{items}</code> = items to categorize, <code>{category_definitions}</code> = contents of <code>backend/data/categories.md</code>
             </div>
             <div class="prompt-actions">
               <button @click="savePrompt" class="btn-sm btn-primary" :disabled="!promptDirty">Save Prompt</button>
@@ -213,6 +213,13 @@
               {{ isAllSelected ? 'Deselect All' : 'Select All' }}
             </span>
           </label>
+          <span class="selection-separator">|</span>
+          <button @click="selectByConfidence('high')" class="btn-filter" :class="{ active: isHighSelected }">
+            <span class="confidence-dot high"></span> High
+          </button>
+          <button @click="selectByConfidence('medium')" class="btn-filter" :class="{ active: isMediumPlusSelected }">
+            <span class="confidence-dot medium"></span> Medium+
+          </button>
           <span class="selection-count" v-if="selectedIds.size > 0">
             {{ selectedIds.size }} selected
           </span>
@@ -349,6 +356,24 @@ const isAllSelected = computed(() =>
 
 const isPartiallySelected = computed(() =>
   selectedIds.value.size > 0 && selectedIds.value.size < items.value.length
+);
+
+const highConfidenceItems = computed(() =>
+  items.value.filter(i => i.confidence === 'high')
+);
+
+const mediumPlusItems = computed(() =>
+  items.value.filter(i => i.confidence === 'high' || i.confidence === 'medium')
+);
+
+const isHighSelected = computed(() =>
+  highConfidenceItems.value.length > 0 &&
+  highConfidenceItems.value.every(i => selectedIds.value.has(i.filepath))
+);
+
+const isMediumPlusSelected = computed(() =>
+  mediumPlusItems.value.length > 0 &&
+  mediumPlusItems.value.every(i => selectedIds.value.has(i.filepath))
 );
 
 onMounted(async () => {
@@ -494,6 +519,23 @@ function toggleSelectAll() {
     selectedIds.value = new Set();
   } else {
     selectedIds.value = new Set(items.value.map(i => i.filepath));
+  }
+}
+
+function selectByConfidence(level: 'high' | 'medium') {
+  const targetItems = level === 'high' ? highConfidenceItems.value : mediumPlusItems.value;
+  const allSelected = targetItems.every(i => selectedIds.value.has(i.filepath));
+
+  if (allSelected) {
+    // Deselect these items
+    const newSet = new Set(selectedIds.value);
+    targetItems.forEach(i => newSet.delete(i.filepath));
+    selectedIds.value = newSet;
+  } else {
+    // Select these items (add to existing selection)
+    const newSet = new Set(selectedIds.value);
+    targetItems.forEach(i => newSet.add(i.filepath));
+    selectedIds.value = newSet;
   }
 }
 
@@ -993,6 +1035,42 @@ h2 {
   color: var(--text-secondary);
   font-size: 0.9rem;
   font-weight: 500;
+}
+
+.selection-separator {
+  color: var(--border-default);
+  font-size: 0.9rem;
+}
+
+.btn-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.btn-filter:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.btn-filter.active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+.btn-filter .confidence-dot {
+  width: 6px;
+  height: 6px;
 }
 
 .selection-count {

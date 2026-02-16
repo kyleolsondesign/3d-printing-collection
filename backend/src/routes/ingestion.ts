@@ -17,10 +17,13 @@ import {
 const router = express.Router();
 
 const DEFAULT_INGESTION_DIR = '/Users/kyle/Downloads';
+const CATEGORIES_FILE = path.join(import.meta.dirname, '../../data/categories.md');
 
 const DEFAULT_PROMPT = `You are categorizing 3D printing model files into an existing collection. The existing categories are:
 
 {categories}
+
+{category_definitions}
 
 For each item below, suggest the best matching category from the list above. Use ALL available context (model filenames, PDF text, tags, designer info) to make your decision. If none of the existing categories fit well, use "Uncategorized". Rate your confidence: "high" if you're quite sure, "medium" if it's a reasonable guess, "low" if you're unsure.
 
@@ -31,6 +34,15 @@ Respond with ONLY a JSON array, one entry per item, in order:
 [{"category": "...", "confidence": "high|medium|low"}, ...]
 
 No explanation, just the JSON array.`;
+
+function loadCategoryDefinitions(): string {
+    try {
+        if (fs.existsSync(CATEGORIES_FILE)) {
+            return fs.readFileSync(CATEGORIES_FILE, 'utf-8').trim();
+        }
+    } catch { /* ignore */ }
+    return '';
+}
 
 // Common noise words to ignore in fuzzy matching
 const NOISE_WORDS = new Set([
@@ -186,10 +198,12 @@ async function suggestCategoriesWithClaude(
 
     const categoryList = categories.join(', ');
 
-    // Use custom prompt or default
+    // Use custom prompt or default, with placeholder substitution
     const promptTemplate = getConfig('ingestion_prompt') || DEFAULT_PROMPT;
+    const categoryDefs = loadCategoryDefinitions();
     const prompt = promptTemplate
         .replace('{categories}', categoryList)
+        .replace('{category_definitions}', categoryDefs ? `Here are detailed descriptions of each category to help you decide:\n\n${categoryDefs}` : '')
         .replace('{items}', itemList);
 
     const response = await client.messages.create({
