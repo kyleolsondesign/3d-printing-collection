@@ -3,7 +3,7 @@
     <div class="header">
       <div class="header-left">
         <h2>Import Models</h2>
-        <span class="count-badge" v-if="items.length > 0">{{ items.length }}</span>
+        <span class="count-badge" v-if="items.length > 0">{{ filteredItems.length !== items.length ? `${filteredItems.length} / ${items.length}` : items.length }}</span>
       </div>
       <p class="subtitle">Scan a folder for model files and import them into your collection</p>
     </div>
@@ -225,6 +225,19 @@
           </span>
         </div>
         <div class="bulk-buttons" v-if="selectedIds.size > 0">
+          <div class="batch-category-control">
+            <input
+              type="text"
+              v-model="batchCategory"
+              class="category-input batch-category-input"
+              list="category-options"
+              placeholder="Set category..."
+              @click.stop
+            />
+            <button @click="applyBatchCategory" class="btn-sm btn-ghost" :disabled="!batchCategory.trim()" title="Apply category to selected">
+              Apply
+            </button>
+          </div>
           <button @click="importSelected" class="btn-import-bulk" :disabled="importing">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
@@ -234,11 +247,22 @@
             Import {{ selectedIds.size }} Item{{ selectedIds.size > 1 ? 's' : '' }}
           </button>
         </div>
+        <!-- Import progress bar -->
+        <div v-if="importing" class="import-progress">
+          <div class="import-progress-bar">
+            <div class="import-progress-fill"></div>
+          </div>
+          <span class="import-progress-text">Importing {{ selectedIds.size }} item{{ selectedIds.size > 1 ? 's' : '' }}...</span>
+        </div>
       </div>
 
-      <div class="items-list">
+      <div v-if="filteredItems.length === 0 && store.globalSearchQuery" class="empty">
+        <h3>No matching models</h3>
+        <p>No items match "{{ store.globalSearchQuery }}"</p>
+      </div>
+      <div v-else class="items-list">
         <div
-          v-for="item in items"
+          v-for="item in filteredItems"
           :key="item.filepath"
           class="item-card"
           :class="{ selected: selectedIds.has(item.filepath), importing: importingPaths.has(item.filepath) }"
@@ -273,6 +297,13 @@
               <span class="file-size">{{ formatFileSize(item.fileSize) }}</span>
             </div>
           </div>
+          <div class="item-actions" @click.stop>
+            <button @click="openInFinder(item.filepath)" class="btn-finder" title="Show in Finder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+              </svg>
+            </button>
+          </div>
           <div class="item-category" @click.stop>
             <div class="confidence-dot" :class="item.confidence" :title="`${item.confidence} confidence match`"></div>
             <div class="category-select-wrapper">
@@ -300,6 +331,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { ingestionApi, systemApi } from '../services/api';
+import { useAppStore } from '../store';
 
 interface IngestionItem {
   filename: string;
@@ -326,8 +358,10 @@ interface ImportResults {
   details: ImportDetail[];
 }
 
+const store = useAppStore();
 const ingestionDir = ref('');
 const hasApiKey = ref(false);
+const batchCategory = ref('');
 const editingPath = ref(false);
 const editPathValue = ref('');
 const editingApiKey = ref(false);
@@ -375,6 +409,12 @@ const isMediumPlusSelected = computed(() =>
   mediumPlusItems.value.length > 0 &&
   mediumPlusItems.value.every(i => selectedIds.value.has(i.filepath))
 );
+
+const filteredItems = computed(() => {
+  const q = store.globalSearchQuery.toLowerCase();
+  if (!q) return items.value;
+  return items.value.filter(i => i.filename.toLowerCase().includes(q));
+});
 
 onMounted(async () => {
   await loadConfig();
@@ -541,6 +581,11 @@ function selectByConfidence(level: 'high' | 'medium') {
 
 function updateCategory(item: IngestionItem, value: string) {
   item.selectedCategory = value;
+  if (value && !selectedIds.value.has(item.filepath)) {
+    const newSet = new Set(selectedIds.value);
+    newSet.add(item.filepath);
+    selectedIds.value = newSet;
+  }
 }
 
 function showCategoryDropdown(_item: IngestionItem) {
@@ -597,6 +642,24 @@ async function importSelected() {
     importing.value = false;
     importingPaths.value.clear();
     selectedIds.value.clear();
+  }
+}
+
+function applyBatchCategory() {
+  const cat = batchCategory.value.trim();
+  if (!cat || selectedIds.value.size === 0) return;
+  items.value.forEach(item => {
+    if (selectedIds.value.has(item.filepath)) {
+      item.selectedCategory = cat;
+    }
+  });
+}
+
+async function openInFinder(filepath: string) {
+  try {
+    await systemApi.openFolder(filepath);
+  } catch (error) {
+    console.error('Failed to open in Finder:', error);
   }
 }
 
@@ -1002,6 +1065,7 @@ h2 {
 /* Bulk Actions Bar */
 .bulk-actions-bar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.25rem;
@@ -1009,6 +1073,10 @@ h2 {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   margin-bottom: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .selection-controls {
@@ -1107,6 +1175,91 @@ h2 {
 .btn-import-bulk svg {
   width: 18px;
   height: 18px;
+}
+
+.bulk-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Batch Category */
+.batch-category-control {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.batch-category-input {
+  width: 150px;
+  font-size: 0.8rem;
+  padding: 0.375rem 0.625rem;
+}
+
+/* Import Progress */
+.import-progress {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+}
+
+.import-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-hover);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.import-progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 2px;
+  animation: progressIndeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes progressIndeterminate {
+  0% { width: 0%; margin-left: 0%; }
+  50% { width: 40%; margin-left: 30%; }
+  100% { width: 0%; margin-left: 100%; }
+}
+
+.import-progress-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Show in Finder button */
+.item-actions {
+  flex-shrink: 0;
+}
+
+.btn-finder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.btn-finder:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.btn-finder svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Items List */
