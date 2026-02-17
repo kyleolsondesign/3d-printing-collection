@@ -441,7 +441,7 @@ router.post('/config', (req, res) => {
     res.json({ success: true, directory: currentDir, hasApiKey, prompt: currentPrompt });
 });
 
-// GET /api/ingestion/scan
+// GET /api/ingestion/scan — file discovery + fuzzy categorization only (no API cost)
 router.get('/scan', async (req, res) => {
     try {
         const ingestionDir = getConfig('ingestion_directory') || DEFAULT_INGESTION_DIR;
@@ -453,39 +453,14 @@ router.get('/scan', async (req, res) => {
         const scannedItems = await scanIngestionDir(ingestionDir);
 
         if (scannedItems.length === 0) {
-            return res.json({ items: [], usedClaude: false });
-        }
-
-        // Try Claude first, fall back to fuzzy matching
-        let claudeSuggestions: Map<string, { category: string; confidence: 'high' | 'medium' | 'low' }> | null = null;
-        let usedClaude = false;
-
-        try {
-            claudeSuggestions = await suggestCategoriesWithClaude(scannedItems, categories);
-            usedClaude = true;
-        } catch (error: any) {
-            if (error.message !== 'no_api_key') {
-                console.error('Claude categorization failed, falling back to fuzzy matching:', error.message);
-            }
+            return res.json({ items: [] });
         }
 
         const items: IngestionItem[] = scannedItems.map(item => {
-            const claudeSuggestion = claudeSuggestions?.get(item.filepath);
-            let suggestedCategory: string;
-            let confidence: 'high' | 'medium' | 'low';
-
-            if (claudeSuggestion) {
-                suggestedCategory = claudeSuggestion.category;
-                confidence = claudeSuggestion.confidence;
-            } else {
-                // Fuzzy fallback
-                const nameForMatch = item.isFolder
-                    ? item.filename
-                    : path.basename(item.filename, path.extname(item.filename));
-                const fuzzy = suggestCategoryFuzzy(nameForMatch, categories);
-                suggestedCategory = fuzzy.category;
-                confidence = fuzzy.confidence;
-            }
+            const nameForMatch = item.isFolder
+                ? item.filename
+                : path.basename(item.filename, path.extname(item.filename));
+            const fuzzy = suggestCategoryFuzzy(nameForMatch, categories);
 
             return {
                 filename: item.filename,
@@ -493,14 +468,162 @@ router.get('/scan', async (req, res) => {
                 isFolder: item.isFolder,
                 fileCount: item.fileCount,
                 fileSize: item.fileSize,
-                suggestedCategory,
-                confidence
+                suggestedCategory: fuzzy.category,
+                confidence: fuzzy.confidence
             };
         });
 
-        res.json({ items, usedClaude });
+        res.json({ items });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// State for AI categorization progress (polled by frontend)
+let aiCategorizationProgress = {
+    active: false,
+    totalItems: 0,
+    processedItems: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+    status: '' as string
+};
+
+// GET /api/ingestion/categorize/status — poll AI categorization progress
+router.get('/categorize/status', (_req, res) => {
+    res.json(aiCategorizationProgress);
+});
+
+// POST /api/ingestion/categorize — AI-powered categorization (manual trigger, batched)
+router.post('/categorize', async (req, res) => {
+    if (aiCategorizationProgress.active) {
+        return res.status(409).json({ error: 'AI categorization already in progress' });
+    }
+
+    try {
+        const ingestionDir = getConfig('ingestion_directory') || DEFAULT_INGESTION_DIR;
+        if (!fs.existsSync(ingestionDir)) {
+            return res.status(400).json({ error: `Ingestion directory does not exist: ${ingestionDir}` });
+        }
+
+        const apiKey = getConfig('anthropic_api_key');
+        if (!apiKey) {
+            return res.status(400).json({ error: 'Anthropic API key not configured' });
+        }
+
+        const categories = getExistingCategories();
+        const scannedItems = await scanIngestionDir(ingestionDir);
+
+        if (scannedItems.length === 0) {
+            return res.json({ items: [], batches: 0 });
+        }
+
+        const BATCH_SIZE = 15;
+        const batches: ScannedItem[][] = [];
+        for (let i = 0; i < scannedItems.length; i += BATCH_SIZE) {
+            batches.push(scannedItems.slice(i, i + BATCH_SIZE));
+        }
+
+        aiCategorizationProgress = {
+            active: true,
+            totalItems: scannedItems.length,
+            processedItems: 0,
+            currentBatch: 0,
+            totalBatches: batches.length,
+            status: `Starting AI categorization (${scannedItems.length} items in ${batches.length} batch${batches.length > 1 ? 'es' : ''})...`
+        };
+
+        console.log(`[AI Categorize] Starting: ${scannedItems.length} items in ${batches.length} batches of up to ${BATCH_SIZE}`);
+        const startTime = Date.now();
+
+        const allResults = new Map<string, { category: string; confidence: 'high' | 'medium' | 'low' }>();
+
+        for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+            const batch = batches[batchIdx];
+            aiCategorizationProgress.currentBatch = batchIdx + 1;
+            aiCategorizationProgress.status = `Processing batch ${batchIdx + 1} of ${batches.length} (${batch.length} items)...`;
+            console.log(`[AI Categorize] Batch ${batchIdx + 1}/${batches.length}: ${batch.length} items (${batch.map(i => i.filename).join(', ')})`);
+
+            const batchStart = Date.now();
+            try {
+                const batchResults = await suggestCategoriesWithClaude(batch, categories);
+                const batchTime = ((Date.now() - batchStart) / 1000).toFixed(1);
+
+                let matched = 0;
+                for (const [filepath, suggestion] of batchResults) {
+                    allResults.set(filepath, suggestion);
+                    matched++;
+                }
+                console.log(`[AI Categorize] Batch ${batchIdx + 1} complete: ${matched}/${batch.length} categorized (${batchTime}s)`);
+
+                // Log individual results for this batch
+                for (const item of batch) {
+                    const result = batchResults.get(item.filepath);
+                    if (result) {
+                        console.log(`[AI Categorize]   "${item.filename}" -> "${result.category}" (${result.confidence})`);
+                    } else {
+                        console.log(`[AI Categorize]   "${item.filename}" -> NO RESULT (will use fuzzy fallback)`);
+                    }
+                }
+            } catch (error) {
+                const batchTime = ((Date.now() - batchStart) / 1000).toFixed(1);
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`[AI Categorize] Batch ${batchIdx + 1} FAILED (${batchTime}s): ${message}`);
+                // Continue with remaining batches
+            }
+
+            aiCategorizationProgress.processedItems += batch.length;
+        }
+
+        const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[AI Categorize] Complete: ${allResults.size}/${scannedItems.length} categorized by AI (${totalTime}s total)`);
+
+        // Build final results: AI suggestions where available, fuzzy fallback otherwise
+        const items: IngestionItem[] = scannedItems.map(item => {
+            const aiSuggestion = allResults.get(item.filepath);
+            if (aiSuggestion) {
+                return {
+                    filename: item.filename,
+                    filepath: item.filepath,
+                    isFolder: item.isFolder,
+                    fileCount: item.fileCount,
+                    fileSize: item.fileSize,
+                    suggestedCategory: aiSuggestion.category,
+                    confidence: aiSuggestion.confidence
+                };
+            } else {
+                const nameForMatch = item.isFolder
+                    ? item.filename
+                    : path.basename(item.filename, path.extname(item.filename));
+                const fuzzy = suggestCategoryFuzzy(nameForMatch, categories);
+                return {
+                    filename: item.filename,
+                    filepath: item.filepath,
+                    isFolder: item.isFolder,
+                    fileCount: item.fileCount,
+                    fileSize: item.fileSize,
+                    suggestedCategory: fuzzy.category,
+                    confidence: fuzzy.confidence
+                };
+            }
+        });
+
+        aiCategorizationProgress = {
+            active: false,
+            totalItems: scannedItems.length,
+            processedItems: scannedItems.length,
+            currentBatch: batches.length,
+            totalBatches: batches.length,
+            status: `Complete: ${allResults.size} of ${scannedItems.length} categorized by AI`
+        };
+
+        res.json({ items, batches: batches.length, aiCategorized: allResults.size });
+    } catch (error) {
+        aiCategorizationProgress.active = false;
+        aiCategorizationProgress.status = 'Failed';
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[AI Categorize] Error: ${message}`);
         res.status(500).json({ error: message });
     }
 });

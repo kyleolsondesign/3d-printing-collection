@@ -1,6 +1,8 @@
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
+import os from 'os';
 import { execFile } from 'child_process';
 import yauzl from 'yauzl';
 import db from '../config/database.js';
@@ -15,7 +17,7 @@ export type ScanMode = 'full' | 'full_sync' | 'add_only';
 // This prevents the scanner from blocking API requests
 const yieldToEventLoop = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
-type ScanStep = 'idle' | 'discovering' | 'indexing' | 'extracting' | 'metadata' | 'tagging' | 'cleanup' | 'complete';
+type ScanStep = 'idle' | 'discovering' | 'indexing' | 'extracting' | 'metadata' | 'deduplicating' | 'tagging' | 'cleanup' | 'complete';
 
 interface ScanProgress {
     totalFiles: number;
@@ -978,6 +980,9 @@ class Scanner {
 
         // Phase: Extract metadata from PDFs
         await this.extractMetadataFromPdfs();
+
+        // Phase: Deduplicate images
+        await this.deduplicateAllImages();
     }
 
     /**
@@ -1075,7 +1080,187 @@ class Scanner {
 
         const totalTime = ((Date.now() - metadataStart) / 1000).toFixed(1);
         console.log(`Metadata extraction complete: ${successCount} models enriched, ${tagCount} tags added (${totalTime}s total)`);
+        this.progress.overallProgress = 90;
+    }
+
+    /**
+     * Deduplicate images across all models that have multiple visible images.
+     * Uses perceptual hashing (resize to 8x8 via sips, then hash the result)
+     * to detect visually identical images regardless of format, size, or compression.
+     * Keeps the highest quality image (largest file size) and hides duplicates.
+     */
+    async deduplicateAllImages(): Promise<{ modelsProcessed: number; duplicatesHidden: number }> {
+        // Find all models with multiple non-hidden images
+        const modelsWithMultipleImages = db.prepare(`
+            SELECT model_id, COUNT(*) as image_count
+            FROM model_assets
+            WHERE asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
+            GROUP BY model_id
+            HAVING COUNT(*) > 1
+        `).all() as Array<{ model_id: number; image_count: number }>;
+
+        if (modelsWithMultipleImages.length === 0) {
+            this.progress.overallProgress = 95;
+            return { modelsProcessed: 0, duplicatesHidden: 0 };
+        }
+
+        this.progress.currentStep = 'deduplicating';
+        this.progress.modelsToExtract = modelsWithMultipleImages.length;
+        this.progress.modelsExtracted = 0;
+        this.progress.stepDescription = `Deduplicating images (0 of ${modelsWithMultipleImages.length})...`;
+        this.progress.overallProgress = 90;
+        console.log(`Deduplicating images for ${modelsWithMultipleImages.length} models...`);
+
+        const dedupStart = Date.now();
+        let totalDuplicatesHidden = 0;
+
+        for (const { model_id } of modelsWithMultipleImages) {
+            try {
+                const hidden = await this.deduplicateModelImages(model_id);
+                totalDuplicatesHidden += hidden;
+            } catch (error) {
+                // Continue on individual model errors
+            }
+
+            this.progress.modelsExtracted++;
+            this.progress.overallProgress = 90 + Math.round((this.progress.modelsExtracted / this.progress.modelsToExtract) * 5);
+            this.progress.stepDescription = `Deduplicating images (${this.progress.modelsExtracted} of ${this.progress.modelsToExtract})...`;
+
+            // Yield control every 20 models
+            if (this.progress.modelsExtracted % 20 === 0) {
+                await yieldToEventLoop();
+            }
+        }
+
+        const dedupTime = ((Date.now() - dedupStart) / 1000).toFixed(1);
+        console.log(`Deduplication complete: ${totalDuplicatesHidden} duplicate images hidden across ${modelsWithMultipleImages.length} models (${dedupTime}s)`);
         this.progress.overallProgress = 95;
+
+        return { modelsProcessed: modelsWithMultipleImages.length, duplicatesHidden: totalDuplicatesHidden };
+    }
+
+    /**
+     * Deduplicate images for a single model.
+     * Returns the number of duplicates that were hidden.
+     */
+    async deduplicateModelImages(modelId: number): Promise<number> {
+        const images = db.prepare(`
+            SELECT id, filepath, is_primary
+            FROM model_assets
+            WHERE model_id = ? AND asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
+        `).all(modelId) as Array<{ id: number; filepath: string; is_primary: number }>;
+
+        if (images.length < 2) return 0;
+
+        // Step 1: Compute perceptual hash for each image
+        const imageHashes: Array<{ id: number; filepath: string; is_primary: number; hash: string; fileSize: number }> = [];
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dedup-'));
+
+        try {
+            for (const image of images) {
+                if (!fs.existsSync(image.filepath)) continue;
+
+                try {
+                    const stats = fs.statSync(image.filepath);
+                    const hash = await this.computePerceptualHash(image.filepath, tempDir);
+                    if (hash) {
+                        imageHashes.push({
+                            id: image.id,
+                            filepath: image.filepath,
+                            is_primary: image.is_primary,
+                            hash,
+                            fileSize: stats.size
+                        });
+                    }
+                } catch {
+                    // Skip images that can't be hashed
+                }
+            }
+
+            if (imageHashes.length < 2) return 0;
+
+            // Step 2: Group by perceptual hash
+            const hashGroups = new Map<string, typeof imageHashes>();
+            for (const img of imageHashes) {
+                const group = hashGroups.get(img.hash) || [];
+                group.push(img);
+                hashGroups.set(img.hash, group);
+            }
+
+            // Step 3: For each group with duplicates, keep the best and hide the rest
+            let duplicatesHidden = 0;
+            const hideStmt = db.prepare('UPDATE model_assets SET is_hidden = 1 WHERE id = ?');
+
+            for (const [, group] of hashGroups) {
+                if (group.length < 2) continue;
+
+                // Sort: primary images first, then by file size descending (keep largest)
+                group.sort((a, b) => {
+                    if (a.is_primary !== b.is_primary) return b.is_primary - a.is_primary;
+                    return b.fileSize - a.fileSize;
+                });
+
+                // Hide all except the first (best) one
+                for (let i = 1; i < group.length; i++) {
+                    hideStmt.run(group[i].id);
+                    duplicatesHidden++;
+                }
+            }
+
+            return duplicatesHidden;
+        } finally {
+            // Clean up temp directory
+            try {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            } catch {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    /**
+     * Compute a perceptual hash of an image by resizing it to 8x8 grayscale
+     * using macOS sips, then hashing the resulting pixel data.
+     */
+    private async computePerceptualHash(imagePath: string, tempDir: string): Promise<string | null> {
+        const ext = path.extname(imagePath).toLowerCase();
+        // Skip non-standard image formats that sips might not handle
+        if (!['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.bmp'].includes(ext)) {
+            return null;
+        }
+
+        const baseName = crypto.randomBytes(8).toString('hex');
+        const resizedPath = path.join(tempDir, `${baseName}.png`);
+
+        try {
+            // Use sips to resize to 8x8 and convert to PNG (deterministic output)
+            await new Promise<void>((resolve, reject) => {
+                execFile('sips', [
+                    '-z', '8', '8',          // Resize to 8x8
+                    '-s', 'format', 'png',   // Output as PNG
+                    imagePath,
+                    '--out', resizedPath
+                ], { timeout: 5000 }, (error) => {
+                    if (error) reject(error);
+                    else resolve();
+                });
+            });
+
+            if (!fs.existsSync(resizedPath)) return null;
+
+            // Hash the resized image bytes
+            const data = fs.readFileSync(resizedPath);
+            const hash = crypto.createHash('md5').update(data).digest('hex');
+
+            // Clean up the temp file immediately
+            try { fs.unlinkSync(resizedPath); } catch { /* ignore */ }
+
+            return hash;
+        } catch {
+            // Clean up on error
+            try { if (fs.existsSync(resizedPath)) fs.unlinkSync(resizedPath); } catch { /* ignore */ }
+            return null;
+        }
     }
 
     private trackLooseFile(filepath: string): void {

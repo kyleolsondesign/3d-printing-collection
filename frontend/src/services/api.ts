@@ -182,7 +182,8 @@ export const systemApi = {
     getLooseFiles: () => api.get('/system/loose-files'),
     openFolder: (folderPath: string) => api.post('/system/open-folder', { folderPath }),
     organizeLooseFile: (looseFileId: number) => api.post('/system/organize-loose-file', { looseFileId }),
-    organizeLooseFiles: (looseFileIds: number[]) => api.post('/system/organize-loose-files', { looseFileIds })
+    organizeLooseFiles: (looseFileIds: number[]) => api.post('/system/organize-loose-files', { looseFileIds }),
+    deduplicateImages: () => api.post('/system/deduplicate-images')
 };
 
 // Ingestion API
@@ -190,6 +191,8 @@ export const ingestionApi = {
     getConfig: () => api.get('/ingestion/config'),
     setConfig: (data: { directory?: string; apiKey?: string; prompt?: string }) => api.post('/ingestion/config', data),
     scan: () => api.get('/ingestion/scan'),
+    categorize: () => api.post('/ingestion/categorize'),
+    categorizeStatus: () => api.get('/ingestion/categorize/status'),
     importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean }>) =>
         api.post('/ingestion/import', { items })
 };

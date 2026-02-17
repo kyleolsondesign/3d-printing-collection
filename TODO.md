@@ -51,7 +51,7 @@
 - [x] All tabs except "loose files" should use the same card and table view, with the option to switch between. Clicking the name, date added, date created, and category table headers in the table view should update the sorting and query param. Clicking the active sort header should toggle the sort direction.
 - [x] Search bar does not work on loose files tab. Should search amongst the loose files. Does not work on settings tab. For settings tab it should bring you to browse and then search within browse when you submit a search query
 - [x] When clicking on image preview in model view, allow full-size viewing of the images, taking over left/right keyboard navigation to look through the images. Escape should return to the modal view.
-- [ ] Detect duplicate images for a single model and hide duplicates. These might have the same visual content but not the same size, filetype or compression. Always choose to keep the highest quality image.
+- [x] Detect duplicate images for a single model and hide duplicates. These might have the same visual content but not the same size, filetype or compression. Always choose to keep the highest quality image.
 - [x] Create a new ingestion view, which scans an ingestion folder that can be configured (default: `/Users/kyle/Downloads`) for models that are uncategorized. The ingestion tool should propose existing categories for the models into automatically. There should UI to accept the suggestions, which will also move the models into the appropriate category folder.
 - [x] Give me an overall progress indicator when batch importing
 - [x] Search on the import page should filter the importable models
@@ -60,6 +60,7 @@
 - [x] Allow batch assigning of categories in the ingestion view by setting all the selected items to the same category
 - [x] Make the "select all" and "import" box sticky at the top of the screen when you scroll past it on the ingestion view
 - [x] Rescanning a model or extracting zip breaks the link from the page to launch the modal and breaks the deep-linking to the modal on refresh, because the ID changes. Can we either keep the original ID or update the view to reflect the new ID both in the links and the query params? After extracting a zip file from the modal view for a model, refresh the modal view. While extracting, give a progress indicator
+- [ ] Prefer .gif images as the primary image for a model when adding
 
 ---
 
@@ -75,6 +76,5 @@
 - [x] Image gallery mode: A full-screen, image-focused browsing mode with larger thumbnails in a masonry or justified grid layout. Clicking opens the model details. Good for visual browsing when you know what something looks like but not its name.
 - [x] Print time and filament tracking: The `printed_models` table already has `print_time_hours` and `filament_used_grams` columns. Add UI in the printed view and modal to record and display these, with totals in the stats dashboard.
 - [ ] File system watcher: Use `fs.watch` or `chokidar` to monitor the model directory for changes and automatically trigger incremental scans when files are added, moved, or deleted. Eliminates the need for manual re-scans.
-- [ ] Keyboard shortcuts for browse: Add hotkeys for common actions while browsing — `f` to toggle favorite, `q` to toggle queue, `p` to cycle printed, `s` to toggle selection mode, `/` to focus search bar. Show a keyboard shortcut help overlay with `?`.
 
 ---

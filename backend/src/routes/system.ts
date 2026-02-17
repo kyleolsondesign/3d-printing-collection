@@ -107,6 +107,17 @@ router.get('/scan/status', (req, res) => {
     }
 });
 
+// Deduplicate images across all models (manual trigger)
+router.post('/deduplicate-images', async (req, res) => {
+    try {
+        const result = await scanner.deduplicateAllImages();
+        res.json(result);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 // Get all categories (excludes soft-deleted models)
 router.get('/categories', (req, res) => {
     try {

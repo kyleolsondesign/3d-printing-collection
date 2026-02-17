@@ -37,11 +37,53 @@
             </template>
           </div>
         </div>
+      </div>
+      <button @click="scanFolder" class="btn-scan" :disabled="scanning || !ingestionDir">
+        <svg v-if="scanning" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"/>
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="M21 21l-4.35-4.35"/>
+        </svg>
+        {{ scanning ? 'Scanning...' : 'Scan' }}
+      </button>
+    </div>
+
+    <!-- AI Categorization Section -->
+    <div class="ai-categorize-bar">
+      <div class="ai-categorize-header">
+        <div class="ai-categorize-info">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a7 7 0 017 7c0 3-2 5.5-5 7-.5.25-1 .5-1.5.5H11.5c-.5 0-1-.25-1.5-.5-3-1.5-5-4-5-7a7 7 0 017-7z"/>
+            <path d="M9 22h6M12 18v4"/>
+          </svg>
+          <div>
+            <span class="ai-title" v-if="!categorizing && !aiDone">Use AI to improve category suggestions</span>
+            <span class="ai-title" v-else-if="categorizing">{{ aiProgress.status }}</span>
+            <span class="ai-title" v-else-if="aiDone">{{ aiProgress.status }}</span>
+            <span class="ai-hint" v-if="!categorizing && !aiDone">Sends model names and metadata to Claude API (costs apply)</span>
+          </div>
+        </div>
+        <div class="ai-categorize-actions">
+          <div v-if="categorizing" class="ai-progress">
+            <div class="ai-progress-bar">
+              <div class="ai-progress-fill" :style="{ width: aiProgressPercent + '%' }"></div>
+            </div>
+            <span class="ai-progress-text">Batch {{ aiProgress.currentBatch }}/{{ aiProgress.totalBatches }}</span>
+          </div>
+          <button v-if="!categorizing && items.length > 0 && hasApiKey" @click="categorizeWithAI" class="btn-ai" :disabled="scanning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2a7 7 0 017 7c0 3-2 5.5-5 7-.5.25-1 .5-1.5.5H11.5c-.5 0-1-.25-1.5-.5-3-1.5-5-4-5-7a7 7 0 017-7z"/>
+              <path d="M9 22h6M12 18v4"/>
+            </svg>
+            {{ aiDone ? 'Re-categorize with AI' : 'Categorize with AI' }}
+          </button>
+        </div>
+      </div>
+      <div class="ai-config-rows">
         <div class="config-row">
-          <label class="config-label">
-            Claude API key
-            <span class="config-hint">(enables AI-powered category suggestions)</span>
-          </label>
+          <label class="config-label">Claude API key</label>
           <div class="config-path-row">
             <template v-if="editingApiKey">
               <input
@@ -80,7 +122,6 @@
             </svg>
             <label class="config-label" style="margin-bottom: 0; cursor: pointer;">
               Categorization prompt
-              <span class="config-hint">(customize how Claude categorizes models)</span>
             </label>
           </button>
           <div v-if="showPromptEditor" class="prompt-editor-wrapper">
@@ -100,25 +141,6 @@
           </div>
         </div>
       </div>
-      <button @click="scanFolder" class="btn-scan" :disabled="scanning || !ingestionDir">
-        <svg v-if="scanning" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"/>
-        </svg>
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="M21 21l-4.35-4.35"/>
-        </svg>
-        {{ scanning ? 'Scanning...' : 'Scan' }}
-      </button>
-    </div>
-
-    <!-- Claude indicator -->
-    <div v-if="usedClaude && items.length > 0" class="claude-badge">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 2a7 7 0 017 7c0 3-2 5.5-5 7-.5.25-1 .5-1.5.5H11.5c-.5 0-1-.25-1.5-.5-3-1.5-5-4-5-7a7 7 0 017-7z"/>
-        <path d="M9 22h6M12 18v4"/>
-      </svg>
-      Categories suggested by Claude
     </div>
 
     <!-- Results Panel -->
@@ -374,9 +396,22 @@ const items = ref<IngestionItem[]>([]);
 const categories = ref<string[]>([]);
 const scanning = ref(false);
 const importing = ref(false);
+const categorizing = ref(false);
+const aiDone = ref(false);
 const hasScanned = ref(false);
-const usedClaude = ref(false);
 const selectedIds = ref<Set<string>>(new Set());
+const aiProgress = ref({
+  active: false,
+  totalItems: 0,
+  processedItems: 0,
+  currentBatch: 0,
+  totalBatches: 0,
+  status: ''
+});
+const aiProgressPercent = computed(() => {
+  if (aiProgress.value.totalBatches === 0) return 0;
+  return Math.round((aiProgress.value.currentBatch / aiProgress.value.totalBatches) * 100);
+});
 const importingPaths = ref<Set<string>>(new Set());
 const lastResults = ref<ImportResults | null>(null);
 
@@ -385,11 +420,11 @@ const promptDirty = computed(() =>
 );
 
 const isAllSelected = computed(() =>
-  items.value.length > 0 && selectedIds.value.size === items.value.length
+  filteredItems.value.length > 0 && filteredItems.value.every(i => selectedIds.value.has(i.filepath))
 );
 
 const isPartiallySelected = computed(() =>
-  selectedIds.value.size > 0 && selectedIds.value.size < items.value.length
+  selectedIds.value.size > 0 && !isAllSelected.value
 );
 
 const highConfidenceItems = computed(() =>
@@ -480,10 +515,6 @@ async function saveApiKey() {
     hasApiKey.value = response.data.hasApiKey;
     editingApiKey.value = false;
     editApiKeyValue.value = '';
-    // Re-scan to get Claude suggestions
-    if (items.value.length > 0 || hasScanned.value) {
-      await scanFolder();
-    }
   } catch (error: any) {
     console.error('Failed to save API key:', error);
     alert(error.response?.data?.error || 'Failed to save API key');
@@ -524,7 +555,7 @@ async function scanFolder() {
   scanning.value = true;
   hasScanned.value = false;
   items.value = [];
-  usedClaude.value = false;
+  aiDone.value = false;
   selectedIds.value.clear();
 
   try {
@@ -533,7 +564,6 @@ async function scanFolder() {
       ...item,
       selectedCategory: item.suggestedCategory
     }));
-    usedClaude.value = response.data.usedClaude || false;
     hasScanned.value = true;
   } catch (error: any) {
     console.error('Failed to scan:', error);
@@ -541,6 +571,55 @@ async function scanFolder() {
     hasScanned.value = true;
   } finally {
     scanning.value = false;
+  }
+}
+
+async function categorizeWithAI() {
+  if (categorizing.value) return;
+  categorizing.value = true;
+  aiDone.value = false;
+  aiProgress.value = { active: true, totalItems: items.value.length, processedItems: 0, currentBatch: 0, totalBatches: 0, status: 'Starting AI categorization...' };
+
+  // Poll for progress
+  const pollInterval = setInterval(async () => {
+    try {
+      const status = await ingestionApi.categorizeStatus();
+      aiProgress.value = status.data;
+    } catch { /* ignore polling errors */ }
+  }, 1000);
+
+  try {
+    const response = await ingestionApi.categorize();
+    clearInterval(pollInterval);
+
+    // Update items with AI suggestions
+    const aiItems = response.data.items || [];
+    for (const aiItem of aiItems) {
+      const existing = items.value.find(i => i.filepath === aiItem.filepath);
+      if (existing) {
+        existing.suggestedCategory = aiItem.suggestedCategory;
+        existing.confidence = aiItem.confidence;
+        existing.selectedCategory = aiItem.suggestedCategory;
+      }
+    }
+
+    aiDone.value = true;
+    aiProgress.value = {
+      active: false,
+      totalItems: aiItems.length,
+      processedItems: aiItems.length,
+      currentBatch: response.data.batches || 0,
+      totalBatches: response.data.batches || 0,
+      status: `AI categorized ${response.data.aiCategorized || 0} of ${aiItems.length} items`
+    };
+  } catch (error: any) {
+    clearInterval(pollInterval);
+    console.error('AI categorization failed:', error);
+    aiProgress.value.status = 'AI categorization failed';
+    aiProgress.value.active = false;
+    alert(error.response?.data?.error || 'AI categorization failed');
+  } finally {
+    categorizing.value = false;
   }
 }
 
@@ -556,9 +635,18 @@ function toggleSelect(filepath: string) {
 
 function toggleSelectAll() {
   if (isAllSelected.value) {
-    selectedIds.value = new Set();
+    // Deselect only the filtered items (preserve selections outside the filter)
+    const newSet = new Set(selectedIds.value);
+    for (const item of filteredItems.value) {
+      newSet.delete(item.filepath);
+    }
+    selectedIds.value = newSet;
   } else {
-    selectedIds.value = new Set(items.value.map(i => i.filepath));
+    const newSet = new Set(selectedIds.value);
+    for (const item of filteredItems.value) {
+      newSet.add(item.filepath);
+    }
+    selectedIds.value = newSet;
   }
 }
 
@@ -924,25 +1012,123 @@ h2 {
   gap: 0.5rem;
 }
 
-/* Claude Badge */
-.claude-badge {
+/* AI Categorize Section */
+.ai-categorize-bar {
+  padding: 0.875rem 1rem;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+
+.ai-categorize-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ai-categorize-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.ai-config-rows {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.ai-config-rows .config-row {
+  padding: 0;
+}
+
+.ai-categorize-info {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-categorize-info > svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: rgb(167, 139, 250);
+}
+
+.ai-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ai-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.ai-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 160px;
+}
+
+.ai-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ai-progress-fill {
+  height: 100%;
+  background: rgb(139, 92, 246);
+  transition: width 0.3s ease;
+  border-radius: 3px;
+}
+
+.ai-progress-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.btn-ai {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.875rem;
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.25);
-  border-radius: var(--radius-md);
+  background: rgba(139, 92, 246, 0.15);
   color: rgb(167, 139, 250);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: var(--radius-md);
+  font-weight: 600;
   font-size: 0.8rem;
-  font-weight: 500;
-  margin-bottom: 1rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
 }
 
-.claude-badge svg {
+.btn-ai svg {
   width: 16px;
   height: 16px;
-  flex-shrink: 0;
+}
+
+.btn-ai:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.btn-ai:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Config state indicators */

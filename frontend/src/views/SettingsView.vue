@@ -137,6 +137,40 @@
       <div class="section-header">
         <div class="section-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Maintenance</h3>
+          <p class="section-description">Tools for managing your collection</p>
+        </div>
+      </div>
+      <div class="maintenance-actions">
+        <div class="maintenance-item">
+          <div class="maintenance-info">
+            <span class="maintenance-title">Deduplicate Images</span>
+            <span class="maintenance-desc">Find and hide visually identical images within each model, keeping the highest quality version.</span>
+          </div>
+          <button @click="deduplicateImages" class="btn-secondary" :disabled="deduplicating || scanStatus.scanning">
+            <svg v-if="deduplicating" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 11-6.219-8.56"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7" opacity="0.4"/>
+              <rect x="14" y="14" width="7" height="7" opacity="0.4"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            {{ deduplicating ? 'Deduplicating...' : 'Run Deduplication' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="section-header">
+        <div class="section-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
           </svg>
@@ -215,6 +249,7 @@ import { systemApi, type ScanMode } from '../services/api';
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');
 const scanMode = ref<ScanMode>('full_sync');
 const scanning = ref(false);
+const deduplicating = ref(false);
 const lastScan = ref<string | null>(null);
 const message = ref('');
 const messageType = ref<'success' | 'error'>('success');
@@ -369,6 +404,24 @@ async function saveAndScan() {
     showMessage('Failed to start scan', 'error');
   } finally {
     scanning.value = false;
+  }
+}
+
+async function deduplicateImages() {
+  if (deduplicating.value) return;
+  deduplicating.value = true;
+  try {
+    const response = await systemApi.deduplicateImages();
+    const { modelsProcessed, duplicatesHidden } = response.data;
+    if (duplicatesHidden > 0) {
+      showMessage(`Found and hidden ${duplicatesHidden} duplicate images across ${modelsProcessed} models`, 'success');
+    } else {
+      showMessage('No duplicate images found', 'success');
+    }
+  } catch (error) {
+    showMessage('Failed to run deduplication', 'error');
+  } finally {
+    deduplicating.value = false;
   }
 }
 
@@ -804,5 +857,71 @@ h2 {
   margin-top: 1.25rem;
   display: flex;
   justify-content: flex-end;
+}
+
+.maintenance-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.maintenance-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.maintenance-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.maintenance-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.maintenance-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.btn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.btn-secondary svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

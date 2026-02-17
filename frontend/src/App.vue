@@ -138,7 +138,7 @@ async function loadLooseFilesCount() {
 
 function handleSearch() {
   if (searchInput.value.trim()) {
-    if (route.name === 'settings' || route.name === 'ingestion') {
+    if (route.name === 'settings') {
       router.push({ path: '/', query: { q: searchInput.value.trim() } });
       return;
     }
@@ -163,7 +163,7 @@ const searchPlaceholder = computed(() => {
     queue: 'Search queue...',
     printed: 'Search printed...',
     'loose-files': 'Search loose files...',
-    ingestion: 'Search models...',
+    ingestion: 'Search imports...',
   };
   return placeholders[route.name as string] || 'Search models...';
 });
