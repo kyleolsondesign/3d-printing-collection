@@ -20,7 +20,7 @@ Decorative art pieces, busts, sculptures, architectural models, wall art, relief
 
 ## Bird Houses
 
-Bird houses, bird feeders, and outdoor wildlife accessories.
+Bird houses, birdhouse, bird feeders, and outdoor wildlife accessories.
 
 ## Cars
 
@@ -52,7 +52,7 @@ Fidget toys, clickers, spinners, stress relief toys, and tactile desk toys.
 
 ## Figurines
 
-Character figurines, miniatures, statues, and collectible display models (non-dragon).
+Character figurines, miniatures, statues, and collectible display models (non-dragon). Figurines are always characters, not objects.
 
 ## Game Night & Marble Runs
 
@@ -96,7 +96,7 @@ Geometric patterns, tessellations, mathematical shapes, and abstract geometric d
 
 ## Plants, Planters & Vases
 
-Plant pots, planters, vases, self-watering systems, plant labels, and garden accessories.
+Plant pots, planters, vases, self-watering systems, hydroponics, test tube planters, plant labels, and garden accessories.
 
 ## Skadis
 
@@ -104,7 +104,7 @@ IKEA Skadis pegboard accessories: hooks, holders, bins, and custom mounts for th
 
 ## Storage & Organization
 
-General storage solutions, desk organizers, drawer dividers, wall mounts, hooks, and organizational accessories (not Gridfinity, HSW, or Skadis specific).
+General storage solutions, bowls, containers, bins, desk organizers, cable organizers, drawer dividers, wall mounts, hooks, and organizational accessories (not Gridfinity, HSW, or Skadis specific).
 
 ## Tea Lights & Candles
 
@@ -120,7 +120,7 @@ Practical tools, wrenches, jigs, measuring tools, clamps, and other functional u
 
 ## Toys
 
-Toys for children, playsets, action figures, building blocks, toy vehicles, and play accessories.
+Toys for children, playsets, action figures, building blocks, toy vehicles, and play accessories. Flexis and articulated models are most often toys.
 
 ## Wine & Coasters
 

@@ -163,7 +163,7 @@ router.get('/stats', (req, res) => {
 // Get loose files
 router.get('/loose-files', (req, res) => {
     try {
-        const looseFiles = db.prepare('SELECT * FROM loose_files ORDER BY filename ASC').all();
+        const looseFiles = db.prepare('SELECT * FROM loose_files ORDER BY filepath ASC').all();
         res.json({ looseFiles });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

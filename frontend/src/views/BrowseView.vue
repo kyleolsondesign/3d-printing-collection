@@ -11,22 +11,25 @@
 
     <div class="filters">
       <div class="filter-row">
-        <div class="category-filters">
-          <button
-            @click="filterByCategory('all')"
-            :class="['category-btn', { active: store.selectedCategory === 'all' }]"
-          >
-            All
-          </button>
-          <button
-            v-for="cat in store.categories"
-            :key="cat.category"
-            @click="filterByCategory(cat.category)"
-            :class="['category-btn', { active: store.selectedCategory === cat.category }]"
-          >
-            {{ cat.category }}
-            <span class="cat-count">{{ cat.count }}</span>
-          </button>
+        <div class="category-scroll-wrapper">
+          <div class="category-scroll" ref="categoryScrollRef">
+            <button
+              @click="filterByCategory('all')"
+              :class="['cat-chip', { active: store.selectedCategory === 'all' }]"
+            >
+              <span class="cat-chip-label">All</span>
+              <span class="cat-chip-count">{{ store.categories.reduce((sum: number, c: { count: number }) => sum + c.count, 0).toLocaleString() }}</span>
+            </button>
+            <button
+              v-for="cat in store.categories"
+              :key="cat.category"
+              @click="filterByCategory(cat.category)"
+              :class="['cat-chip', { active: store.selectedCategory === cat.category }]"
+            >
+              <span class="cat-chip-label">{{ cat.category }}</span>
+              <span class="cat-chip-count">{{ cat.count }}</span>
+            </button>
+          </div>
         </div>
         <div class="view-controls">
           <div class="filter-toggles">
@@ -213,7 +216,7 @@
         <div class="model-info">
           <h3 :title="model.filename" @click="openModal(model)">{{ model.filename }}</h3>
           <div class="model-meta">
-            <span class="category-tag">{{ model.category }}</span>
+            <span class="category-tag clickable" @click.stop="filterByCategory(model.category)">{{ model.category }}</span>
             <span v-if="model.file_count > 1" class="file-count">{{ model.file_count }} files</span>
             <span v-if="model.is_paid" class="badge-paid">Paid</span>
             <span v-if="model.is_original" class="badge-original">Original</span>
@@ -342,7 +345,7 @@
               </div>
             </td>
             <td class="col-category">
-              <span class="category-pill">{{ model.category }}</span>
+              <span class="category-pill clickable" @click.stop="filterByCategory(model.category)">{{ model.category }}</span>
             </td>
             <td class="col-files">{{ model.file_count }}</td>
             <td class="col-date">{{ formatDate(model.date_added) }}</td>
@@ -435,6 +438,7 @@ const sortField = ref('date_added');
 const sortOrder = ref<'asc' | 'desc'>('desc');
 const hidePrinted = ref(true);
 const hideQueued = ref(false);
+const categoryScrollRef = ref<HTMLElement | null>(null);
 const loadMoreSentinel = ref<HTMLElement | null>(null);
 const totalModels = ref(0);
 const isSearchActive = ref(false);
@@ -981,51 +985,74 @@ async function bulkAddToFavorites() {
   flex-wrap: wrap;
 }
 
-.category-filters {
-  display: flex;
-  gap: 0.375rem;
-  flex-wrap: wrap;
+/* Horizontal scrollable category bar */
+.category-scroll-wrapper {
+  position: relative;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent 0, black 0, black calc(100% - 2rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 0, black calc(100% - 2rem), transparent 100%);
 }
 
-.category-btn {
+.category-scroll {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-right: 2rem;
+}
+
+.category-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.cat-chip {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.875rem;
-  border: 1px solid var(--border-default);
-  background: var(--bg-elevated);
-  border-radius: var(--radius-md);
-  font-size: 0.85rem;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 999px;
+  font-size: 0.8rem;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  cursor: pointer;
   transition: all var(--transition-base);
+  flex-shrink: 0;
 }
 
-.category-btn:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  background: var(--accent-primary-dim);
+.cat-chip:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
-.category-btn.active {
+.cat-chip.active {
   background: var(--accent-primary);
   color: var(--bg-deepest);
-  border-color: var(--accent-primary);
+  font-weight: 600;
 }
 
-.category-btn.active .cat-count {
+.cat-chip.active .cat-chip-count {
   background: rgba(0, 0, 0, 0.2);
   color: inherit;
 }
 
-.cat-count {
-  font-size: 0.75rem;
+.cat-chip-label {
+  pointer-events: none;
+}
+
+.cat-chip-count {
+  font-size: 0.65rem;
   font-family: var(--font-mono);
-  padding: 0.125rem 0.375rem;
+  padding: 0.1rem 0.35rem;
   background: var(--bg-hover);
-  border-radius: var(--radius-sm);
-  color: var(--text-tertiary);
+  border-radius: 999px;
+  color: var(--text-muted);
+  pointer-events: none;
 }
 
 .view-controls {
@@ -1298,6 +1325,16 @@ async function bulkAddToFavorites() {
   font-weight: 500;
 }
 
+.category-tag.clickable {
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.category-tag.clickable:hover {
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+}
+
 .file-count {
   padding: 0.25rem 0.5rem;
   color: var(--text-tertiary);
@@ -1516,6 +1553,16 @@ async function bulkAddToFavorites() {
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 500;
+}
+
+.category-pill.clickable {
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.category-pill.clickable:hover {
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
 }
 
 .table-actions {

@@ -1035,6 +1035,9 @@ h2 {
 }
 
 .ai-config-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid rgba(139, 92, 246, 0.15);
