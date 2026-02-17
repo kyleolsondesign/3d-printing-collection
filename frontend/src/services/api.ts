@@ -183,7 +183,8 @@ export const systemApi = {
     openFolder: (folderPath: string) => api.post('/system/open-folder', { folderPath }),
     organizeLooseFile: (looseFileId: number) => api.post('/system/organize-loose-file', { looseFileId }),
     organizeLooseFiles: (looseFileIds: number[]) => api.post('/system/organize-loose-files', { looseFileIds }),
-    deduplicateImages: () => api.post('/system/deduplicate-images')
+    deduplicateImages: () => api.post('/system/deduplicate-images'),
+    trashLooseFile: (looseFileId: number) => api.post('/system/trash-loose-file', { looseFileId })
 };
 
 // Ingestion API

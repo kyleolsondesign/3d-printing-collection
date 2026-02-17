@@ -129,7 +129,7 @@
 
       <div v-else class="loose-files-list">
         <div
-          v-for="(file, index) in filteredLooseFiles"
+          v-for="(file, index) in paginatedFiles"
           :key="file.id"
           class="file-card"
           :class="{ selected: selectedIds.has(file.id), organizing: organizingIds.has(file.id) }"
@@ -175,6 +175,11 @@
               </svg>
               Organize
             </button>
+            <button @click.stop="trashFile(file)" class="btn-danger" title="Move to Trash">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+              </svg>
+            </button>
             <button @click.stop="openInFinder(file)" class="btn-secondary" title="Show in Finder">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
@@ -183,12 +188,73 @@
           </div>
         </div>
       </div>
+
+      <!-- Pagination -->
+      <div v-if="totalPages > 1 || filteredLooseFiles.length > 25" class="pagination-bar">
+        <div class="pagination-info">
+          <span class="pagination-range">
+            {{ (currentPage - 1) * pageSize + 1 }}&ndash;{{ Math.min(currentPage * pageSize, filteredLooseFiles.length) }}
+            of {{ filteredLooseFiles.length }}
+          </span>
+          <div class="page-size-select">
+            <label>Per page:</label>
+            <select v-model="pageSize" @change="currentPage = 1">
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+            </select>
+          </div>
+        </div>
+        <div class="pagination-controls">
+          <button
+            @click="currentPage = 1"
+            :disabled="currentPage <= 1"
+            class="page-btn"
+            title="First page"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/>
+            </svg>
+          </button>
+          <button
+            @click="currentPage--"
+            :disabled="currentPage <= 1"
+            class="page-btn"
+            title="Previous page"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </button>
+          <span class="page-indicator">{{ currentPage }} / {{ totalPages }}</span>
+          <button
+            @click="currentPage++"
+            :disabled="currentPage >= totalPages"
+            class="page-btn"
+            title="Next page"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </button>
+          <button
+            @click="currentPage = totalPages"
+            :disabled="currentPage >= totalPages"
+            class="page-btn"
+            title="Last page"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 17l5-5-5-5M6 17l5-5-5-5"/>
+            </svg>
+          </button>
+        </div>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { systemApi } from '../services/api';
 import { useAppStore } from '../store';
 
@@ -223,23 +289,34 @@ const organizing = ref(false);
 const selectedIds = ref<Set<number>>(new Set());
 const organizingIds = ref<Set<number>>(new Set());
 const lastResults = ref<OrganizeResults | null>(null);
+const currentPage = ref(1);
+const pageSize = ref(50);
 
 const filteredLooseFiles = computed(() => {
   const query = store.globalSearchQuery.toLowerCase();
   if (!query) return looseFiles.value;
   return looseFiles.value.filter(f =>
     f.filename.toLowerCase().includes(query) ||
+    f.filepath.toLowerCase().includes(query) ||
     f.file_type.toLowerCase().includes(query) ||
     (f.category && f.category.toLowerCase().includes(query))
   );
 });
 
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredLooseFiles.value.length / pageSize.value)));
+
+const paginatedFiles = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredLooseFiles.value.slice(start, start + pageSize.value);
+});
+
+// Select all only selects items on the current page
 const isAllSelected = computed(() =>
-  filteredLooseFiles.value.length > 0 && selectedIds.value.size === filteredLooseFiles.value.length
+  paginatedFiles.value.length > 0 && paginatedFiles.value.every(f => selectedIds.value.has(f.id))
 );
 
 const isPartiallySelected = computed(() =>
-  selectedIds.value.size > 0 && selectedIds.value.size < filteredLooseFiles.value.length
+  !isAllSelected.value && paginatedFiles.value.some(f => selectedIds.value.has(f.id))
 );
 
 onMounted(async () => {
@@ -248,6 +325,11 @@ onMounted(async () => {
 
 onUnmounted(() => {
   store.clearGlobalSearch();
+});
+
+// Reset to page 1 when search query changes
+watch(() => store.globalSearchQuery, () => {
+  currentPage.value = 1;
 });
 
 async function loadLooseFiles() {
@@ -276,9 +358,14 @@ function toggleSelect(id: number) {
 
 function toggleSelectAll() {
   if (isAllSelected.value) {
-    selectedIds.value = new Set();
+    // Deselect only current page items
+    const pageIds = new Set(paginatedFiles.value.map(f => f.id));
+    selectedIds.value = new Set([...selectedIds.value].filter(id => !pageIds.has(id)));
   } else {
-    selectedIds.value = new Set(filteredLooseFiles.value.map(f => f.id));
+    // Select all on current page (add to existing selection)
+    const newSet = new Set(selectedIds.value);
+    paginatedFiles.value.forEach(f => newSet.add(f.id));
+    selectedIds.value = newSet;
   }
 }
 
@@ -349,10 +436,26 @@ async function organizeSelected() {
 
 async function openInFinder(file: LooseFile) {
   try {
-    const folderPath = file.filepath.substring(0, file.filepath.lastIndexOf('/'));
-    await systemApi.openFolder(folderPath);
+    // Pass the full filepath so open -R reveals and selects the file itself
+    await systemApi.openFolder(file.filepath);
   } catch (error) {
-    console.error('Failed to open folder:', error);
+    console.error('Failed to open in Finder:', error);
+  }
+}
+
+async function trashFile(file: LooseFile) {
+  if (!confirm(`Move "${file.filename}" to Trash?`)) return;
+  try {
+    await systemApi.trashLooseFile(file.id);
+    looseFiles.value = looseFiles.value.filter(f => f.id !== file.id);
+    selectedIds.value.delete(file.id);
+    selectedIds.value = new Set(selectedIds.value);
+    // Adjust page if current page is now empty
+    if (currentPage.value > totalPages.value) {
+      currentPage.value = Math.max(1, totalPages.value);
+    }
+  } catch (error) {
+    console.error('Failed to trash file:', error);
   }
 }
 
@@ -821,6 +924,31 @@ h2 {
   background: var(--bg-hover);
 }
 
+.btn-danger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.btn-danger svg {
+  width: 18px;
+  height: 18px;
+}
+
+.btn-danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
 .loading {
   display: flex;
   flex-direction: column;
@@ -881,5 +1009,96 @@ h2 {
 .empty p {
   color: var(--text-secondary);
   font-size: 0.95rem;
+}
+
+/* Pagination */
+.pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  margin-top: 1rem;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.pagination-range {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.page-size-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-size-select label {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.page-size-select select {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.page-size-select select:hover {
+  border-color: var(--border-strong);
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.page-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.page-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.page-btn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.page-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.page-indicator {
+  padding: 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
 }
 </style>

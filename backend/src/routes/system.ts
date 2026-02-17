@@ -348,4 +348,47 @@ router.post('/open-folder', (req, res) => {
     }
 });
 
+// Move a loose file to macOS Trash
+router.post('/trash-loose-file', async (req, res) => {
+    try {
+        const { looseFileId } = req.body;
+
+        if (!looseFileId) {
+            return res.status(400).json({ error: 'looseFileId is required' });
+        }
+
+        const looseFile = db.prepare('SELECT * FROM loose_files WHERE id = ?').get(looseFileId) as any;
+        if (!looseFile) {
+            return res.status(404).json({ error: 'Loose file not found' });
+        }
+
+        // Check file exists
+        if (!fs.existsSync(looseFile.filepath)) {
+            // File already gone, just remove from DB
+            db.prepare('DELETE FROM loose_files WHERE id = ?').run(looseFileId);
+            return res.json({ success: true, message: 'File not found on disk, removed from database' });
+        }
+
+        // Move to macOS Trash using osascript
+        await new Promise<void>((resolve, reject) => {
+            const escapedPath = looseFile.filepath.replace(/"/g, '\\"');
+            exec(
+                `osascript -e 'tell application "Finder" to delete POSIX file "${escapedPath}"'`,
+                (error) => {
+                    if (error) reject(error);
+                    else resolve();
+                }
+            );
+        });
+
+        // Remove from database
+        db.prepare('DELETE FROM loose_files WHERE id = ?').run(looseFileId);
+
+        res.json({ success: true });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 export default router;
