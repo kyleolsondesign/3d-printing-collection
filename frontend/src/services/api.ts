@@ -195,7 +195,9 @@ export const ingestionApi = {
     categorize: () => api.post('/ingestion/categorize'),
     categorizeStatus: () => api.get('/ingestion/categorize/status'),
     importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean }>) =>
-        api.post('/ingestion/import', { items })
+        api.post('/ingestion/import', { items }),
+    getPreviewImageUrl: (filePath: string) =>
+        `/api/ingestion/preview-image?path=${encodeURIComponent(filePath)}`
 };
 
 export default api;

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
 import db from '../config/database.js';
 import scanner from '../services/scanner.js';
-import { isModelFile, isArchiveFile, isDocumentFile } from '../utils/fileTypes.js';
+import { isModelFile, isArchiveFile, isDocumentFile, isImageFile } from '../utils/fileTypes.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
 import {
     extractRawTextFromPdf,
@@ -63,6 +63,7 @@ interface IngestionItem {
     fileSize: number;
     suggestedCategory: string;
     confidence: 'high' | 'medium' | 'low';
+    imageFile: string | null;
 }
 
 interface ScannedItem {
@@ -71,6 +72,7 @@ interface ScannedItem {
     isFolder: boolean;
     fileCount: number;
     fileSize: number;
+    imageFile: string | null;
     // Rich context for AI categorization
     modelFileNames: string[];
     pdfFilename: string | null;
@@ -255,6 +257,7 @@ interface FolderScanResult {
     modelFileNames: string[];
     pdfPaths: string[];
     textFilePaths: string[];
+    imagePaths: string[];
 }
 
 function scanFolderContents(dirPath: string): FolderScanResult {
@@ -263,7 +266,8 @@ function scanFolderContents(dirPath: string): FolderScanResult {
         totalSize: 0,
         modelFileNames: [],
         pdfPaths: [],
-        textFilePaths: []
+        textFilePaths: [],
+        imagePaths: []
     };
 
     function walk(dir: string) {
@@ -284,6 +288,10 @@ function scanFolderContents(dirPath: string): FolderScanResult {
             } else if (isDocumentFile(fullPath)) {
                 if (result.pdfPaths.length < 3) {
                     result.pdfPaths.push(fullPath);
+                }
+            } else if (isImageFile(fullPath)) {
+                if (result.imagePaths.length < 5) {
+                    result.imagePaths.push(fullPath);
                 }
             } else if (TEXT_EXTENSIONS.includes(path.extname(fullPath).toLowerCase())) {
                 if (result.textFilePaths.length < 1) {
@@ -362,6 +370,7 @@ async function scanIngestionDir(ingestionDir: string): Promise<ScannedItem[]> {
                     fileCount: scanResult.count,
                     fileSize: scanResult.totalSize,
                     modelFileNames: scanResult.modelFileNames,
+                    imageFile: scanResult.imagePaths.length > 0 ? scanResult.imagePaths[0] : null,
                     ...context
                 });
             }
@@ -369,12 +378,31 @@ async function scanIngestionDir(ingestionDir: string): Promise<ScannedItem[]> {
             let fileSize = 0;
             try { fileSize = fs.statSync(fullPath).size; } catch { /* ignore */ }
 
+            // Check for sibling image with matching basename
+            const baseName = path.basename(entry.name, path.extname(entry.name));
+            let siblingImage: string | null = null;
+            for (const sibling of entries) {
+                if (sibling.name === entry.name || sibling.isDirectory()) continue;
+                const siblingPath = path.join(ingestionDir, sibling.name);
+                if (isImageFile(siblingPath)) {
+                    const siblingBase = path.basename(sibling.name, path.extname(sibling.name));
+                    if (siblingBase === baseName) {
+                        siblingImage = siblingPath;
+                        break;
+                    }
+                    if (!siblingImage) {
+                        siblingImage = siblingPath;
+                    }
+                }
+            }
+
             items.push({
                 filename: entry.name,
                 filepath: fullPath,
                 isFolder: false,
                 fileCount: 1,
                 fileSize,
+                imageFile: siblingImage,
                 modelFileNames: [entry.name],
                 pdfFilename: null,
                 pdfText: null,
@@ -468,6 +496,7 @@ router.get('/scan', async (req, res) => {
                 isFolder: item.isFolder,
                 fileCount: item.fileCount,
                 fileSize: item.fileSize,
+                imageFile: item.imageFile,
                 suggestedCategory: fuzzy.category,
                 confidence: fuzzy.confidence
             };
@@ -589,6 +618,7 @@ router.post('/categorize', async (req, res) => {
                     isFolder: item.isFolder,
                     fileCount: item.fileCount,
                     fileSize: item.fileSize,
+                    imageFile: item.imageFile,
                     suggestedCategory: aiSuggestion.category,
                     confidence: aiSuggestion.confidence
                 };
@@ -603,6 +633,7 @@ router.post('/categorize', async (req, res) => {
                     isFolder: item.isFolder,
                     fileCount: item.fileCount,
                     fileSize: item.fileSize,
+                    imageFile: item.imageFile,
                     suggestedCategory: fuzzy.category,
                     confidence: fuzzy.confidence
                 };
@@ -624,6 +655,32 @@ router.post('/categorize', async (req, res) => {
         aiCategorizationProgress.status = 'Failed';
         const message = error instanceof Error ? error.message : String(error);
         console.error(`[AI Categorize] Error: ${message}`);
+        res.status(500).json({ error: message });
+    }
+});
+
+// GET /api/ingestion/preview-image — serve an image from the ingestion directory
+router.get('/preview-image', (req, res) => {
+    try {
+        const filePath = req.query.path as string;
+        if (!filePath) {
+            return res.status(400).json({ error: 'path query parameter is required' });
+        }
+
+        // Security: only serve files under the configured ingestion directory
+        const ingestionDir = getConfig('ingestion_directory') || DEFAULT_INGESTION_DIR;
+        const resolved = path.resolve(filePath);
+        if (!resolved.startsWith(path.resolve(ingestionDir))) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        if (!fs.existsSync(resolved)) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        res.sendFile(resolved);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });
     }
 });

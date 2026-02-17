@@ -298,16 +298,22 @@
               :disabled="importingPaths.has(item.filepath)"
             />
           </label>
-          <div class="item-icon" :class="{ folder: item.isFolder }">
-            <svg v-if="importingPaths.has(item.filepath)" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <div class="item-thumb" v-if="item.imageFile">
+            <img
+              :src="ingestionApi.getPreviewImageUrl(item.imageFile)"
+              :alt="item.filename"
+              @error="onImageError"
+              loading="lazy"
+            />
+            <div v-if="importingPaths.has(item.filepath)" class="thumb-spinner">
+              <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"/>
+              </svg>
+            </div>
+          </div>
+          <div class="item-icon-mini" v-else-if="importingPaths.has(item.filepath)">
+            <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"/>
-            </svg>
-            <svg v-else-if="item.isFolder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
-              <path d="M13 2v7h7"/>
             </svg>
           </div>
           <div class="item-info">
@@ -361,6 +367,7 @@ interface IngestionItem {
   isFolder: boolean;
   fileCount: number;
   fileSize: number;
+  imageFile: string | null;
   suggestedCategory: string;
   confidence: 'high' | 'medium' | 'low';
   selectedCategory: string;
@@ -753,6 +760,11 @@ async function openInFinder(filepath: string) {
 
 function path_basename(filepath: string): string {
   return filepath.split('/').pop() || filepath;
+}
+
+function onImageError(event: Event) {
+  const target = event.target as HTMLImageElement;
+  target.style.display = 'none';
 }
 
 function formatFileSize(bytes: number): string {
@@ -1486,29 +1498,51 @@ h2 {
   pointer-events: none;
 }
 
-.item-icon {
-  width: 48px;
-  height: 48px;
+.item-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.item-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb-spinner {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent-primary-dim);
-  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.thumb-spinner svg {
+  width: 24px;
+  height: 24px;
   color: var(--accent-primary);
+  animation: spin 1s linear infinite;
+}
+
+.item-icon-mini {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.item-icon.folder {
-  background: var(--warning-dim);
-  color: var(--warning);
-}
-
-.item-icon svg {
+.item-icon-mini svg.spinner {
   width: 24px;
   height: 24px;
-}
-
-.item-icon svg.spinner {
+  color: var(--accent-primary);
   animation: spin 1s linear infinite;
 }
 
