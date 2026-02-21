@@ -285,6 +285,7 @@ class Scanner {
 
             // Index assets (recursively searches subfolders)
             this.indexAssets(modelId, folderPath);
+            this.selectPrimaryImage(modelId);
 
             // Extract images from archives if no primary image
             if (!this.hasPrimaryImage(modelId)) {
@@ -427,6 +428,7 @@ class Scanner {
 
             // Index assets
             this.indexAssets(modelId, folderPath);
+            this.selectPrimaryImage(modelId);
 
             // Extract images from archives if no primary image
             if (!this.hasPrimaryImage(modelId)) {
@@ -887,6 +889,7 @@ class Scanner {
 
                 // Find and index associated assets (images, PDFs)
                 this.indexAssets(modelId, folderPath);
+                this.selectPrimaryImage(modelId);
 
                 // Check if model needs image extraction from archives
                 if (!this.hasPrimaryImage(modelId)) {
@@ -1315,13 +1318,9 @@ class Scanner {
                     this.indexAssetsRecursive(modelId, fullPath);
                 } else if (entry.isFile()) {
                     let assetType: string | null = null;
-                    let isPrimary = false;
 
                     if (isImageFile(fullPath)) {
                         assetType = 'image';
-                        // First image becomes primary
-                        const existingImages = db.prepare('SELECT COUNT(*) as count FROM model_assets WHERE model_id = ? AND asset_type = ?').get(modelId, 'image') as { count: number };
-                        isPrimary = existingImages.count === 0;
                     } else if (isDocumentFile(fullPath)) {
                         assetType = 'pdf';
                     }
@@ -1329,10 +1328,10 @@ class Scanner {
                     if (assetType) {
                         const insert = db.prepare(`
                             INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
-                            VALUES (?, ?, ?, ?)
+                            VALUES (?, ?, ?, 0)
                         `);
 
-                        insert.run(modelId, fullPath, assetType, isPrimary ? 1 : 0);
+                        insert.run(modelId, fullPath, assetType);
                         this.progress.assetsFound++;
                     }
                 }
@@ -1340,6 +1339,26 @@ class Scanner {
         } catch (error) {
             // Silently continue on individual file/folder errors
         }
+    }
+
+    /**
+     * Select the best primary image for a model from its indexed assets.
+     * Prefers .gif images, then falls back to the first image found.
+     */
+    private selectPrimaryImage(modelId: number): void {
+        const images = db.prepare(`
+            SELECT id, filepath FROM model_assets
+            WHERE model_id = ? AND asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
+            ORDER BY id
+        `).all(modelId) as Array<{ id: number; filepath: string }>;
+
+        if (images.length === 0) return;
+
+        // Prefer .gif images as primary
+        const gifImage = images.find(img => path.extname(img.filepath).toLowerCase() === '.gif');
+        const primaryId = gifImage ? gifImage.id : images[0].id;
+
+        db.prepare('UPDATE model_assets SET is_primary = 1 WHERE id = ?').run(primaryId);
     }
 
     private hasPrimaryImage(modelId: number): boolean {
@@ -1426,30 +1445,36 @@ class Scanner {
             return a.date.getTime() - b.date.getTime();
         });
 
-        // Try to extract an image from each archive
+        const insert = db.prepare(`
+            INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
+            VALUES (?, ?, 'image', 0)
+        `);
+
+        // Try to extract images from each archive
+        let extractedAny = false;
         for (const archive of archives) {
-            const extracted = await this.extractImageFromZip(archive.path, folderPath, archive.type);
-            if (extracted) {
-                // Index the extracted image
-                const insert = db.prepare(`
-                    INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
-                    VALUES (?, ?, 'image', 1)
-                `);
-                insert.run(modelId, extracted);
-                this.progress.assetsFound++;
-                return; // Stop after first successful extraction
+            const extracted = await this.extractImagesFromZip(archive.path, folderPath, archive.type);
+            if (extracted.length > 0) {
+                for (const imagePath of extracted) {
+                    insert.run(modelId, imagePath);
+                    this.progress.assetsFound++;
+                }
+                extractedAny = true;
+                break; // Stop after first archive with images
             }
+        }
+
+        if (extractedAny) {
+            this.selectPrimaryImage(modelId);
+            return;
         }
 
         // Fallback: try to extract first page from PDFs as thumbnail
         const extracted = await this.extractImageFromPdf(folderPath);
         if (extracted) {
-            const insert = db.prepare(`
-                INSERT INTO model_assets (model_id, filepath, asset_type, is_primary)
-                VALUES (?, ?, 'image', 1)
-            `);
             insert.run(modelId, extracted);
             this.progress.assetsFound++;
+            db.prepare('UPDATE model_assets SET is_primary = 1 WHERE model_id = ? AND filepath = ?').run(modelId, extracted);
         }
     }
 
@@ -1610,12 +1635,18 @@ class Scanner {
         }
     }
 
-    private extractImageFromZip(zipPath: string, outputDir: string, type: '3mf' | 'photozip'): Promise<string | null> {
-        const TIMEOUT_MS = 10000; // 10 second timeout per archive
+    /**
+     * Extract images from a ZIP/3MF archive. Returns paths of all extracted high-scoring images.
+     * For 3mf: extracts all images scoring >= 70 (Auxiliaries, plate, metadata, thumbnail).
+     * For photo zips: extracts the single best image.
+     */
+    private extractImagesFromZip(zipPath: string, outputDir: string, type: '3mf' | 'photozip'): Promise<string[]> {
+        const TIMEOUT_MS = 10000;
+        const HIGH_SCORE_THRESHOLD = 70; // Extract all images at or above this score
 
         return new Promise((resolve) => {
             let resolved = false;
-            const safeResolve = (value: string | null) => {
+            const safeResolve = (value: string[]) => {
                 if (!resolved) {
                     resolved = true;
                     clearTimeout(timer);
@@ -1625,41 +1656,41 @@ class Scanner {
 
             const timer = setTimeout(() => {
                 console.warn(`  ZIP extraction timed out after ${TIMEOUT_MS / 1000}s: ${path.basename(zipPath)}`);
-                safeResolve(null);
+                safeResolve([]);
             }, TIMEOUT_MS);
 
             yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
                 if (err || !zipfile) {
-                    safeResolve(null);
+                    safeResolve([]);
                     return;
                 }
 
                 const candidates: Array<{ name: string; score: number }> = [];
 
                 zipfile.on('error', () => {
-                    safeResolve(null);
+                    safeResolve([]);
                 });
 
                 zipfile.on('entry', (entry: yauzl.Entry) => {
-                    if (resolved) return; // Stop processing if timed out
+                    if (resolved) return;
                     const entryName = entry.fileName;
                     const ext = path.extname(entryName).toLowerCase();
 
-                    // Check if it's an image
                     if (['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext)) {
                         const baseName = path.basename(entryName).toLowerCase();
                         let score = 0;
 
                         if (type === '3mf') {
-                            // Prefer plate images in 3mf files
-                            if (baseName.includes('plate_1')) score = 100;
+                            const entryLower = entryName.toLowerCase();
+                            // Prefer Auxiliaries images (user-added reference images)
+                            if (entryLower.includes('auxiliaries/') || entryLower.includes('auxiliaries\\')) score = 110;
+                            else if (baseName.includes('plate_1')) score = 100;
                             else if (baseName.includes('plate')) score = 90;
-                            else if (entryName.toLowerCase().includes('metadata')) score = 80;
+                            else if (entryLower.includes('metadata')) score = 80;
                             else if (baseName.includes('thumbnail')) score = 70;
                             else if (baseName.includes('preview')) score = 60;
                             else score = 10;
                         } else {
-                            // For photo zips, any image is good
                             if (baseName.includes('main') || baseName.includes('cover')) score = 100;
                             else if (baseName.includes('thumb') || baseName.includes('preview')) score = 90;
                             else score = 50;
@@ -1675,60 +1706,88 @@ class Scanner {
                     if (resolved) return;
                     if (candidates.length === 0) {
                         zipfile.close();
-                        safeResolve(null);
+                        safeResolve([]);
                         return;
                     }
 
-                    // Sort by score and pick the best
+                    // Sort by score descending
                     candidates.sort((a, b) => b.score - a.score);
-                    const bestCandidate = candidates[0].name;
 
-                    // Re-open to extract the specific file
+                    // For 3mf: extract all high-scoring images; for photo zips: just the best
+                    const toExtract = type === '3mf'
+                        ? candidates.filter(c => c.score >= HIGH_SCORE_THRESHOLD)
+                        : [candidates[0]];
+
+                    // If no high-scoring candidates, fall back to the single best
+                    if (toExtract.length === 0) {
+                        toExtract.push(candidates[0]);
+                    }
+
+                    const targetNames = new Set(toExtract.map(c => c.name));
+
+                    // Re-open to extract the selected files
                     yauzl.open(zipPath, { lazyEntries: true }, (err2, zipfile2) => {
                         if (err2 || !zipfile2) {
-                            safeResolve(null);
+                            safeResolve([]);
                             return;
                         }
 
+                        const extractedPaths: string[] = [];
+                        let pending = 0;
+                        let entriesDone = false;
+
+                        const checkComplete = () => {
+                            if (entriesDone && pending === 0) {
+                                zipfile2.close();
+                                safeResolve(extractedPaths);
+                            }
+                        };
+
                         zipfile2.on('error', () => {
-                            safeResolve(null);
+                            safeResolve(extractedPaths);
                         });
 
                         zipfile2.on('entry', (entry: yauzl.Entry) => {
                             if (resolved) return;
-                            if (entry.fileName === bestCandidate) {
+                            if (targetNames.has(entry.fileName)) {
+                                pending++;
                                 zipfile2.openReadStream(entry, (streamErr, readStream) => {
                                     if (streamErr || !readStream) {
+                                        pending--;
+                                        checkComplete();
                                         zipfile2.readEntry();
                                         return;
                                     }
 
-                                    // Generate output filename
-                                    const ext = path.extname(bestCandidate);
+                                    const ext = path.extname(entry.fileName);
                                     const archiveName = path.basename(zipPath, path.extname(zipPath));
-                                    const outputName = `_extracted_${archiveName}${ext}`;
+                                    const entryBaseName = path.basename(entry.fileName, ext);
+                                    // Use unique name per entry to avoid collisions
+                                    const suffix = extractedPaths.length > 0 ? `_${extractedPaths.length}` : '';
+                                    const outputName = `_extracted_${archiveName}${suffix}${ext}`;
                                     const outputPath = path.join(outputDir, outputName);
 
                                     const writeStream = fs.createWriteStream(outputPath);
                                     readStream.pipe(writeStream);
 
                                     writeStream.on('finish', () => {
-                                        zipfile2.close();
-                                        safeResolve(outputPath);
+                                        extractedPaths.push(outputPath);
+                                        pending--;
+                                        checkComplete();
                                     });
 
                                     writeStream.on('error', () => {
-                                        zipfile2.readEntry();
+                                        pending--;
+                                        checkComplete();
                                     });
                                 });
-                            } else {
-                                zipfile2.readEntry();
                             }
+                            zipfile2.readEntry();
                         });
 
                         zipfile2.on('end', () => {
-                            zipfile2.close();
-                            safeResolve(null);
+                            entriesDone = true;
+                            checkComplete();
                         });
 
                         zipfile2.readEntry();

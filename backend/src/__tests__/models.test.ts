@@ -208,6 +208,31 @@ describe('Models Routes', () => {
         });
     });
 
+    describe('Primary image selection (GIF preference)', () => {
+        it('returns gif as primaryImage when gif and other images exist', async () => {
+            // Add a gif image (not primary) and verify the browse endpoint
+            // uses it since gifs should be preferred
+            testDb.prepare(`INSERT INTO model_assets (id, model_id, filepath, asset_type, is_primary) VALUES (?, ?, ?, ?, ?)`).run(10, 1, '/test/models/a/animation.gif', 'image', 0);
+            // Model 1 already has image1.jpg as is_primary=1 (id=1) and image2.jpg (id=2)
+            // When gif is set as primary, it should show up
+            testDb.prepare('UPDATE model_assets SET is_primary = 0 WHERE model_id = 1').run();
+            testDb.prepare('UPDATE model_assets SET is_primary = 1 WHERE id = 10').run();
+
+            const res = await request(app).get('/api/models');
+            expect(res.status).toBe(200);
+            const modelA = res.body.models.find((m: any) => m.id === 1);
+            expect(modelA.primaryImage).toBe('/test/models/a/animation.gif');
+        });
+
+        it('returns first image as primaryImage when no gif exists', async () => {
+            // Model 1 has image1.jpg as primary
+            const res = await request(app).get('/api/models');
+            expect(res.status).toBe(200);
+            const modelA = res.body.models.find((m: any) => m.id === 1);
+            expect(modelA.primaryImage).toBe('/test/models/a/image1.jpg');
+        });
+    });
+
     describe('GET /api/models/:id', () => {
         it('returns model details with filtered hidden assets', async () => {
             testDb.prepare('UPDATE model_assets SET is_hidden = 1 WHERE id = 2').run();

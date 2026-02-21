@@ -28,7 +28,7 @@ Model cars, vehicle accessories, car-related organizers, and automotive tools.
 
 ## Core One
 
-Accessories and modifications specifically for the Prusa Core One printer.
+Accessories and modifications specifically for the Prusa Core One 3D printer. "One Piece" has nothing to do with the Core One 3D printer.
 
 ## CyberBrick
 

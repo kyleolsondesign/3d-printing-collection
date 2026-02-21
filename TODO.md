@@ -39,7 +39,7 @@
 - [x] Some of the models in the Paid folder are actually nested folders of a single parent model. For example `Shared 3D Models/Paid/OriginalToys3D/Original Toys 3D_D Rex/Files for printing and assembling (STL)/Color_D (red color)` and `Shared 3D Models/Paid/OriginalToys3D/Original Toys 3D_D Rex/Files for printing and assembling (STL)/Color_C (brown color)` are both nested folders under a single model. The structure for the `Shared 3D Models/Paid` should be: `Shared 3D Models/Paid/{designer}/{model folder}` and anything nested underneath should be part of that model. Some models might be directly under the designer folder and not nested.
 - [x] When logging a model name, use the full path from the 3d model root folder
 - [x] Reduce the polling time for the scan status updates in the frontend. Once every 10 seconds is enough
-- [ ] When using 3mf file to find images, prefer the images under "Auxiliaries" if it exists. Extract multiple images if they are high scoring
+- [x] When using 3mf file to find images, prefer the images under "Auxiliaries" if it exists. Extract multiple images if they are high scoring
 - [x] When marking as printed from views that don't show a "good" and "bad" separately, make it a 3-state toggle, with the states in order of: not printed, good print, bad print
 - [x] After a scan, display how long the scan took in total, and which type of scan was run
 - [x] When in the modal view, use the right/left arrow keys to switch to the next or previous model in the current list on the underlying page. Add UI on hover of the right or left edge of the screen with the same behavior
@@ -60,7 +60,9 @@
 - [x] Allow batch assigning of categories in the ingestion view by setting all the selected items to the same category
 - [x] Make the "select all" and "import" box sticky at the top of the screen when you scroll past it on the ingestion view
 - [x] Rescanning a model or extracting zip breaks the link from the page to launch the modal and breaks the deep-linking to the modal on refresh, because the ID changes. Can we either keep the original ID or update the view to reflect the new ID both in the links and the query params? After extracting a zip file from the modal view for a model, refresh the modal view. While extracting, give a progress indicator
-- [ ] Prefer .gif images as the primary image for a model when adding
+- [x] Prefer .gif images as the primary image for a model when adding
+- [ ] "Deduplicating images" when running an "add only" scan should only affect the new models
+- [x] On the import view, show an image preview if there is an image in the model folder. Do not do the whole extraction process until it's imported, but just if there is already an image. Remove the generic placeholder folder icon, as it is confusing in the same row as the "show in finder" button
 
 ---
 
