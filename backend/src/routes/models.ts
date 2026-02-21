@@ -288,15 +288,48 @@ router.get('/search/query', (req, res) => {
             return res.status(400).json({ error: 'Search query required' });
         }
 
-        // Use FTS5 for full-text search, exclude soft-deleted models
-        const models = db.prepare(`
+        // Build prefix search query for FTS5: append * to each term for prefix matching
+        const terms = query.trim().split(/\s+/).filter(t => t.length > 0);
+        const ftsQuery = terms.map(t => {
+            // Escape FTS5 special characters and add prefix wildcard
+            const escaped = t.replace(/['"*()]/g, '');
+            return `"${escaped}"*`;
+        }).join(' ');
+
+        // Use FTS5 for prefix-aware search, then fall back to LIKE for substring matches
+        let models: any[];
+        try {
+            models = db.prepare(`
+                SELECT models.*, mm.designer, mm.source_platform, mm.source_url FROM models
+                LEFT JOIN model_metadata mm ON mm.model_id = models.id
+                JOIN models_fts ON models.id = models_fts.rowid
+                WHERE models_fts MATCH ? AND models.deleted_at IS NULL
+                ORDER BY rank
+                LIMIT 100
+            `).all(ftsQuery);
+        } catch {
+            // If FTS query fails (bad syntax), fall back to empty results for FTS
+            models = [];
+        }
+
+        // Also find substring matches not caught by FTS prefix search
+        const likePattern = `%${query}%`;
+        const likeModels = db.prepare(`
             SELECT models.*, mm.designer, mm.source_platform, mm.source_url FROM models
             LEFT JOIN model_metadata mm ON mm.model_id = models.id
-            JOIN models_fts ON models.id = models_fts.rowid
-            WHERE models_fts MATCH ? AND models.deleted_at IS NULL
-            ORDER BY rank
+            WHERE models.deleted_at IS NULL
+              AND (models.filename LIKE ? OR models.filepath LIKE ? OR models.category LIKE ?)
             LIMIT 100
-        `).all(query) as any[];
+        `).all(likePattern, likePattern, likePattern) as any[];
+
+        // Merge results, FTS first (ranked), then LIKE matches not already included
+        const seenIds = new Set(models.map((m: any) => m.id));
+        for (const m of likeModels) {
+            if (!seenIds.has(m.id)) {
+                models.push(m);
+                seenIds.add(m.id);
+            }
+        }
 
         // Get primary image and status for each search result
         const modelsWithDetails = models.map(model => {

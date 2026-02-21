@@ -206,6 +206,22 @@ describe('Models Routes', () => {
             const res = await request(app).get('/api/models/search/query');
             expect(res.status).toBe(400);
         });
+
+        it('matches prefix searches (partial word at start)', async () => {
+            // "Test" should match "Test Model A" via prefix
+            const res = await request(app).get('/api/models/search/query?q=Tes');
+            expect(res.status).toBe(200);
+            expect(res.body.models.length).toBeGreaterThan(0);
+        });
+
+        it('matches substring searches via LIKE fallback', async () => {
+            // Add a model with a compound word
+            testDb.prepare(`INSERT INTO models (id, filename, filepath, category, file_count) VALUES (?, ?, ?, ?, ?)`).run(10, 'thermoformed-box', '/test/models/thermo', 'Tools', 1);
+            // "thermoform" should match "thermoformed-box" via LIKE substring
+            const res = await request(app).get('/api/models/search/query?q=thermoform');
+            expect(res.status).toBe(200);
+            expect(res.body.models.find((m: any) => m.id === 10)).toBeDefined();
+        });
     });
 
     describe('Primary image selection (GIF preference)', () => {
