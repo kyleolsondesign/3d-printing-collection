@@ -54,6 +54,18 @@ describe('API Client', () => {
                 params: { hidePrinted: true, hideQueued: false, category: 'Toys' }
             });
         });
+
+        it('recordView calls POST with model id', async () => {
+            await modelsApi.recordView(42);
+            const mockApi = axios.create() as any;
+            expect(mockApi.post).toHaveBeenCalledWith('/models/42/view');
+        });
+
+        it('getRecent calls GET with limit', async () => {
+            await modelsApi.getRecent(25);
+            const mockApi = axios.create() as any;
+            expect(mockApi.get).toHaveBeenCalledWith('/models/recent', { params: { limit: 25 } });
+        });
     });
 
     describe('printedApi', () => {

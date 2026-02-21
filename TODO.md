@@ -61,7 +61,7 @@
 - [x] Make the "select all" and "import" box sticky at the top of the screen when you scroll past it on the ingestion view
 - [x] Rescanning a model or extracting zip breaks the link from the page to launch the modal and breaks the deep-linking to the modal on refresh, because the ID changes. Can we either keep the original ID or update the view to reflect the new ID both in the links and the query params? After extracting a zip file from the modal view for a model, refresh the modal view. While extracting, give a progress indicator
 - [x] Prefer .gif images as the primary image for a model when adding
-- [ ] "Deduplicating images" when running an "add only" scan should only affect the new models
+- [x] "Deduplicating images" when running an "add only" scan should only affect the new models
 - [x] On the import view, show an image preview if there is an image in the model folder. Do not do the whole extraction process until it's imported, but just if there is already an image. Remove the generic placeholder folder icon, as it is confusing in the same row as the "show in finder" button
 
 ---
@@ -70,8 +70,8 @@
 - [ ] Duplicate detection: Find potential duplicate models based on filename similarity (fuzzy matching) and/or file hashes. Show a dedicated review page where you can compare duplicates side-by-side and choose to merge or delete.
 - [ ] Custom tags: Allow users to create and assign custom tags to models (beyond the auto-detected category). Tags should be searchable and filterable from the browse view. The database schema already supports this via the `tags` and `model_tags` tables.
 - [ ] Statistics dashboard: A dedicated stats page showing collection insights — total storage used, models per category (bar chart), prints over time (line chart), good vs bad print ratio, most-printed categories, average files per model, etc.
-- [ ] Recently viewed models: Track which models were opened in the details modal and show a "Recently Viewed" section or tab, ordered by last viewed timestamp. Useful for finding models you were just looking at.
-- [ ] Lazy loading / virtual scrolling for images: Only load thumbnail images that are currently visible in the viewport. For large collections, loading all 50 card images at once causes unnecessary network traffic and slow initial render.
+- [x] Recently viewed models: Track which models were opened in the details modal and show a "Recently Viewed" section or tab, ordered by last viewed timestamp. Useful for finding models you were just looking at.
+- [x] Lazy loading / virtual scrolling for images: Only load thumbnail images that are currently visible in the viewport. For large collections, loading all 50 card images at once causes unnecessary network traffic and slow initial render.
 - [ ] Batch category reassignment: Allow selecting multiple models on the browse page and moving them to a different category. This would involve renaming the parent folder on disk and updating the database.
 - [x] Model notes: Add a free-text notes field to any model (not just printed ones). Useful for recording slicer settings, material recommendations, or assembly instructions. Editable from the details modal.
 - [x] Saved searches / smart collections: Allow saving search queries + filter combinations as named collections (e.g., "Unpainted toys", "Large prints to try"). These would appear as quick-access buttons or a sidebar section.

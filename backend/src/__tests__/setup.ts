@@ -14,7 +14,7 @@ export function initSchema(db: InstanceType<typeof Database>): void {
     db.exec(`DROP TABLE IF EXISTS models_fts`);
 
     // Drop tables in dependency order
-    const tables = ['make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'print_queue', 'tags', 'config', 'loose_files', 'models'];
+    const tables = ['recently_viewed', 'make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'print_queue', 'tags', 'config', 'loose_files', 'models'];
     for (const table of tables) {
         db.exec(`DROP TABLE IF EXISTS ${table}`);
     }
@@ -165,6 +165,15 @@ export function initSchema(db: InstanceType<typeof Database>): void {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS recently_viewed (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id INTEGER NOT NULL UNIQUE,
+            viewed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
         )
     `);
 

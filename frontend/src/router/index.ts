@@ -5,6 +5,7 @@ import PrintedView from '../views/PrintedView.vue';
 import QueueView from '../views/QueueView.vue';
 import LooseFilesView from '../views/LooseFilesView.vue';
 import IngestionView from '../views/IngestionView.vue';
+import RecentView from '../views/RecentView.vue';
 import SettingsView from '../views/SettingsView.vue';
 
 const router = createRouter({
@@ -14,6 +15,11 @@ const router = createRouter({
             path: '/',
             name: 'browse',
             component: BrowseView
+        },
+        {
+            path: '/recent',
+            name: 'recent',
+            component: RecentView
         },
         {
             path: '/favorites',

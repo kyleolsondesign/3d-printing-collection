@@ -108,7 +108,13 @@ export const modelsApi = {
         api.patch(`/models/${modelId}`, { notes }),
 
     hideAsset: (modelId: number, assetId: number, isHidden: boolean) =>
-        api.put(`/models/${modelId}/assets/${assetId}/hide`, { isHidden })
+        api.put(`/models/${modelId}/assets/${assetId}/hide`, { isHidden }),
+
+    getRecent: (limit?: number) =>
+        api.get('/models/recent', { params: { limit } }),
+
+    recordView: (modelId: number) =>
+        api.post(`/models/${modelId}/view`)
 };
 
 // Favorites API

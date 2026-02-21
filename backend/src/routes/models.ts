@@ -125,6 +125,79 @@ router.get('/', (req, res) => {
     }
 });
 
+// Get recently viewed models
+router.get('/recent', (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 50;
+        const recentModels = db.prepare(`
+            SELECT rv.viewed_at, models.*, mm.designer, mm.source_platform, mm.source_url
+            FROM recently_viewed rv
+            JOIN models ON rv.model_id = models.id
+            LEFT JOIN model_metadata mm ON mm.model_id = models.id
+            WHERE models.deleted_at IS NULL
+            ORDER BY rv.viewed_at DESC
+            LIMIT ?
+        `).all(limit) as any[];
+
+        const modelsWithDetails = recentModels.map(model => {
+            const primaryImage = db.prepare(`
+                SELECT filepath FROM model_assets
+                WHERE model_id = ? AND asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
+                ORDER BY is_primary DESC, id ASC
+                LIMIT 1
+            `).get(model.id) as { filepath: string } | undefined;
+
+            const favorite = db.prepare('SELECT id FROM favorites WHERE model_id = ?').get(model.id);
+            const queued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model.id);
+            const printed = db.prepare('SELECT rating FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC LIMIT 1').get(model.id) as { rating: 'good' | 'bad' | null } | undefined;
+
+            return {
+                ...model,
+                primaryImage: primaryImage?.filepath || null,
+                isFavorite: !!favorite,
+                isQueued: !!queued,
+                isPrinted: !!printed,
+                printRating: printed?.rating || null
+            };
+        });
+
+        res.json({ models: modelsWithDetails });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Record a model view
+router.post('/:id/view', (req, res) => {
+    try {
+        const { id } = req.params;
+        const modelId = parseInt(id);
+
+        if (isNaN(modelId)) {
+            return res.status(400).json({ error: 'Invalid model ID' });
+        }
+
+        // Verify model exists
+        const model = db.prepare('SELECT id FROM models WHERE id = ?').get(modelId);
+        if (!model) {
+            return res.status(404).json({ error: 'Model not found' });
+        }
+
+        // Upsert: insert or update viewed_at
+        db.prepare(`
+            INSERT INTO recently_viewed (model_id, viewed_at)
+            VALUES (?, CURRENT_TIMESTAMP)
+            ON CONFLICT(model_id) DO UPDATE SET viewed_at = CURRENT_TIMESTAMP
+        `).run(modelId);
+
+        res.json({ success: true });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 // Get model by ID with assets
 router.get('/:id', (req, res) => {
     try {

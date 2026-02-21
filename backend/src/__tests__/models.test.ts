@@ -249,4 +249,88 @@ describe('Models Routes', () => {
             expect(res.status).toBe(404);
         });
     });
+
+    describe('POST /api/models/:id/view', () => {
+        it('records a model view', async () => {
+            const res = await request(app).post('/api/models/1/view');
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(true);
+
+            const record = testDb.prepare('SELECT * FROM recently_viewed WHERE model_id = 1').get() as any;
+            expect(record).toBeTruthy();
+            expect(record.model_id).toBe(1);
+        });
+
+        it('updates viewed_at on subsequent views', async () => {
+            await request(app).post('/api/models/1/view');
+            const first = testDb.prepare('SELECT viewed_at FROM recently_viewed WHERE model_id = 1').get() as any;
+
+            // View again - should upsert, not duplicate
+            await request(app).post('/api/models/1/view');
+            const count = testDb.prepare('SELECT COUNT(*) as cnt FROM recently_viewed WHERE model_id = 1').get() as any;
+            expect(count.cnt).toBe(1);
+        });
+
+        it('returns 404 for non-existent model', async () => {
+            const res = await request(app).post('/api/models/999/view');
+            expect(res.status).toBe(404);
+        });
+
+        it('returns 400 for invalid model ID', async () => {
+            const res = await request(app).post('/api/models/abc/view');
+            expect(res.status).toBe(400);
+        });
+    });
+
+    describe('GET /api/models/recent', () => {
+        it('returns empty list when no views recorded', async () => {
+            const res = await request(app).get('/api/models/recent');
+            expect(res.status).toBe(200);
+            expect(res.body.models).toHaveLength(0);
+        });
+
+        it('returns recently viewed models in reverse chronological order', async () => {
+            // Insert with explicit timestamps to ensure ordering
+            testDb.prepare(`INSERT INTO recently_viewed (model_id, viewed_at) VALUES (?, ?)`).run(1, '2025-01-01 10:00:00');
+            testDb.prepare(`INSERT INTO recently_viewed (model_id, viewed_at) VALUES (?, ?)`).run(2, '2025-01-01 11:00:00');
+
+            const res = await request(app).get('/api/models/recent');
+            expect(res.status).toBe(200);
+            expect(res.body.models).toHaveLength(2);
+            // Most recent first
+            expect(res.body.models[0].id).toBe(2);
+            expect(res.body.models[1].id).toBe(1);
+        });
+
+        it('includes primaryImage and status fields', async () => {
+            await request(app).post('/api/models/1/view');
+
+            const res = await request(app).get('/api/models/recent');
+            expect(res.status).toBe(200);
+            const model = res.body.models[0];
+            expect(model.primaryImage).toBe('/test/models/a/image1.jpg');
+            expect(model.isPrinted).toBe(true);
+            expect(model.printRating).toBe('good');
+            expect(model.isFavorite).toBe(false);
+        });
+
+        it('excludes soft-deleted models', async () => {
+            await request(app).post('/api/models/1/view');
+            testDb.prepare('UPDATE models SET deleted_at = CURRENT_TIMESTAMP WHERE id = 1').run();
+
+            const res = await request(app).get('/api/models/recent');
+            expect(res.status).toBe(200);
+            expect(res.body.models).toHaveLength(0);
+        });
+
+        it('respects limit parameter', async () => {
+            await request(app).post('/api/models/1/view');
+            await request(app).post('/api/models/2/view');
+            await request(app).post('/api/models/3/view');
+
+            const res = await request(app).get('/api/models/recent').query({ limit: 2 });
+            expect(res.status).toBe(200);
+            expect(res.body.models).toHaveLength(2);
+        });
+    });
 });

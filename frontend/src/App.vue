@@ -24,6 +24,15 @@
           </span>
           <span class="nav-label">Browse</span>
         </router-link>
+        <router-link to="/recent" :class="{ active: $route.name === 'recent' }">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+          </span>
+          <span class="nav-label">Recent</span>
+        </router-link>
         <router-link to="/favorites" :class="{ active: $route.name === 'favorites' }">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -159,6 +168,7 @@ watch(() => store.globalSearchQuery, (newVal) => {
 const searchPlaceholder = computed(() => {
   const placeholders: Record<string, string> = {
     browse: 'Search models...',
+    recent: 'Search recent...',
     favorites: 'Search favorites...',
     queue: 'Search queue...',
     printed: 'Search printed...',

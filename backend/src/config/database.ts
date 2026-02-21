@@ -209,6 +209,16 @@ function initializeDatabase(): void {
         )
     `);
 
+    // Recently viewed models
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS recently_viewed (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id INTEGER NOT NULL UNIQUE,
+            viewed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
+        )
+    `);
+
     // Create indexes
     db.exec(`
         CREATE INDEX IF NOT EXISTS idx_models_category ON models(category);

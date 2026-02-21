@@ -554,14 +554,16 @@ function handleKeydown(event: KeyboardEvent) {
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown);
   await loadModelDetails();
+  modelsApi.recordView(props.modelId).catch(() => {});
 });
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown);
 });
 
-watch(() => props.modelId, async () => {
+watch(() => props.modelId, async (newId) => {
   await loadModelDetails();
+  modelsApi.recordView(newId).catch(() => {});
 });
 
 async function loadModelDetails() {

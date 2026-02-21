@@ -70,6 +70,7 @@ class Scanner {
         scanMode: null
     };
     private foldersWithModels: Map<string, FolderData> = new Map();
+    private newModelIds: Set<number> = new Set();
 
     /**
      * Scan the model directory with the specified mode:
@@ -106,6 +107,7 @@ class Scanner {
             scanMode: mode
         };
         this.foldersWithModels = new Map();
+        this.newModelIds = new Set();
 
         try {
             console.log(`Starting ${mode} scan of directory: ${modelDirectory}`);
@@ -869,6 +871,7 @@ class Scanner {
                     );
 
                     modelId = Number(result.lastInsertRowid);
+                    this.newModelIds.add(modelId);
                     this.progress.modelsFound++;
                 }
 
@@ -984,8 +987,9 @@ class Scanner {
         // Phase: Extract metadata from PDFs
         await this.extractMetadataFromPdfs();
 
-        // Phase: Deduplicate images
-        await this.deduplicateAllImages();
+        // Phase: Deduplicate images (in add_only mode, only process new models)
+        const dedupModelIds = this.scanMode === 'add_only' ? Array.from(this.newModelIds) : undefined;
+        await this.deduplicateAllImages(dedupModelIds);
     }
 
     /**
@@ -1092,15 +1096,21 @@ class Scanner {
      * to detect visually identical images regardless of format, size, or compression.
      * Keeps the highest quality image (largest file size) and hides duplicates.
      */
-    async deduplicateAllImages(): Promise<{ modelsProcessed: number; duplicatesHidden: number }> {
-        // Find all models with multiple non-hidden images
-        const modelsWithMultipleImages = db.prepare(`
+    async deduplicateAllImages(modelIds?: number[]): Promise<{ modelsProcessed: number; duplicatesHidden: number }> {
+        // Find models with multiple non-hidden images, optionally scoped to specific models
+        let query = `
             SELECT model_id, COUNT(*) as image_count
             FROM model_assets
-            WHERE asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
-            GROUP BY model_id
-            HAVING COUNT(*) > 1
-        `).all() as Array<{ model_id: number; image_count: number }>;
+            WHERE asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)`;
+        if (modelIds && modelIds.length > 0) {
+            const placeholders = modelIds.map(() => '?').join(',');
+            query += ` AND model_id IN (${placeholders})`;
+        }
+        query += ` GROUP BY model_id HAVING COUNT(*) > 1`;
+
+        const modelsWithMultipleImages = db.prepare(query).all(
+            ...(modelIds && modelIds.length > 0 ? modelIds : [])
+        ) as Array<{ model_id: number; image_count: number }>;
 
         if (modelsWithMultipleImages.length === 0) {
             this.progress.overallProgress = 95;
