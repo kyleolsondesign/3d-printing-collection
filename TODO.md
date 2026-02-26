@@ -67,9 +67,9 @@
 ---
 
 - [x] Designer browsing: A dedicated view or filter to browse models grouped by designer (extracted from PDF metadata). Show designer name, model count, and link to their profile URL if available. Add a full record for designers. Use the folder structure under "Shared 3D Models/Paid/{designer}" to infer the designer name for paid models and create those relationships for the models as well. Allow editing/adding attributes for the designer record within the designer page view
-- [ ] Duplicate detection: Find potential duplicate models based on filename similarity (fuzzy matching) and/or file hashes. Show a dedicated review page where you can compare duplicates side-by-side and choose to merge or delete.
+- [x] ~~Duplicate detection: Find potential duplicate models based on filename similarity (fuzzy matching) and/or file hashes. Show a dedicated review page where you can compare duplicates side-by-side and choose to merge or delete.~~
 - [x] Custom tags: Allow users to create and assign custom tags to models (beyond the auto-detected category). Tags should be searchable and filterable from the browse view. The database schema already supports this via the `tags` and `model_tags` tables.
-- [ ] Statistics dashboard: A dedicated stats page showing collection insights — total storage used, models per category (bar chart), prints over time (line chart), good vs bad print ratio, most-printed categories, average files per model, etc.
+- [x] Statistics dashboard: A dedicated stats page showing collection insights — total storage used, models per category (bar chart), prints over time (line chart), good vs bad print ratio, most-printed categories, average files per model, etc.
 - [x] Recently viewed models: Track which models were opened in the details modal and show a "Recently Viewed" section or tab, ordered by last viewed timestamp. Useful for finding models you were just looking at.
 - [x] Lazy loading / virtual scrolling for images: Only load thumbnail images that are currently visible in the viewport. For large collections, loading all 50 card images at once causes unnecessary network traffic and slow initial render.
 - [x] Batch category reassignment: Allow selecting multiple models on the browse page and moving them to a different category. This would involve renaming the parent folder on disk and updating the database.

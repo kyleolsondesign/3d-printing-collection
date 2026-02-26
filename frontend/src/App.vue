@@ -79,6 +79,14 @@
           </span>
           <span class="nav-label">Designers</span>
         </router-link>
+        <router-link to="/stats" :class="{ active: $route.name === 'stats' }">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 20V10M12 20V4M6 20v-6"/>
+            </svg>
+          </span>
+          <span class="nav-label">Stats</span>
+        </router-link>
         <router-link to="/ingestion" :class="{ active: $route.name === 'ingestion' }">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -186,6 +194,7 @@ const searchPlaceholder = computed(() => {
     'loose-files': 'Search loose files...',
     ingestion: 'Search imports...',
     designers: 'Search designers...',
+    stats: 'Statistics',
   };
   return placeholders[route.name as string] || 'Search models...';
 });

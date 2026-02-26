@@ -188,6 +188,7 @@ export const systemApi = {
     getScanStatus: () => api.get('/system/scan/status'),
     getCategories: () => api.get('/system/categories'),
     getStats: () => api.get('/system/stats'),
+    getDetailedStats: () => api.get('/system/stats/detail'),
     getLooseFiles: () => api.get('/system/loose-files'),
     openFolder: (folderPath: string) => api.post('/system/open-folder', { folderPath }),
     organizeLooseFile: (looseFileId: number) => api.post('/system/organize-loose-file', { looseFileId }),

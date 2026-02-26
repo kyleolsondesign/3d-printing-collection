@@ -160,6 +160,125 @@ router.get('/stats', (req, res) => {
     }
 });
 
+// Get detailed statistics for the dashboard
+router.get('/stats/detail', (req, res) => {
+    try {
+        // Models per category (top 20)
+        const modelsByCategory = db.prepare(`
+            SELECT category, COUNT(*) as count
+            FROM models
+            WHERE deleted_at IS NULL AND category IS NOT NULL
+            GROUP BY category
+            ORDER BY count DESC
+            LIMIT 20
+        `).all() as Array<{ category: string; count: number }>;
+
+        // Prints per month (last 18 months)
+        const printsByMonth = db.prepare(`
+            SELECT
+                strftime('%Y-%m', printed_at) as month,
+                COUNT(*) as total,
+                SUM(CASE WHEN rating = 'good' THEN 1 ELSE 0 END) as good_count,
+                SUM(CASE WHEN rating = 'bad' THEN 1 ELSE 0 END) as bad_count
+            FROM printed_models
+            WHERE printed_at >= date('now', '-18 months')
+            GROUP BY month
+            ORDER BY month ASC
+        `).all() as Array<{ month: string; total: number; good_count: number; bad_count: number }>;
+
+        // Good vs bad print ratio
+        const printRatings = db.prepare(`
+            SELECT
+                SUM(CASE WHEN rating = 'good' THEN 1 ELSE 0 END) as good,
+                SUM(CASE WHEN rating = 'bad' THEN 1 ELSE 0 END) as bad,
+                SUM(CASE WHEN rating IS NULL THEN 1 ELSE 0 END) as unrated
+            FROM printed_models
+        `).get() as { good: number; bad: number; unrated: number };
+
+        // Most printed categories
+        const topPrintedCategories = db.prepare(`
+            SELECT m.category, COUNT(pm.id) as print_count
+            FROM printed_models pm
+            JOIN models m ON m.id = pm.model_id
+            WHERE m.category IS NOT NULL
+            GROUP BY m.category
+            ORDER BY print_count DESC
+            LIMIT 10
+        `).all() as Array<{ category: string; print_count: number }>;
+
+        // Average files per model
+        const avgFilesRow = db.prepare(`
+            SELECT AVG(file_count) as avg FROM models WHERE deleted_at IS NULL AND file_count > 0
+        `).get() as { avg: number | null };
+
+        // Total file size (from model_files)
+        const fileSizeRow = db.prepare(`
+            SELECT SUM(mf.file_size) as total
+            FROM model_files mf
+            JOIN models m ON m.id = mf.model_id
+            WHERE m.deleted_at IS NULL
+        `).get() as { total: number | null };
+
+        // Print time and filament totals
+        const printTotals = db.prepare(`
+            SELECT
+                SUM(print_time_hours) as total_hours,
+                SUM(filament_used_grams) as total_grams
+            FROM printed_models
+            WHERE print_time_hours IS NOT NULL OR filament_used_grams IS NOT NULL
+        `).get() as { total_hours: number | null; total_grams: number | null };
+
+        // Models added per month (last 18 months)
+        const modelsAddedByMonth = db.prepare(`
+            SELECT
+                strftime('%Y-%m', date_added) as month,
+                COUNT(*) as count
+            FROM models
+            WHERE deleted_at IS NULL AND date_added >= date('now', '-18 months')
+            GROUP BY month
+            ORDER BY month ASC
+        `).all() as Array<{ month: string; count: number }>;
+
+        // Tag usage stats (top 15)
+        const tagStats = db.prepare(`
+            SELECT t.name, COUNT(mt.model_id) as model_count
+            FROM tags t
+            JOIN model_tags mt ON mt.tag_id = t.id
+            GROUP BY t.id
+            ORDER BY model_count DESC
+            LIMIT 15
+        `).all() as Array<{ name: string; model_count: number }>;
+
+        // File type breakdown
+        const fileTypes = db.prepare(`
+            SELECT file_type, COUNT(*) as count
+            FROM model_files mf
+            JOIN models m ON m.id = mf.model_id
+            WHERE m.deleted_at IS NULL AND file_type IS NOT NULL
+            GROUP BY file_type
+            ORDER BY count DESC
+            LIMIT 10
+        `).all() as Array<{ file_type: string; count: number }>;
+
+        res.json({
+            modelsByCategory,
+            printsByMonth,
+            printRatings,
+            topPrintedCategories,
+            avgFilesPerModel: avgFilesRow.avg ? Math.round(avgFilesRow.avg * 10) / 10 : 0,
+            totalFileSize: fileSizeRow.total || 0,
+            totalPrintTimeHours: printTotals?.total_hours || 0,
+            totalFilamentGrams: printTotals?.total_grams || 0,
+            modelsAddedByMonth,
+            tagStats,
+            fileTypes
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 // Get loose files
 router.get('/loose-files', (req, res) => {
     try {
