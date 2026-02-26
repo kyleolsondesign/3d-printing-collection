@@ -199,6 +199,8 @@ All API endpoints are in `/api/*`:
 - `/api/system/loose-files` - Get all loose files that need organizing
 - `/api/system/open-folder` - Open a folder in macOS Finder
 - `/api/ingestion` - Model ingestion from external folders (scan, config, import)
+- `/api/tags` - Custom tag CRUD; add/remove tags from models; bulk tag multiple models
+- `/api/designers` - Designer CRUD; sync designers from Paid folder structure; list designer models
 
 File serving uses secure path validation to prevent directory traversal attacks (backend/src/routes/models.ts).
 
@@ -319,7 +321,9 @@ For models without standalone images, the scanner automatically extracts images 
   - Search filtering: Global search bar filters loose files by filename, file type, and category
   - Organize summary: After organizing files, a detailed per-file results panel shows each file's outcome (success with new folder name, or failure with error message)
 - **Show in Finder**: Button on each model card to quickly open the containing folder
-- **Multi-tag support**: Models can have multiple tags/categories (database schema ready, UI pending)
+- **Custom tags**: Users can create and assign tags to models; editable in the model details modal with autocomplete; bulk tag action in browse selection mode
+- **Designer browsing**: Dedicated `/designers` view showing designers grouped by model count; "Sync Designers" auto-extracts designer names from `Paid/{designer}/` folder structure and PDF metadata; CRUD with profile URL and notes fields
+- **Batch category reassignment**: "Move" action in browse selection mode moves selected model folders on disk to a new category and updates all database paths
 
 ### Date Tracking & Sorting
 - **Date tracking**: Models track earliest file dates from all files in folder
@@ -491,4 +495,4 @@ The app integrates with macOS Finder tags to sync print status:
 - File system watcher for auto-refresh
 - Export/import favorites and queue
 - Print statistics and analytics
-- Lazy loading for images (only load visible thumbnails)
+- Duplicate detection (fuzzy filename matching + file hash comparison)
