@@ -284,8 +284,11 @@ function initializeDatabase(): void {
         END
     `);
 
-    // Seed default watcher config if not present
-    db.prepare(`INSERT OR IGNORE INTO config (key, value) VALUES ('file_watcher_enabled', 'false')`).run();
+    // Watcher is disabled by default on every startup; must be explicitly enabled via Settings
+    db.prepare(`
+        INSERT INTO config (key, value) VALUES ('file_watcher_enabled', 'false')
+        ON CONFLICT(key) DO UPDATE SET value = 'false'
+    `).run();
 
     console.log('Database initialized successfully');
 }
