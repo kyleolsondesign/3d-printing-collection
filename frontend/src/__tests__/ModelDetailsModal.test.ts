@@ -42,6 +42,7 @@ function setupMocks(overrides: Partial<typeof mockModelDetails> = {}) {
         (filepath: string) => `/api/models/file/serve?path=${filepath}`
     );
     vi.mocked(api.modelsApi.recordView).mockResolvedValue({ data: { success: true } } as any);
+    vi.mocked(api.tagsApi.getAll).mockResolvedValue({ data: [] } as any);
 }
 
 function mountModal(props = { modelId: 1 }) {

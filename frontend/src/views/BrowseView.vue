@@ -149,6 +149,62 @@
           </svg>
           <span>Printed</span>
         </button>
+        <div class="bulk-tag-wrapper">
+          <button
+            @click="showBulkCategoryPicker = !showBulkCategoryPicker; bulkCategoryTarget = ''"
+            class="bulk-btn"
+            title="Move to Category"
+            :disabled="bulkLoading || selectedCount === 0"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+              <path d="M12 11v6M9 14l3 3 3-3"/>
+            </svg>
+            <span>Move</span>
+          </button>
+          <div v-if="showBulkCategoryPicker" class="bulk-tag-input-row">
+            <input
+              v-model="bulkCategoryTarget"
+              list="bulk-category-list"
+              @keydown.enter="bulkReassignCategory"
+              @keydown.escape="showBulkCategoryPicker = false; bulkCategoryTarget = ''"
+              placeholder="Category name..."
+              class="bulk-tag-input"
+              type="text"
+              autofocus
+            />
+            <datalist id="bulk-category-list">
+              <option v-for="cat in store.categories" :key="cat.category" :value="cat.category" />
+            </datalist>
+            <button @click="bulkReassignCategory" class="bulk-tag-confirm" :disabled="!bulkCategoryTarget.trim()">Move</button>
+          </div>
+        </div>
+        <div class="bulk-tag-wrapper">
+          <button
+            @click="showBulkTagInput = !showBulkTagInput; bulkTagInput = ''"
+            class="bulk-btn"
+            title="Add Tag"
+            :disabled="bulkLoading || selectedCount === 0"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
+              <line x1="7" y1="7" x2="7.01" y2="7"/>
+            </svg>
+            <span>Tag</span>
+          </button>
+          <div v-if="showBulkTagInput" class="bulk-tag-input-row">
+            <input
+              v-model="bulkTagInput"
+              @keydown.enter="bulkAddTag"
+              @keydown.escape="showBulkTagInput = false; bulkTagInput = ''"
+              placeholder="Tag name..."
+              class="bulk-tag-input"
+              type="text"
+              autofocus
+            />
+            <button @click="bulkAddTag" class="bulk-tag-confirm" :disabled="!bulkTagInput.trim()">Apply</button>
+          </div>
+        </div>
         <button @click="bulkDelete" class="bulk-btn delete-btn" title="Delete" :disabled="bulkLoading || selectedCount === 0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
@@ -426,7 +482,7 @@
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../store';
-import { modelsApi, systemApi, queueApi, printedApi, favoritesApi } from '../services/api';
+import { modelsApi, systemApi, queueApi, printedApi, favoritesApi, tagsApi } from '../services/api';
 import type { Model } from '../services/api';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 
@@ -449,6 +505,14 @@ const isInitialized = ref(false);
 const selectionMode = ref(false);
 const selectedModels = ref<Set<number>>(new Set());
 const bulkLoading = ref(false);
+
+// Bulk tag state
+const showBulkTagInput = ref(false);
+const bulkTagInput = ref('');
+
+// Bulk category reassignment state
+const showBulkCategoryPicker = ref(false);
+const bulkCategoryTarget = ref('');
 
 const hasMoreModels = computed(() => !isSearchActive.value && store.models.length < totalModels.value);
 const selectedCount = computed(() => selectedModels.value.size);
@@ -900,6 +964,52 @@ async function bulkAddToFavorites() {
     selectionMode.value = false;
   } catch (error) {
     console.error('Failed to add to favorites:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkReassignCategory() {
+  const category = bulkCategoryTarget.value.trim();
+  if (!category || selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    const res = await modelsApi.bulkReassignCategory(ids, category);
+    const data = res.data;
+    // Update local state for successfully moved models
+    for (const result of data.results) {
+      if (result.success) {
+        const model = store.models.find(m => m.id === result.id);
+        if (model) model.category = category;
+      }
+    }
+    showBulkCategoryPicker.value = false;
+    bulkCategoryTarget.value = '';
+    deselectAll();
+    selectionMode.value = false;
+    // Reload categories count
+    await store.loadCategories();
+  } catch (error) {
+    console.error('Failed to reassign category:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkAddTag() {
+  const tagName = bulkTagInput.value.trim();
+  if (!tagName || selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await tagsApi.bulkAddToModels(ids, tagName);
+    showBulkTagInput.value = false;
+    bulkTagInput.value = '';
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to add tag:', error);
   } finally {
     bulkLoading.value = false;
   }
@@ -1788,6 +1898,66 @@ async function bulkAddToFavorites() {
   display: flex;
   align-items: center;
   margin-left: 0.5rem;
+}
+
+.bulk-tag-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bulk-tag-input-row {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  display: flex;
+  gap: 0.5rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.5rem;
+  box-shadow: var(--shadow-lg);
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.bulk-tag-input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.625rem;
+  outline: none;
+  width: 140px;
+  transition: border-color var(--transition-base);
+}
+
+.bulk-tag-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.bulk-tag-confirm {
+  background: var(--accent-primary-dim);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--accent-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.bulk-tag-confirm:hover:not(:disabled) {
+  background: var(--accent-primary);
+  color: var(--bg-deepest);
+}
+
+.bulk-tag-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Selection checkboxes */

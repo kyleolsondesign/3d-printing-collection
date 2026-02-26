@@ -95,6 +95,9 @@ export const modelsApi = {
     bulkDelete: (modelIds: number[]) =>
         api.post('/models/bulk-delete', { model_ids: modelIds }),
 
+    bulkReassignCategory: (modelIds: number[], newCategory: string) =>
+        api.post('/models/bulk-reassign-category', { model_ids: modelIds, new_category: newCategory }),
+
     setPrimaryImage: (modelId: number, assetId: number) =>
         api.put(`/models/${modelId}/primary-image`, { assetId }),
 
@@ -204,6 +207,44 @@ export const ingestionApi = {
         api.post('/ingestion/import', { items }),
     getPreviewImageUrl: (filePath: string) =>
         `/api/ingestion/preview-image?path=${encodeURIComponent(filePath)}`
+};
+
+// Designers API
+export interface Designer {
+    id: number;
+    name: string;
+    profile_url: string | null;
+    notes: string | null;
+    model_count?: number;
+    latest_model_date?: string | null;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export const designersApi = {
+    getAll: () => api.get('/designers'),
+    getById: (id: number, page?: number) => api.get(`/designers/${id}`, { params: { page } }),
+    create: (data: { name: string; profile_url?: string; notes?: string }) => api.post('/designers', data),
+    update: (id: number, data: { name?: string; profile_url?: string; notes?: string }) => api.patch(`/designers/${id}`, data),
+    delete: (id: number) => api.delete(`/designers/${id}`),
+    sync: () => api.post('/designers/sync')
+};
+
+// Tags API
+export interface Tag {
+    id: number;
+    name: string;
+    model_count?: number;
+    created_at?: string;
+}
+
+export const tagsApi = {
+    getAll: () => api.get('/tags'),
+    create: (name: string) => api.post('/tags', { name }),
+    delete: (id: number) => api.delete(`/tags/${id}`),
+    addToModel: (modelId: number, name: string) => api.post(`/tags/model/${modelId}`, { name }),
+    removeFromModel: (modelId: number, tagId: number) => api.delete(`/tags/model/${modelId}/${tagId}`),
+    bulkAddToModels: (modelIds: number[], tagName: string) => api.post('/tags/bulk', { modelIds, tagName })
 };
 
 export default api;

@@ -187,9 +187,35 @@
               </div>
 
               <!-- Tags -->
-              <div class="tags-section" v-if="modelDetails.tags && modelDetails.tags.length > 0">
+              <div class="tags-section">
                 <div class="tags-list">
-                  <span v-for="tag in modelDetails.tags" :key="tag" class="tag-chip">{{ tag }}</span>
+                  <span v-for="tag in modelTags" :key="tag.id" class="tag-chip editable">
+                    {{ tag.name }}
+                    <button class="tag-remove-btn" @click="removeTag(tag)" title="Remove tag">×</button>
+                  </span>
+                  <div class="tag-input-wrapper" ref="tagInputWrapperRef">
+                    <input
+                      v-model="tagInput"
+                      @keydown.enter.prevent="addTag"
+                      @keydown.escape="tagInput = ''; showTagSuggestions = false"
+                      @input="showTagSuggestions = true"
+                      @focus="showTagSuggestions = true"
+                      @blur="handleTagInputBlur"
+                      placeholder="Add tag..."
+                      class="tag-input"
+                      type="text"
+                    />
+                    <div v-if="showTagSuggestions && filteredTagSuggestions.length > 0" class="tag-suggestions">
+                      <button
+                        v-for="suggestion in filteredTagSuggestions"
+                        :key="suggestion.id"
+                        class="tag-suggestion"
+                        @mousedown.prevent="selectTagSuggestion(suggestion)"
+                      >
+                        {{ suggestion.name }}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -376,7 +402,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, type Model, type ModelAsset, type ModelMetadata, type MakeImage } from '../services/api';
+import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, tagsApi, type Model, type ModelAsset, type ModelMetadata, type MakeImage, type Tag } from '../services/api';
 import { useAppStore } from '../store';
 
 interface ModelFile {
@@ -409,7 +435,7 @@ interface ModelDetails extends Model {
   isQueued: boolean;
   printHistory: PrintRecord[];
   metadata?: ModelMetadata | null;
-  tags?: string[];
+  tags?: Tag[];
 }
 
 const props = defineProps<{
@@ -467,6 +493,21 @@ const lightboxOpen = ref(false);
 const lightboxIndex = ref(0);
 const notesValue = ref('');
 const savedNotes = ref('');
+
+// Tags state
+const modelTags = ref<Tag[]>([]);
+const allTags = ref<Tag[]>([]);
+const tagInput = ref('');
+const showTagSuggestions = ref(false);
+const tagInputWrapperRef = ref<HTMLElement | null>(null);
+
+const filteredTagSuggestions = computed(() => {
+  const q = tagInput.value.trim().toLowerCase();
+  const existingIds = new Set(modelTags.value.map(t => t.id));
+  return allTags.value.filter(t =>
+    !existingIds.has(t.id) && (q === '' || t.name.includes(q))
+  ).slice(0, 8);
+});
 
 const imageAssets = computed(() =>
   modelDetails.value?.assets.filter(a => a.asset_type === 'image') || []
@@ -569,13 +610,16 @@ watch(() => props.modelId, async (newId) => {
 async function loadModelDetails() {
   loading.value = true;
   try {
-    const [detailsRes, filesRes] = await Promise.all([
+    const [detailsRes, filesRes, allTagsRes] = await Promise.all([
       modelsApi.getById(props.modelId),
-      modelsApi.getFiles(props.modelId)
+      modelsApi.getFiles(props.modelId),
+      tagsApi.getAll()
     ]);
 
     modelDetails.value = detailsRes.data;
     modelFiles.value = filesRes.data.files;
+    modelTags.value = detailsRes.data.tags || [];
+    allTags.value = allTagsRes.data;
 
     // Set primary image
     const primary = imageAssets.value.find(a => a.is_primary);
@@ -823,6 +867,55 @@ async function deleteMakeImage(imageId: number) {
   } catch (error) {
     console.error('Failed to delete make image:', error);
   }
+}
+
+async function addTag() {
+  if (!modelDetails.value || !tagInput.value.trim()) return;
+  const name = tagInput.value.trim();
+  try {
+    const res = await tagsApi.addToModel(modelDetails.value.id, name);
+    const tag: Tag = res.data.tag;
+    if (!modelTags.value.find(t => t.id === tag.id)) {
+      modelTags.value.push(tag);
+    }
+    // Add to allTags if new
+    if (!allTags.value.find(t => t.id === tag.id)) {
+      allTags.value.push(tag);
+    }
+    tagInput.value = '';
+    showTagSuggestions.value = false;
+  } catch (error) {
+    console.error('Failed to add tag:', error);
+  }
+}
+
+async function removeTag(tag: Tag) {
+  if (!modelDetails.value) return;
+  try {
+    await tagsApi.removeFromModel(modelDetails.value.id, tag.id);
+    modelTags.value = modelTags.value.filter(t => t.id !== tag.id);
+  } catch (error) {
+    console.error('Failed to remove tag:', error);
+  }
+}
+
+async function selectTagSuggestion(tag: Tag) {
+  if (!modelDetails.value) return;
+  showTagSuggestions.value = false;
+  tagInput.value = '';
+  try {
+    await tagsApi.addToModel(modelDetails.value.id, tag.name);
+    if (!modelTags.value.find(t => t.id === tag.id)) {
+      modelTags.value.push(tag);
+    }
+  } catch (error) {
+    console.error('Failed to add tag:', error);
+  }
+}
+
+function handleTagInputBlur() {
+  // Small delay to allow mousedown on suggestions to fire first
+  setTimeout(() => { showTagSuggestions.value = false; }, 150);
 }
 
 async function extractZipFile(zipFile: ZipFile) {
@@ -1826,13 +1919,94 @@ async function extractZipFile(zipFile: ZipFile) {
 }
 
 .tag-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   padding: 0.125rem 0.5rem;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+.tag-chip.editable {
+  padding-right: 0.25rem;
+}
+
+.tag-remove-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 0.875rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  border-radius: 2px;
+  transition: color var(--transition-base);
+}
+
+.tag-remove-btn:hover {
+  color: var(--danger);
+}
+
+.tag-input-wrapper {
+  position: relative;
+}
+
+.tag-input {
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  width: 120px;
+  outline: none;
+  transition: border-color var(--transition-base);
+}
+
+.tag-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.tag-input:focus {
+  border-color: var(--accent-primary);
+  border-style: solid;
+}
+
+.tag-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  min-width: 150px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tag-suggestion {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-base);
+}
+
+.tag-suggestion:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* Lightbox */

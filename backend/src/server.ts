@@ -8,6 +8,8 @@ import printedRouter from './routes/printed.js';
 import queueRouter from './routes/queue.js';
 import systemRouter from './routes/system.js';
 import ingestionRouter from './routes/ingestion.js';
+import tagsRouter from './routes/tags.js';
+import designersRouter from './routes/designers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,6 +35,8 @@ app.use('/api/printed', printedRouter);
 app.use('/api/queue', queueRouter);
 app.use('/api/system', systemRouter);
 app.use('/api/ingestion', ingestionRouter);
+app.use('/api/tags', tagsRouter);
+app.use('/api/designers', designersRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

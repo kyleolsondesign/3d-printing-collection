@@ -257,11 +257,11 @@ router.get('/:id', (req, res) => {
 
         // Get tags
         const tags = db.prepare(`
-            SELECT t.name FROM tags t
+            SELECT t.id, t.name FROM tags t
             JOIN model_tags mt ON mt.tag_id = t.id
             WHERE mt.model_id = ?
             ORDER BY t.name
-        `).all(id) as Array<{ name: string }>;
+        `).all(id) as Array<{ id: number; name: string }>;
 
         res.json({
             ...model,
@@ -271,7 +271,7 @@ router.get('/:id', (req, res) => {
             isQueued: !!queued,
             printHistory: printed,
             metadata,
-            tags: tags.map(t => t.name)
+            tags
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -549,7 +549,7 @@ router.post('/:id/extract-zip', async (req, res) => {
         const result = await scanner.rescanModel(modelId);
 
         // Return the updated model data (ID is preserved by rescanModel)
-        const updatedModel = db.prepare('SELECT * FROM models WHERE id = ?').get(modelId);
+        const updatedModel = db.prepare('SELECT * FROM models WHERE id = ?').get(modelId) as any;
         const assets = db.prepare('SELECT * FROM model_assets WHERE model_id = ? ORDER BY is_primary DESC').all(modelId);
         const files = db.prepare('SELECT * FROM model_files WHERE model_id = ?').all(modelId);
 
@@ -586,6 +586,91 @@ router.post('/bulk-delete', (req, res) => {
         }
 
         res.json({ success: true, affected });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Bulk reassign category - moves model folders to a new category directory
+router.post('/bulk-reassign-category', async (req, res) => {
+    try {
+        const { model_ids, new_category } = req.body;
+
+        if (!Array.isArray(model_ids) || model_ids.length === 0) {
+            return res.status(400).json({ error: 'model_ids must be a non-empty array' });
+        }
+        if (!new_category || typeof new_category !== 'string' || !new_category.trim()) {
+            return res.status(400).json({ error: 'new_category is required' });
+        }
+
+        const category = new_category.trim();
+        const config = db.prepare('SELECT value FROM config WHERE key = ?').get('modelDirectory') as { value: string } | undefined;
+        if (!config) {
+            return res.status(400).json({ error: 'Model directory not configured' });
+        }
+        const modelRoot = config.value;
+
+        const results: Array<{ id: number; success: boolean; error?: string; newFilepath?: string }> = [];
+
+        for (const modelId of model_ids) {
+            const model = db.prepare('SELECT * FROM models WHERE id = ? AND deleted_at IS NULL').get(modelId) as { id: number; filepath: string; category: string } | undefined;
+            if (!model) {
+                results.push({ id: modelId, success: false, error: 'Model not found' });
+                continue;
+            }
+
+            if (model.category === category) {
+                results.push({ id: modelId, success: true, newFilepath: model.filepath });
+                continue;
+            }
+
+            const folderName = path.basename(model.filepath);
+            const newCategoryDir = path.join(modelRoot, category);
+            const newFilepath = path.join(newCategoryDir, folderName);
+
+            try {
+                // Create category directory if it doesn't exist
+                if (!fs.existsSync(newCategoryDir)) {
+                    fs.mkdirSync(newCategoryDir, { recursive: true });
+                }
+
+                // Check for collision
+                if (fs.existsSync(newFilepath)) {
+                    results.push({ id: modelId, success: false, error: `Destination already exists: ${newFilepath}` });
+                    continue;
+                }
+
+                // Move the folder
+                fs.renameSync(model.filepath, newFilepath);
+
+                // Update DB: model filepath and category
+                db.prepare('UPDATE models SET filepath = ?, category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+                    .run(newFilepath, category, modelId);
+
+                // Update model_files filepaths
+                const modelFiles = db.prepare('SELECT id, filepath FROM model_files WHERE model_id = ?').all(modelId) as Array<{ id: number; filepath: string }>;
+                for (const file of modelFiles) {
+                    const updatedFilepath = file.filepath.replace(model.filepath, newFilepath);
+                    db.prepare('UPDATE model_files SET filepath = ? WHERE id = ?').run(updatedFilepath, file.id);
+                }
+
+                // Update model_assets filepaths
+                const assets = db.prepare('SELECT id, filepath FROM model_assets WHERE model_id = ?').all(modelId) as Array<{ id: number; filepath: string }>;
+                for (const asset of assets) {
+                    const updatedFilepath = asset.filepath.replace(model.filepath, newFilepath);
+                    db.prepare('UPDATE model_assets SET filepath = ? WHERE id = ?').run(updatedFilepath, asset.id);
+                }
+
+                results.push({ id: modelId, success: true, newFilepath });
+            } catch (moveError) {
+                const errMsg = moveError instanceof Error ? moveError.message : String(moveError);
+                results.push({ id: modelId, success: false, error: errMsg });
+            }
+        }
+
+        const succeeded = results.filter(r => r.success).length;
+        res.json({ success: true, results, succeeded, total: model_ids.length });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

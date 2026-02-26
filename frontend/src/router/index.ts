@@ -6,6 +6,7 @@ import QueueView from '../views/QueueView.vue';
 import LooseFilesView from '../views/LooseFilesView.vue';
 import IngestionView from '../views/IngestionView.vue';
 import RecentView from '../views/RecentView.vue';
+import DesignersView from '../views/DesignersView.vue';
 import SettingsView from '../views/SettingsView.vue';
 
 const router = createRouter({
@@ -45,6 +46,11 @@ const router = createRouter({
             path: '/ingestion',
             name: 'ingestion',
             component: IngestionView
+        },
+        {
+            path: '/designers',
+            name: 'designers',
+            component: DesignersView
         },
         {
             path: '/settings',

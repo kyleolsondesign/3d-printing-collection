@@ -188,6 +188,25 @@ function initializeDatabase(): void {
         )
     `);
 
+    // Designers table - for browsing models by designer
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS designers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            profile_url TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Add designer_id to models for linking to designer records
+    try {
+        db.exec(`ALTER TABLE models ADD COLUMN designer_id INTEGER REFERENCES designers(id) ON DELETE SET NULL`);
+    } catch (e) {
+        // Column already exists, ignore
+    }
+
     // Tags table - for categorizing models with multiple tags
     db.exec(`
         CREATE TABLE IF NOT EXISTS tags (
