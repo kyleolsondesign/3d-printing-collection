@@ -38,7 +38,7 @@ async function updateModelFinderTags(modelId: number): Promise<void> {
 router.get('/', (req, res) => {
     try {
         const queue = db.prepare(`
-            SELECT print_queue.*, models.*
+            SELECT models.*, print_queue.*
             FROM print_queue
             JOIN models ON print_queue.model_id = models.id
             ORDER BY print_queue.priority DESC, print_queue.added_at ASC
