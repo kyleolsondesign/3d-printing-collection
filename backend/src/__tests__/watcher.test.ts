@@ -118,6 +118,47 @@ describe('WatcherService', () => {
             expect(mockFsWatch).not.toHaveBeenCalledWith('/test/models/.hidden', expect.any(Function));
         });
 
+        it('watches designer subdirectories under Paid at root level', async () => {
+            mockReaddirSync
+                .mockReturnValueOnce([
+                    { name: 'Paid', isDirectory: () => true },
+                    { name: 'Toys', isDirectory: () => true },
+                ])
+                .mockReturnValueOnce([
+                    // Paid entries (designer dirs)
+                    { name: 'Designer1', isDirectory: () => true },
+                    { name: 'Designer2', isDirectory: () => true },
+                    { name: '.hidden', isDirectory: () => true }, // should be ignored
+                ])
+                .mockReturnValue([]); // Toys depth-2 check (no nested Paid)
+            await watcherService.start('/test/models');
+            expect(mockFsWatch).toHaveBeenCalledWith('/test/models/Paid', expect.any(Function));
+            expect(mockFsWatch).toHaveBeenCalledWith('/test/models/Paid/Designer1', expect.any(Function));
+            expect(mockFsWatch).toHaveBeenCalledWith('/test/models/Paid/Designer2', expect.any(Function));
+            expect(mockFsWatch).not.toHaveBeenCalledWith('/test/models/Paid/.hidden', expect.any(Function));
+        });
+
+        it('watches designer subdirectories under nested Paid (Category/Paid/Designer)', async () => {
+            mockReaddirSync
+                .mockReturnValueOnce([
+                    // root entries
+                    { name: 'Shared Models', isDirectory: () => true },
+                ])
+                .mockReturnValueOnce([
+                    // Shared Models entries
+                    { name: 'Paid', isDirectory: () => true },
+                    { name: 'SomeModel', isDirectory: () => true },
+                ])
+                .mockReturnValueOnce([
+                    // Paid entries (designers)
+                    { name: 'Designer1', isDirectory: () => true },
+                ]);
+            await watcherService.start('/test/models');
+            expect(mockFsWatch).toHaveBeenCalledWith('/test/models/Shared Models', expect.any(Function));
+            expect(mockFsWatch).toHaveBeenCalledWith('/test/models/Shared Models/Paid', expect.any(Function));
+            expect(mockFsWatch).toHaveBeenCalledWith('/test/models/Shared Models/Paid/Designer1', expect.any(Function));
+        });
+
         it('reports active when watchers are running', async () => {
             await watcherService.start('/test/models');
             expect(watcherService.getStatus().active).toBe(true);

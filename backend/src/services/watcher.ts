@@ -48,7 +48,9 @@ class WatcherService {
     /**
      * Start watching a model directory at shallow depth.
      * Watches the root + each immediate subdirectory (category level).
-     * This keeps the total watcher count to ~20 handles instead of 38k+.
+     * For "Paid" directories at depth 1 or depth 2, also watches designer
+     * subdirectories so that new models added to existing designer folders are detected.
+     * This keeps the total watcher count manageable instead of 38k+.
      */
     async start(directory: string): Promise<void> {
         await this.stop();
@@ -61,15 +63,51 @@ class WatcherService {
         try {
             const entries = fs.readdirSync(directory, { withFileTypes: true });
             for (const entry of entries) {
-                if (entry.isDirectory() && !IGNORE_RE.test(entry.name)) {
-                    this.watchDir(path.join(directory, entry.name));
+                if (!entry.isDirectory() || IGNORE_RE.test(entry.name)) continue;
+                const categoryPath = path.join(directory, entry.name);
+                this.watchDir(categoryPath);
+
+                // Paid at depth 1 (e.g. Root/Paid/<designer>/<model>):
+                // watch each designer subdirectory
+                if (/^paid$/i.test(entry.name)) {
+                    this.watchPaidDesigners(categoryPath);
+                    continue;
                 }
+
+                // Check if this category contains a nested Paid folder
+                // (e.g. Root/Shared Models/Paid/<designer>/<model>)
+                try {
+                    const subEntries = fs.readdirSync(categoryPath, { withFileTypes: true });
+                    for (const sub of subEntries) {
+                        if (!sub.isDirectory() || IGNORE_RE.test(sub.name)) continue;
+                        if (/^paid$/i.test(sub.name)) {
+                            const paidPath = path.join(categoryPath, sub.name);
+                            this.watchDir(paidPath);
+                            this.watchPaidDesigners(paidPath);
+                        }
+                    }
+                } catch { /* skip if not readable */ }
             }
         } catch (err) {
             console.error('[Watcher] Could not read root directory:', (err as Error).message);
         }
 
         console.log(`[Watcher] Started watching: ${directory} (${this.watchers.size} directories)`);
+    }
+
+    /**
+     * Watch each immediate subdirectory of a Paid folder (designer-level directories).
+     * Enables detection of new models dropped into existing designer folders.
+     */
+    private watchPaidDesigners(paidPath: string): void {
+        try {
+            const entries = fs.readdirSync(paidPath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory() && !IGNORE_RE.test(entry.name)) {
+                    this.watchDir(path.join(paidPath, entry.name));
+                }
+            }
+        } catch { /* skip if not readable */ }
     }
 
     /**
