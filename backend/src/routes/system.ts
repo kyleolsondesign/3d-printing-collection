@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import db from '../config/database.js';
 import scanner, { ScanMode } from '../services/scanner.js';
+import watcher from '../services/watcher.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
 
 const router = express.Router();
@@ -89,6 +90,13 @@ router.post('/scan', async (req, res) => {
             console.error('Scan error:', error);
         });
 
+        // Restart watcher if directory changed
+        if (req.body.modelDirectory) {
+            watcher.restart(modelDirectory).catch((err: Error) => {
+                console.error('Failed to restart watcher after directory change:', err.message);
+            });
+        }
+
         res.json({ success: true, message: `Scan started (mode: ${mode})` });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -101,6 +109,31 @@ router.get('/scan/status', (req, res) => {
     try {
         const progress = scanner.getProgress();
         res.json(progress);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Get file watcher status
+router.get('/watcher/status', (req, res) => {
+    try {
+        res.json(watcher.getStatus());
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Enable or disable file watcher
+router.post('/watcher/toggle', async (req, res) => {
+    try {
+        const { enabled } = req.body;
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ error: 'enabled (boolean) is required' });
+        }
+        await watcher.setEnabled(enabled);
+        res.json({ success: true, status: watcher.getStatus() });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

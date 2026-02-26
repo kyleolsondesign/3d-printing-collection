@@ -137,6 +137,47 @@
       <div class="section-header">
         <div class="section-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </div>
+        <div>
+          <h3>File Watcher</h3>
+          <p class="section-description">Automatically scan for changes when files are added, moved, or deleted</p>
+        </div>
+      </div>
+      <div class="watcher-row">
+        <div class="watcher-info">
+          <div class="watcher-status-badge">
+            <span class="status-dot" :class="watcherStatus.active ? 'active' : 'inactive'"></span>
+            <span class="status-text">{{ watcherStatus.active ? 'Active' : 'Inactive' }}</span>
+            <span v-if="watcherStatus.pendingChanges > 0" class="pending-badge">{{ watcherStatus.pendingChanges }} pending</span>
+          </div>
+          <p v-if="watcherStatus.lastTriggered" class="last-triggered">Last triggered: {{ formatDate(watcherStatus.lastTriggered) }}</p>
+          <p v-else class="last-triggered muted">Never triggered</p>
+        </div>
+        <button
+          @click="toggleWatcher"
+          :disabled="watcherToggling || scanStatus.scanning"
+          class="btn-secondary watcher-toggle"
+          :class="{ 'watcher-active': watcherStatus.enabled }"
+        >
+          <svg v-if="watcherToggling" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+          </svg>
+          {{ watcherToggling ? 'Updating...' : watcherStatus.enabled ? 'Disable Watcher' : 'Enable Watcher' }}
+        </button>
+      </div>
+      <p class="watcher-note">
+        When enabled, detects file system changes and auto-triggers scans after a 20-second debounce.
+        Additions trigger an "Add Only" scan; deletions trigger a "Sync" scan. Paused while a manual scan is in progress.
+      </p>
+    </div>
+
+    <div class="settings-section">
+      <div class="section-header">
+        <div class="section-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
           </svg>
         </div>
@@ -244,7 +285,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { systemApi, type ScanMode } from '../services/api';
+import { systemApi, type ScanMode, type WatcherStatus } from '../services/api';
 
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');
 const scanMode = ref<ScanMode>('full_sync');
@@ -272,6 +313,9 @@ const scanStatus = ref({
   scanCompletedAt: null as string | null,
   scanMode: null as string | null
 });
+const watcherStatus = ref<WatcherStatus>({ enabled: false, active: false, lastTriggered: null, pendingChanges: 0 });
+const watcherToggling = ref(false);
+
 const stats = ref({
   totalModels: 0,
   deletedModels: 0,
@@ -319,6 +363,7 @@ onMounted(async () => {
   await loadConfig();
   await loadStats();
   await checkScanStatus();
+  await loadWatcherStatus();
 });
 
 onUnmounted(() => {
@@ -404,6 +449,30 @@ async function saveAndScan() {
     showMessage('Failed to start scan', 'error');
   } finally {
     scanning.value = false;
+  }
+}
+
+async function loadWatcherStatus() {
+  try {
+    const response = await systemApi.getWatcherStatus();
+    watcherStatus.value = response.data;
+  } catch (error) {
+    console.error('Failed to load watcher status:', error);
+  }
+}
+
+async function toggleWatcher() {
+  if (watcherToggling.value) return;
+  watcherToggling.value = true;
+  try {
+    const newEnabled = !watcherStatus.value.enabled;
+    await systemApi.toggleWatcher(newEnabled);
+    await loadWatcherStatus();
+    showMessage(newEnabled ? 'File watcher enabled' : 'File watcher disabled', 'success');
+  } catch (error) {
+    showMessage('Failed to toggle file watcher', 'error');
+  } finally {
+    watcherToggling.value = false;
   }
 }
 
@@ -923,5 +992,80 @@ h2 {
 .btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.watcher-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.watcher-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.watcher-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.active {
+  background: var(--success, #22c55e);
+  box-shadow: 0 0 6px var(--success, #22c55e);
+}
+
+.status-dot.inactive {
+  background: var(--text-tertiary);
+}
+
+.status-text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pending-badge {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 20%, transparent);
+  color: var(--warning, #f59e0b);
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+.last-triggered {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.last-triggered.muted {
+  color: var(--text-tertiary);
+}
+
+.watcher-toggle.watcher-active {
+  border-color: var(--success, #22c55e);
+  color: var(--success, #22c55e);
+}
+
+.watcher-note {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  line-height: 1.5;
 }
 </style>

@@ -14,8 +14,16 @@ vi.mock('../utils/finderTags.js', () => ({
     TAG_COLORS: { PRINTED_GOOD: 'Green', PRINTED_BAD: 'Red', QUEUED: 'Blue' }
 }));
 vi.mock('../services/scanner.js', () => ({
-    default: { scan: vi.fn(), deduplicateAllImages: vi.fn() },
+    default: { scan: vi.fn(), deduplicateAllImages: vi.fn(), scanDirectory: vi.fn().mockResolvedValue({}), getProgress: vi.fn().mockReturnValue({ scanning: false }) },
     ScanMode: { SYNC: 'sync', ADD_ONLY: 'add_only', FULL_REBUILD: 'full_rebuild' }
+}));
+vi.mock('../services/watcher.js', () => ({
+    default: {
+        getStatus: vi.fn().mockReturnValue({ enabled: false, active: false, lastTriggered: null, pendingChanges: 0 }),
+        setEnabled: vi.fn().mockResolvedValue(undefined),
+        restart: vi.fn().mockResolvedValue(undefined),
+        initialize: vi.fn().mockResolvedValue(undefined),
+    }
 }));
 
 // Mock child_process exec for open-folder and trash
@@ -170,6 +178,42 @@ describe('System Routes', () => {
                 'open -R "/test/path/file.stl"',
                 expect.any(Function)
             );
+        });
+    });
+
+    describe('GET /api/system/watcher/status', () => {
+        it('returns watcher status object with expected fields', async () => {
+            const res = await request(app).get('/api/system/watcher/status');
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveProperty('enabled');
+            expect(res.body).toHaveProperty('active');
+            expect(res.body).toHaveProperty('lastTriggered');
+            expect(res.body).toHaveProperty('pendingChanges');
+        });
+    });
+
+    describe('POST /api/system/watcher/toggle', () => {
+        it('returns 400 when enabled field is missing', async () => {
+            const res = await request(app).post('/api/system/watcher/toggle').send({});
+            expect(res.status).toBe(400);
+        });
+
+        it('returns 400 when enabled is not a boolean', async () => {
+            const res = await request(app).post('/api/system/watcher/toggle').send({ enabled: 'yes' });
+            expect(res.status).toBe(400);
+        });
+
+        it('enables watcher and returns updated status', async () => {
+            const res = await request(app).post('/api/system/watcher/toggle').send({ enabled: true });
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(true);
+            expect(res.body.status).toHaveProperty('enabled');
+        });
+
+        it('disables watcher and returns updated status', async () => {
+            const res = await request(app).post('/api/system/watcher/toggle').send({ enabled: false });
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(true);
         });
     });
 });

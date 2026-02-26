@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
-import { modelsApi, printedApi, favoritesApi, queueApi } from '../services/api';
+import { modelsApi, printedApi, favoritesApi, queueApi, systemApi } from '../services/api';
 
 vi.mock('axios', () => {
     const mockAxios = {
@@ -136,6 +136,26 @@ describe('API Client', () => {
             await queueApi.reorder(items);
             const mockApi = axios.create() as any;
             expect(mockApi.post).toHaveBeenCalledWith('/queue/reorder', { items });
+        });
+    });
+
+    describe('systemApi watcher methods', () => {
+        it('getWatcherStatus calls GET /system/watcher/status', async () => {
+            await systemApi.getWatcherStatus();
+            const mockApi = axios.create() as any;
+            expect(mockApi.get).toHaveBeenCalledWith('/system/watcher/status');
+        });
+
+        it('toggleWatcher calls POST /system/watcher/toggle with enabled=true', async () => {
+            await systemApi.toggleWatcher(true);
+            const mockApi = axios.create() as any;
+            expect(mockApi.post).toHaveBeenCalledWith('/system/watcher/toggle', { enabled: true });
+        });
+
+        it('toggleWatcher calls POST /system/watcher/toggle with enabled=false', async () => {
+            await systemApi.toggleWatcher(false);
+            const mockApi = axios.create() as any;
+            expect(mockApi.post).toHaveBeenCalledWith('/system/watcher/toggle', { enabled: false });
         });
     });
 });

@@ -284,6 +284,9 @@ function initializeDatabase(): void {
         END
     `);
 
+    // Seed default watcher config if not present
+    db.prepare(`INSERT OR IGNORE INTO config (key, value) VALUES ('file_watcher_enabled', 'false')`).run();
+
     console.log('Database initialized successfully');
 }
 

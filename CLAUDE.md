@@ -343,6 +343,18 @@ Three scan modes available in Settings:
 - **Add Only**: Only adds new models that don't exist in the database. Never modifies or deletes existing records.
 - **Full Rebuild**: Clears all model data and rescans from scratch. Favorites, history, and queue are saved before clearing and restored by matching filepaths after rebuild.
 
+### File System Watcher
+An optional background watcher that auto-triggers scans when the model directory changes:
+- **Toggle in Settings**: Enable/disable via the "File Watcher" section; state persisted in config table (`file_watcher_enabled`)
+- **Shallow watching**: Uses Node's built-in `fs.watch` on the root directory + each immediate category subdirectory (~20 handles total). Does NOT recursively watch all files — this avoids EMFILE errors on large collections.
+- **Debounce**: 20-second debounce after the last event before triggering a scan; maximum 5-minute wait cap for continuous iCloud sync storms
+- **Scan mode**: Always triggers `full_sync` (handles both additions and deletions)
+- **Guards**: Skips auto-scan if a manual scan is already in progress
+- **Ignored events**: Filters `.icloud` placeholders, hidden files (`.`-prefixed), `.DS_Store`, `.tmp`
+- **Restart on directory change**: When the model directory is changed in Settings, the watcher restarts on the new path
+- **Implementation**: `backend/src/services/watcher.ts` (WatcherService singleton)
+- **API endpoints**: `GET /api/system/watcher/status`, `POST /api/system/watcher/toggle`
+
 ### Soft Deletes
 - Models use soft deletion (deleted_at timestamp) instead of hard deletion
 - Deleted models are filtered out of queries by default
@@ -492,7 +504,6 @@ The app integrates with macOS Finder tags to sync print status:
 ## Future Enhancements
 - 3D model preview (STL viewer)
 - Thumbnail generation for models (resize large images)
-- File system watcher for auto-refresh
 - Export/import favorites and queue
 - Print statistics and analytics
 - Duplicate detection (fuzzy filename matching + file hash comparison)

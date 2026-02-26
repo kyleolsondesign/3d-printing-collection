@@ -180,6 +180,13 @@ export const queueApi = {
 // Scan modes for the scanner
 export type ScanMode = 'full' | 'full_sync' | 'add_only';
 
+export interface WatcherStatus {
+    enabled: boolean;
+    active: boolean;
+    lastTriggered: string | null;
+    pendingChanges: number;
+}
+
 // System API
 export const systemApi = {
     getConfig: () => api.get('/system/config'),
@@ -194,7 +201,9 @@ export const systemApi = {
     organizeLooseFile: (looseFileId: number) => api.post('/system/organize-loose-file', { looseFileId }),
     organizeLooseFiles: (looseFileIds: number[]) => api.post('/system/organize-loose-files', { looseFileIds }),
     deduplicateImages: () => api.post('/system/deduplicate-images'),
-    trashLooseFile: (looseFileId: number) => api.post('/system/trash-loose-file', { looseFileId })
+    trashLooseFile: (looseFileId: number) => api.post('/system/trash-loose-file', { looseFileId }),
+    getWatcherStatus: () => api.get<WatcherStatus>('/system/watcher/status'),
+    toggleWatcher: (enabled: boolean) => api.post('/system/watcher/toggle', { enabled })
 };
 
 // Ingestion API

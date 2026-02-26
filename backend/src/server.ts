@@ -10,6 +10,7 @@ import systemRouter from './routes/system.js';
 import ingestionRouter from './routes/ingestion.js';
 import tagsRouter from './routes/tags.js';
 import designersRouter from './routes/designers.js';
+import watcher from './services/watcher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,4 +54,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 app.listen(PORT, () => {
     console.log(`🚀 Backend server running on http://localhost:${PORT}`);
     console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
+    watcher.initialize().catch(err => {
+        console.error('Failed to initialize file watcher:', err);
+    });
 });
