@@ -47,6 +47,15 @@ function loadCategoryDefinitions(): string {
     return '';
 }
 
+// Categories that require the full phrase to appear in the item name.
+// Individual tokens from these categories (e.g. "mini", "one", "brick") are
+// too generic and cause false matches, so token-based scoring is skipped for them.
+const PHRASE_ONLY_CATEGORIES = new Set([
+    'A1 Mini',
+    'Core One',
+    'CyberBrick',
+]);
+
 // Common noise words to ignore in fuzzy matching
 const NOISE_WORDS = new Set([
     'free', '3d', 'print', 'model', 'stl', 'file', 'files', 'download',
@@ -124,7 +133,23 @@ function suggestCategoryFuzzy(itemName: string, categories: string[]): { categor
     let bestScore = 0;
     let exactMatch = false;
 
+    const normalizedItemName = itemName.toLowerCase().replace(/[\s_-]+/g, '');
+
     for (const category of categories) {
+        // Phrase-only categories: require the full category phrase to be present.
+        // Checks both the literal string ("A1 Mini") and a space-collapsed form ("a1mini").
+        if (PHRASE_ONLY_CATEGORIES.has(category)) {
+            const normalizedCat = category.toLowerCase().replace(/[\s_-]+/g, '');
+            const phraseMatch = itemName.toLowerCase().includes(category.toLowerCase())
+                || normalizedItemName.includes(normalizedCat);
+            if (phraseMatch && (category.length > bestCategory.length || bestCategory === 'Uncategorized')) {
+                bestCategory = category;
+                bestScore = 100;
+                exactMatch = true;
+            }
+            continue;
+        }
+
         if (itemName.toLowerCase().includes(category.toLowerCase())) {
             if (category.length > bestCategory.length || bestCategory === 'Uncategorized') {
                 bestCategory = category;

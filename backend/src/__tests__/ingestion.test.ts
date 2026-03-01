@@ -120,6 +120,107 @@ describe('Ingestion Routes', () => {
         });
     });
 
+    describe('GET /api/ingestion/scan - fuzzy category matching', () => {
+        beforeEach(() => {
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('ingestion_directory', '/test/ingestion');
+            mockExistsSync.mockReturnValue(true);
+            mockStatSync.mockReturnValue({ size: 1000 });
+        });
+
+        // Helper: scan a single-file ingestion dir with the given filename
+        async function scanFilename(filename: string) {
+            mockReaddirSync.mockImplementation((dir: string) => {
+                if (dir === '/test/ingestion') {
+                    return [{ name: filename, isDirectory: () => false, isFile: () => true }];
+                }
+                return [];
+            });
+            const res = await request(app).get('/api/ingestion/scan');
+            expect(res.status).toBe(200);
+            return res.body.items[0] as { suggestedCategory: string; confidence: string };
+        }
+
+        // Helper: seed a category by inserting a model with that category
+        function seedCategory(category: string) {
+            testDb.prepare(`INSERT OR IGNORE INTO models (filename, filepath, category, file_count) VALUES (?, ?, ?, 1)`)
+                .run(`${category} model`, `/test/cat/${category}`, category);
+        }
+
+        describe('phrase-only categories (A1 Mini, Core One, CyberBrick)', () => {
+            beforeEach(() => {
+                seedCategory('A1 Mini');
+                seedCategory('Core One');
+                seedCategory('CyberBrick');
+            });
+
+            // A1 Mini — false positives (should NOT match)
+            it('does not match "A1 Mini" for a filename containing only "mini"', async () => {
+                const item = await scanFilename('cool-mini-stand.stl');
+                expect(item.suggestedCategory).not.toBe('A1 Mini');
+            });
+
+            it('does not match "A1 Mini" for a filename containing only "a1"', async () => {
+                const item = await scanFilename('a1-bracket.stl');
+                expect(item.suggestedCategory).not.toBe('A1 Mini');
+            });
+
+            // A1 Mini — true positives (should match)
+            it('matches "A1 Mini" for filename with full phrase "A1 Mini"', async () => {
+                const item = await scanFilename('A1 Mini Enclosure.stl');
+                expect(item.suggestedCategory).toBe('A1 Mini');
+            });
+
+            it('matches "A1 Mini" for space-collapsed form "A1Mini"', async () => {
+                const item = await scanFilename('A1Mini_Spool_Holder.stl');
+                expect(item.suggestedCategory).toBe('A1 Mini');
+            });
+
+            // Core One — false positives
+            it('does not match "Core One" for a filename containing only "one"', async () => {
+                const item = await scanFilename('wall-one-holder.stl');
+                expect(item.suggestedCategory).not.toBe('Core One');
+            });
+
+            it('does not match "Core One" for a filename containing only "core"', async () => {
+                const item = await scanFilename('core-bracket.stl');
+                expect(item.suggestedCategory).not.toBe('Core One');
+            });
+
+            // Core One — true positives
+            it('matches "Core One" for filename with full phrase "Core One"', async () => {
+                const item = await scanFilename('Core One Stand.stl');
+                expect(item.suggestedCategory).toBe('Core One');
+            });
+
+            it('matches "Core One" for space-collapsed form "CoreOne"', async () => {
+                const item = await scanFilename('CoreOne_bracket.stl');
+                expect(item.suggestedCategory).toBe('Core One');
+            });
+
+            // CyberBrick — false positives
+            it('does not match "CyberBrick" for a filename containing only "brick"', async () => {
+                const item = await scanFilename('brick-shelf.stl');
+                expect(item.suggestedCategory).not.toBe('CyberBrick');
+            });
+
+            it('does not match "CyberBrick" for a filename containing only "cyber"', async () => {
+                const item = await scanFilename('cyber-mount.stl');
+                expect(item.suggestedCategory).not.toBe('CyberBrick');
+            });
+
+            // CyberBrick — true positives
+            it('matches "CyberBrick" for filename with full camelCase "CyberBrick"', async () => {
+                const item = await scanFilename('CyberBrick Hub.stl');
+                expect(item.suggestedCategory).toBe('CyberBrick');
+            });
+
+            it('matches "CyberBrick" for spaced form "Cyber Brick"', async () => {
+                const item = await scanFilename('Cyber Brick Mount.stl');
+                expect(item.suggestedCategory).toBe('CyberBrick');
+            });
+        });
+    });
+
     describe('GET /api/ingestion/scan - imageFile field', () => {
         beforeEach(() => {
             testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('ingestion_directory', '/test/ingestion');
