@@ -265,9 +265,9 @@
               <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>
             </svg>
           </div>
-          <div class="image-overlay">
+          <a class="image-overlay" :href="modelUrl(model.id)" @click="onModelLinkClick($event)">
             <span class="open-hint">View details</span>
-          </div>
+          </a>
         </div>
         <div class="model-info">
           <h3 :title="model.filename" @click="openModal(model)">{{ model.filename }}</h3>
@@ -394,7 +394,7 @@
               </div>
             </td>
             <td class="col-name">
-              <span class="model-name" :title="model.filename">{{ model.filename }}</span>
+              <a class="model-name" :href="modelUrl(model.id)" :title="model.filename" @click="onModelLinkClick($event)">{{ model.filename }}</a>
               <div class="name-badges">
                 <span v-if="model.is_paid" class="badge-paid badge-small">Paid</span>
                 <span v-if="model.is_original" class="badge-original badge-small">Original</span>
@@ -817,6 +817,18 @@ function formatDate(dateString: string | null): string {
 
 function openModal(model: Model) {
   selectedModelId.value = model.id;
+}
+
+function modelUrl(modelId: number): string {
+  return router.resolve({ path: route.path, query: { model: String(modelId) } }).href;
+}
+
+function onModelLinkClick(event: MouseEvent) {
+  if (event.metaKey || event.ctrlKey) {
+    event.stopPropagation();
+    return;
+  }
+  event.preventDefault();
 }
 
 function handleModelUpdated(updatedModel: any) {
@@ -1642,6 +1654,7 @@ async function bulkAddTag() {
 .model-name {
   font-weight: 500;
   color: var(--text-primary);
+  text-decoration: none;
 }
 
 .name-badges {

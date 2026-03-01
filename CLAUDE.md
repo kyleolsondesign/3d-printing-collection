@@ -228,6 +228,7 @@ Pinia store (frontend/src/store/index.ts) manages:
 - `setup.ts`: Shared test helpers (`initSchema`, `seedTestData`) for in-memory SQLite
 - `models.test.ts`: Browse filters, inline name editing, asset hide/unhide, primaryImage filtering
 - `printed.test.ts`: Print toggle, queue removal, rating updates, make image CRUD
+- `queue.test.ts`: Queue CRUD, verifies queue row id is returned correctly (not model id), toggle, bulk, reorder
 
 **Test Patterns:**
 - Backend tests use `vi.hoisted` + `vi.mock` to inject an in-memory SQLite database
@@ -405,9 +406,11 @@ The app integrates with macOS Finder tags to sync print status:
 - **Search clears on tab change**: Navigating between tabs clears the search field and results
 - **Dynamic placeholder**: Search placeholder reflects the current view (e.g., "Search favorites...")
 - **URL query params**: State is synced to URL for deep-linking
-  - Supported params: `category`, `q` (search), `sort`, `order`, `view`, `model`
+  - Browse supported params: `category`, `q` (search), `sort`, `order`, `view`, `model`, `hidePrinted`, `hideQueued`
+  - All secondary views (Favorites, Queue, Printed) also support `sort`, `order`, `view`, `model`
   - Example: `/?category=Toys&sort=name&order=asc&view=table`
-  - Deep link to model: `/?model=123` opens model details modal
+  - Deep link to model: `/?model=123` opens model details modal — works on all pages (Browse, Favorites, Queue, Printed)
+- **Cmd+Click to open new tab**: On all views, Cmd+Clicking (or Ctrl+Click) the "View details" image overlay or the model name in table view opens the deep-linked model URL in a new browser tab without opening the modal in the current tab
 
 ### Bulk Operations
 - **Selection mode**: Toggle to enable multi-select on browse, queue, and favorites pages

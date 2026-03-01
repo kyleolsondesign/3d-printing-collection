@@ -133,9 +133,9 @@
               <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>
             </svg>
           </div>
-          <div class="image-overlay">
+          <a class="image-overlay" :href="modelUrl(fav.model_id)" @click="onModelLinkClick($event)">
             <span class="open-hint">View details</span>
-          </div>
+          </a>
         </div>
         <div class="model-info">
           <h3 :title="fav.filename" @click="openModal(fav)">{{ fav.filename }}</h3>
@@ -250,7 +250,7 @@
               </div>
             </td>
             <td class="col-name">
-              <span class="model-name" :title="fav.filename">{{ fav.filename }}</span>
+              <a class="model-name" :href="modelUrl(fav.model_id)" :title="fav.filename" @click="onModelLinkClick($event)">{{ fav.filename }}</a>
             </td>
             <td class="col-category">
               <span class="category-pill">{{ fav.category }}</span>
@@ -347,7 +347,7 @@ const sortedFavorites = computed(() => {
 });
 
 function initFromQueryParams() {
-  const { view, sort, order } = route.query;
+  const { view, sort, order, model } = route.query;
   if (view && typeof view === 'string' && ['grid', 'table'].includes(view)) {
     viewMode.value = view as 'grid' | 'table';
   }
@@ -357,6 +357,10 @@ function initFromQueryParams() {
   if (order && typeof order === 'string' && ['asc', 'desc'].includes(order)) {
     sortOrder.value = order as 'asc' | 'desc';
   }
+  if (model && typeof model === 'string') {
+    const modelId = parseInt(model);
+    if (!isNaN(modelId)) selectedModelId.value = modelId;
+  }
 }
 
 function updateQueryParams() {
@@ -364,10 +368,11 @@ function updateQueryParams() {
   if (viewMode.value !== 'grid') query.view = viewMode.value;
   if (sortField.value !== 'added_at') query.sort = sortField.value;
   if (sortOrder.value !== 'desc') query.order = sortOrder.value;
+  if (selectedModelId.value) query.model = String(selectedModelId.value);
   router.replace({ query });
 }
 
-watch([viewMode, sortField, sortOrder], () => {
+watch([viewMode, sortField, sortOrder, selectedModelId], () => {
   updateQueryParams();
 });
 
@@ -402,6 +407,18 @@ async function removeFavorite(id: number) {
 
 function openModal(fav: any) {
   selectedModelId.value = fav.model_id;
+}
+
+function modelUrl(modelId: number): string {
+  return router.resolve({ path: route.path, query: { model: String(modelId) } }).href;
+}
+
+function onModelLinkClick(event: MouseEvent) {
+  if (event.metaKey || event.ctrlKey) {
+    event.stopPropagation();
+    return;
+  }
+  event.preventDefault();
 }
 
 function handleModelUpdated() {
@@ -969,6 +986,7 @@ h2 {
 .model-name {
   font-weight: 500;
   color: var(--text-primary);
+  text-decoration: none;
 }
 
 .category-pill {
