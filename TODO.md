@@ -13,9 +13,6 @@
 - [x] Move the search bar to the global nav bar. When searching, results should be in the context of the tab you are on (browse, favorites, queue, printed, loose models) and with the results in the same components each tab normally renders with
 - [x] Add query params and support deep-linking for categories, search results, sorting, and card vs. list views
 - [x] On the browse page, next to browse models title, show only the total number of models within the currently selected category or within the search results. Don't show the number that have loaded on however many pages have been requested
-
----
-
 - [x] Not every folder with nested folders is a single model! The "paid" folder has many models under it, each organized by the model creator, for instance. If we're unsure about a model folder, keep it as "uncategorized" and let's merge the "loose models" and these into a tab that can be used to organize these models. Loose models we'd make a folder. Let's also identify some models where we cannot identify the correct parent folder and try to come up with a better algorithm
 - [x] Not every folder with a direct model file in it is a model folder. Anything under a top-level category folder is not
 - [x] When running a full rebuild, it wiped out my favorites
@@ -33,9 +30,6 @@
 - [x] Rename "Open in Finder" to "Show in Finder"
 - [x] You should be able to click any file under a model in the modal view to show that file in finder
 - [x] The "printed" view should be sorted by when the model was marked as printed, if we can tell when the finder tag was added or when we marked it printed in the UI. It should secondarily be sorted by date added of the model
-
----
-
 - [x] Some of the models in the Paid folder are actually nested folders of a single parent model. For example `Shared 3D Models/Paid/OriginalToys3D/Original Toys 3D_D Rex/Files for printing and assembling (STL)/Color_D (red color)` and `Shared 3D Models/Paid/OriginalToys3D/Original Toys 3D_D Rex/Files for printing and assembling (STL)/Color_C (brown color)` are both nested folders under a single model. The structure for the `Shared 3D Models/Paid` should be: `Shared 3D Models/Paid/{designer}/{model folder}` and anything nested underneath should be part of that model. Some models might be directly under the designer folder and not nested.
 - [x] When logging a model name, use the full path from the 3d model root folder
 - [x] Reduce the polling time for the scan status updates in the frontend. Once every 10 seconds is enough
@@ -63,9 +57,6 @@
 - [x] Prefer .gif images as the primary image for a model when adding
 - [x] "Deduplicating images" when running an "add only" scan should only affect the new models
 - [x] On the import view, show an image preview if there is an image in the model folder. Do not do the whole extraction process until it's imported, but just if there is already an image. Remove the generic placeholder folder icon, as it is confusing in the same row as the "show in finder" button
-
----
-
 - [x] Designer browsing: A dedicated view or filter to browse models grouped by designer (extracted from PDF metadata). Show designer name, model count, and link to their profile URL if available. Add a full record for designers. Use the folder structure under "Shared 3D Models/Paid/{designer}" to infer the designer name for paid models and create those relationships for the models as well. Allow editing/adding attributes for the designer record within the designer page view
 - [x] ~~Duplicate detection: Find potential duplicate models based on filename similarity (fuzzy matching) and/or file hashes. Show a dedicated review page where you can compare duplicates side-by-side and choose to merge or delete.~~
 - [x] Custom tags: Allow users to create and assign custom tags to models (beyond the auto-detected category). Tags should be searchable and filterable from the browse view. The database schema already supports this via the `tags` and `model_tags` tables.
@@ -80,3 +71,5 @@
 - [x] File system watcher: Use `fs.watch` or `chokidar` to monitor the model directory for changes and automatically trigger incremental scans when files are added, moved, or deleted. Eliminates the need for manual re-scans.
 
 ---
+
+- [ ] Add a new state for models indicating it is currently printing. There should be a button to add it to this state from the modal view. Anything currently printing should show up on the queue page at the top, even if the model does not otherwise have the queue flag. It should be easily visually distinguished from the 'queued but not printing' models.
