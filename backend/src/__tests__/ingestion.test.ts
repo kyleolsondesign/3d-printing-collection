@@ -221,6 +221,175 @@ describe('Ingestion Routes', () => {
         });
     });
 
+    describe('GET /api/ingestion/scan - synonym expansion', () => {
+        beforeEach(() => {
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('ingestion_directory', '/test/ingestion');
+            mockExistsSync.mockReturnValue(true);
+            mockStatSync.mockReturnValue({ size: 1000 });
+        });
+
+        function seedCategory(category: string) {
+            testDb.prepare(`INSERT OR IGNORE INTO models (filename, filepath, category, file_count) VALUES (?, ?, ?, 1)`)
+                .run(`${category} model`, `/test/cat/${category}`, category);
+        }
+
+        async function scanFilename(filename: string) {
+            mockReaddirSync.mockImplementation((dir: string) => {
+                if (dir === '/test/ingestion') {
+                    return [{ name: filename, isDirectory: () => false, isFile: () => true }];
+                }
+                return [];
+            });
+            const res = await request(app).get('/api/ingestion/scan');
+            expect(res.status).toBe(200);
+            return res.body.items[0] as { suggestedCategory: string; confidence: string };
+        }
+
+        it('matches "Toys" category via synonym "figurine"', async () => {
+            seedCategory('Toys');
+            // "elven" has no synonym group; "figurine" expands to the toys group
+            const item = await scanFilename('elven-figurine.stl');
+            expect(item.suggestedCategory).toBe('Toys');
+        });
+
+        it('matches "Toys" category via synonym "miniature"', async () => {
+            seedCategory('Toys');
+            const item = await scanFilename('miniature-base.stl');
+            expect(item.suggestedCategory).toBe('Toys');
+        });
+
+        it('matches "Tools" category via synonym "wrench"', async () => {
+            seedCategory('Tools');
+            const item = await scanFilename('wrench-organizer.stl');
+            expect(item.suggestedCategory).toBe('Tools');
+        });
+
+        it('matches "Tools" category via synonym "bracket"', async () => {
+            seedCategory('Tools');
+            const item = await scanFilename('monitor-bracket.stl');
+            expect(item.suggestedCategory).toBe('Tools');
+        });
+
+        it('matches "Animals" category via synonym "dragon"', async () => {
+            seedCategory('Animals');
+            const item = await scanFilename('dragon-skull.stl');
+            expect(item.suggestedCategory).toBe('Animals');
+        });
+    });
+
+    describe('GET /api/ingestion/scan - multi-source matching (model filenames)', () => {
+        beforeEach(() => {
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('ingestion_directory', '/test/ingestion');
+            mockExistsSync.mockReturnValue(true);
+            mockStatSync.mockReturnValue({ size: 1000 });
+        });
+
+        function seedCategory(category: string) {
+            testDb.prepare(`INSERT OR IGNORE INTO models (filename, filepath, category, file_count) VALUES (?, ?, ?, 1)`)
+                .run(`${category} model`, `/test/cat/${category}`, category);
+        }
+
+        it('matches category from model filenames when folder name is generic', async () => {
+            seedCategory('Tools');
+
+            // Folder named generically, but model files inside indicate the category
+            mockReaddirSync.mockImplementation((dir: string) => {
+                if (dir === '/test/ingestion') {
+                    return [{ name: 'MakerWorld_Download_12345', isDirectory: () => true, isFile: () => false }];
+                }
+                // Inside the folder: a file with a descriptive name
+                if (dir === '/test/ingestion/MakerWorld_Download_12345') {
+                    return [
+                        { name: 'wrench-holder.stl', isDirectory: () => false, isFile: () => true },
+                    ];
+                }
+                return [];
+            });
+
+            const res = await request(app).get('/api/ingestion/scan');
+            expect(res.status).toBe(200);
+            expect(res.body.items).toHaveLength(1);
+            expect(res.body.items[0].suggestedCategory).toBe('Tools');
+        });
+
+        it('gives only medium confidence when match is from model filenames', async () => {
+            seedCategory('Tools');
+
+            mockReaddirSync.mockImplementation((dir: string) => {
+                if (dir === '/test/ingestion') {
+                    return [{ name: 'Download_99999', isDirectory: () => true, isFile: () => false }];
+                }
+                if (dir === '/test/ingestion/Download_99999') {
+                    return [
+                        { name: 'bracket-mount.stl', isDirectory: () => false, isFile: () => true },
+                    ];
+                }
+                return [];
+            });
+
+            const res = await request(app).get('/api/ingestion/scan');
+            expect(res.status).toBe(200);
+            expect(res.body.items[0].confidence).toBe('medium');
+        });
+    });
+
+    describe('GET /api/ingestion/scan - hint fallback', () => {
+        beforeEach(() => {
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('ingestion_directory', '/test/ingestion');
+            mockExistsSync.mockReturnValue(true);
+            mockStatSync.mockReturnValue({ size: 1000 });
+
+            // Ensure the categorization_hints table exists
+            testDb.exec(`
+                CREATE TABLE IF NOT EXISTS categorization_hints (
+                    token TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    count INTEGER DEFAULT 1,
+                    PRIMARY KEY (token, category)
+                )
+            `);
+        });
+
+        function seedCategory(category: string) {
+            testDb.prepare(`INSERT OR IGNORE INTO models (filename, filepath, category, file_count) VALUES (?, ?, ?, 1)`)
+                .run(`${category} model`, `/test/cat/${category}`, category);
+        }
+
+        async function scanFilename(filename: string) {
+            mockReaddirSync.mockImplementation((dir: string) => {
+                if (dir === '/test/ingestion') {
+                    return [{ name: filename, isDirectory: () => false, isFile: () => true }];
+                }
+                return [];
+            });
+            const res = await request(app).get('/api/ingestion/scan');
+            expect(res.status).toBe(200);
+            return res.body.items[0] as { suggestedCategory: string; confidence: string };
+        }
+
+        it('uses learned hint when no other match is found', async () => {
+            seedCategory('Gadgets');
+
+            // Seed a hint: token "gizmo" → category "Gadgets"
+            testDb.prepare(`INSERT INTO categorization_hints (token, category, count) VALUES (?, ?, ?)`)
+                .run('gizmo', 'Gadgets', 5);
+
+            // File name with no direct match to "Gadgets", but token "gizmo" has a hint
+            const item = await scanFilename('gizmo-v2.stl');
+            expect(item.suggestedCategory).toBe('Gadgets');
+            expect(item.confidence).toBe('low');
+        });
+
+        it('does not use hints for a category that no longer exists', async () => {
+            // Hint for a deleted/unknown category (not in models table)
+            testDb.prepare(`INSERT INTO categorization_hints (token, category, count) VALUES (?, ?, ?)`)
+                .run('gizmo', 'DeletedCategory', 10);
+
+            const item = await scanFilename('gizmo-v2.stl');
+            expect(item.suggestedCategory).toBe('Uncategorized');
+        });
+    });
+
     describe('GET /api/ingestion/scan - imageFile field', () => {
         beforeEach(() => {
             testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('ingestion_directory', '/test/ingestion');

@@ -64,6 +64,38 @@ const NOISE_WORDS = new Set([
     'ready', 'high', 'quality', 'low', 'poly', 'obj', 'fbx', 'gcode'
 ]);
 
+// Semantic synonym groups for 3D printing categories.
+// When an item's tokens include any word in a group, all other words in that group
+// are added to the token set, enabling semantic cross-matching against category names.
+const SYNONYM_GROUPS: string[][] = [
+    // Toys, figures, games
+    ['toy', 'toys', 'figure', 'figures', 'figurine', 'miniature', 'bust', 'statue', 'character', 'diorama', 'game', 'games', 'puzzle'],
+    // Tools, hardware, functional parts
+    ['tool', 'tools', 'wrench', 'bracket', 'mount', 'holder', 'clip', 'organizer', 'jig', 'fixture', 'hardware', 'hanger', 'hook'],
+    // Plants, nature, garden
+    ['plant', 'plants', 'pot', 'vase', 'planter', 'succulent', 'flower', 'garden'],
+    // Vehicles, transportation
+    ['vehicle', 'vehicles', 'car', 'truck', 'boat', 'airplane', 'aircraft', 'ship', 'tank'],
+    // Animals, creatures
+    ['animal', 'animals', 'dog', 'cat', 'bird', 'dragon', 'fish', 'creature', 'beast', 'dinosaur'],
+    // Jewelry, accessories
+    ['jewelry', 'keychain', 'pendant', 'ring', 'earring', 'necklace', 'charm', 'accessory'],
+    // Electronics, tech
+    ['electronic', 'electronics', 'phone', 'cable', 'charger', 'raspberry', 'arduino', 'circuit'],
+    // Household, kitchen, storage
+    ['household', 'kitchen', 'bathroom', 'shelf', 'storage', 'container', 'box', 'drawer'],
+    // Stands, supports, bases
+    ['stand', 'stands', 'base', 'support', 'platform', 'riser', 'dock'],
+];
+
+// Build reverse lookup: word → synonym group
+const SYNONYM_MAP = new Map<string, string[]>();
+for (const group of SYNONYM_GROUPS) {
+    for (const word of group) {
+        SYNONYM_MAP.set(word, group);
+    }
+}
+
 interface IngestionItem {
     filename: string;
     filepath: string;
@@ -123,62 +155,192 @@ function tokenize(name: string): string[] {
         .filter(w => w.length > 2 && !NOISE_WORDS.has(w));
 }
 
-function suggestCategoryFuzzy(itemName: string, categories: string[]): { category: string; confidence: 'high' | 'medium' | 'low' } {
-    const itemTokens = tokenize(itemName);
-    if (itemTokens.length === 0) {
-        return { category: 'Uncategorized', confidence: 'low' };
+// Expand a token set with synonyms from SYNONYM_GROUPS
+function expandWithSynonyms(tokens: string[]): string[] {
+    const expanded = new Set(tokens);
+    for (const token of tokens) {
+        const group = SYNONYM_MAP.get(token);
+        if (group) {
+            for (const synonym of group) {
+                expanded.add(synonym);
+            }
+        }
+    }
+    return Array.from(expanded);
+}
+
+// Pure token overlap score: what fraction of catTokens are covered by itemTokens
+function scoreTokensVsCategory(itemTokens: string[], catTokens: string[]): number {
+    if (itemTokens.length === 0 || catTokens.length === 0) return 0;
+    let matchCount = 0;
+    for (const catToken of catTokens) {
+        if (itemTokens.some(t => t.includes(catToken) || catToken.includes(t))) {
+            matchCount++;
+        }
+    }
+    return matchCount / catTokens.length;
+}
+
+// Score a named source (with pre-expanded tokens) against a single category.
+// Handles phrase-only enforcement, substring check, and token overlap.
+function scoreNameVsCategory(
+    name: string,
+    expandedTokens: string[],
+    category: string,
+    catTokens: string[],
+    normalizedCat: string,
+    isPhraseOnly: boolean
+): { score: number; isExact: boolean } {
+    const normalizedName = name.toLowerCase().replace(/[\s_-]+/g, '');
+
+    if (isPhraseOnly) {
+        const match = name.toLowerCase().includes(category.toLowerCase())
+            || normalizedName.includes(normalizedCat);
+        return { score: match ? 100 : 0, isExact: match };
+    }
+
+    if (name.toLowerCase().includes(category.toLowerCase())) {
+        return { score: 100, isExact: true };
+    }
+
+    return { score: scoreTokensVsCategory(expandedTokens, catTokens), isExact: false };
+}
+
+// Learned-hint fallback: query categorization_hints for token→category associations.
+// Returns a low-confidence suggestion if any learned associations match, or null.
+function tryHintFallback(
+    tokens: string[],
+    categories: string[]
+): { category: string; confidence: 'high' | 'medium' | 'low' } | null {
+    if (tokens.length === 0) return null;
+    try {
+        const placeholders = tokens.map(() => '?').join(',');
+        const rows = db.prepare(`
+            SELECT category, SUM(count) as total
+            FROM categorization_hints
+            WHERE token IN (${placeholders})
+            GROUP BY category
+            ORDER BY total DESC
+            LIMIT 1
+        `).all(...tokens) as Array<{ category: string; total: number }>;
+
+        if (rows.length === 0) return null;
+        const best = rows[0];
+        if (!categories.includes(best.category)) return null;
+        return { category: best.category, confidence: 'low' };
+    } catch {
+        return null;
+    }
+}
+
+interface FuzzyMatchContext {
+    name: string;
+    modelFileNames?: string[];
+    pdfTags?: string[];
+    readmeText?: string | null;
+    pdfText?: string | null;
+}
+
+function suggestCategoryFuzzy(
+    item: FuzzyMatchContext,
+    categories: string[]
+): { category: string; confidence: 'high' | 'medium' | 'low' } {
+    // Pre-compute expanded tokens for each source
+    const primaryTokens = expandWithSynonyms(tokenize(item.name));
+
+    // Model file names: strip extension, tokenize + expand per file
+    const modelFileContexts = (item.modelFileNames || []).map(fn => {
+        const baseName = fn.replace(/\.(stl|3mf|obj|gcode|ply|amf|zip|rar|7z)$/i, '');
+        return { name: baseName, tokens: expandWithSynonyms(tokenize(baseName)) };
+    });
+
+    // PDF tags: tokenize all tags combined
+    const pdfTagTokens = expandWithSynonyms(
+        (item.pdfTags || []).flatMap(tag => tokenize(tag))
+    );
+
+    // Readme / PDF text: limit length to avoid noise
+    const textContent = [item.readmeText, item.pdfText]
+        .filter(Boolean)
+        .join(' ')
+        .substring(0, 500);
+    const textTokens = textContent ? expandWithSynonyms(tokenize(textContent)) : [];
+
+    const hasAnyTokens = primaryTokens.length > 0
+        || modelFileContexts.some(fc => fc.tokens.length > 0)
+        || pdfTagTokens.length > 0
+        || textTokens.length > 0;
+
+    if (!hasAnyTokens) {
+        return tryHintFallback([], categories) ?? { category: 'Uncategorized', confidence: 'low' };
     }
 
     let bestCategory = 'Uncategorized';
     let bestScore = 0;
-    let exactMatch = false;
-
-    const normalizedItemName = itemName.toLowerCase().replace(/[\s_-]+/g, '');
+    let bestIsExact = false;
 
     for (const category of categories) {
-        // Phrase-only categories: require the full category phrase to be present.
-        // Checks both the literal string ("A1 Mini") and a space-collapsed form ("a1mini").
-        if (PHRASE_ONLY_CATEGORIES.has(category)) {
-            const normalizedCat = category.toLowerCase().replace(/[\s_-]+/g, '');
-            const phraseMatch = itemName.toLowerCase().includes(category.toLowerCase())
-                || normalizedItemName.includes(normalizedCat);
-            if (phraseMatch && (category.length > bestCategory.length || bestCategory === 'Uncategorized')) {
-                bestCategory = category;
-                bestScore = 100;
-                exactMatch = true;
-            }
-            continue;
-        }
-
-        if (itemName.toLowerCase().includes(category.toLowerCase())) {
-            if (category.length > bestCategory.length || bestCategory === 'Uncategorized') {
-                bestCategory = category;
-                bestScore = 100;
-                exactMatch = true;
-            }
-            continue;
-        }
-
+        const isPhraseOnly = PHRASE_ONLY_CATEGORIES.has(category);
+        const normalizedCat = category.toLowerCase().replace(/[\s_-]+/g, '');
         const catTokens = tokenize(category);
-        let matchCount = 0;
-        for (const catToken of catTokens) {
-            if (itemTokens.some(t => t.includes(catToken) || catToken.includes(t))) {
-                matchCount++;
+
+        // Source 1: Primary name — unrestricted, can reach high confidence
+        const nameResult = scoreNameVsCategory(
+            item.name, primaryTokens, category, catTokens, normalizedCat, isPhraseOnly
+        );
+
+        // Sources 2–4: secondary — never override primary for high confidence
+        let secondaryScore = 0;
+
+        if (!isPhraseOnly) {
+            // Source 2: Individual model file names
+            for (const fc of modelFileContexts) {
+                const r = scoreNameVsCategory(
+                    fc.name, fc.tokens, category, catTokens, normalizedCat, false
+                );
+                if (r.score > secondaryScore) secondaryScore = r.score;
             }
+
+            // Source 3: PDF tags (pure token overlap)
+            if (pdfTagTokens.length > 0) {
+                const s = scoreTokensVsCategory(pdfTagTokens, catTokens);
+                if (s > secondaryScore) secondaryScore = s;
+            }
+
+            // Source 4: Text content (capped lower — noisy signal)
+            if (textTokens.length > 0) {
+                const s = Math.min(scoreTokensVsCategory(textTokens, catTokens), 0.5);
+                if (s > secondaryScore) secondaryScore = s;
+            }
+
+            // Cap secondary sources below the high-confidence threshold
+            secondaryScore = Math.min(secondaryScore, 0.79);
         }
 
-        if (matchCount > 0 && catTokens.length > 0) {
-            const score = matchCount / catTokens.length;
-            if (score > bestScore || (score === bestScore && category.length > bestCategory.length)) {
-                bestScore = score;
-                bestCategory = category;
-                exactMatch = false;
-            }
+        const catScore = nameResult.isExact ? 100 : Math.max(nameResult.score, secondaryScore);
+        const catIsExact = nameResult.isExact;
+
+        if (catScore > bestScore || (catScore === bestScore && category.length > bestCategory.length)) {
+            bestScore = catScore;
+            bestCategory = category;
+            bestIsExact = catIsExact;
         }
     }
 
+    // Hint fallback: if still no match, try learned associations
+    if (bestScore === 0) {
+        const allTokens = [
+            ...primaryTokens,
+            ...modelFileContexts.flatMap(fc => fc.tokens),
+            ...pdfTagTokens,
+            ...textTokens,
+        ];
+        const hintResult = tryHintFallback(allTokens, categories);
+        if (hintResult) return hintResult;
+    }
+
     let confidence: 'high' | 'medium' | 'low';
-    if (exactMatch || bestScore >= 0.8) {
+    if (bestIsExact || bestScore >= 0.8) {
         confidence = 'high';
     } else if (bestScore > 0) {
         confidence = 'medium';
@@ -510,10 +672,15 @@ router.get('/scan', async (req, res) => {
         }
 
         const items: IngestionItem[] = scannedItems.map(item => {
-            const nameForMatch = item.isFolder
-                ? item.filename
-                : path.basename(item.filename, path.extname(item.filename));
-            const fuzzy = suggestCategoryFuzzy(nameForMatch, categories);
+            const fuzzy = suggestCategoryFuzzy({
+                name: item.isFolder
+                    ? item.filename
+                    : path.basename(item.filename, path.extname(item.filename)),
+                modelFileNames: item.modelFileNames,
+                pdfTags: item.pdfTags,
+                readmeText: item.readmeText,
+                pdfText: item.pdfText,
+            }, categories);
 
             return {
                 filename: item.filename,
@@ -648,10 +815,15 @@ router.post('/categorize', async (req, res) => {
                     confidence: aiSuggestion.confidence
                 };
             } else {
-                const nameForMatch = item.isFolder
-                    ? item.filename
-                    : path.basename(item.filename, path.extname(item.filename));
-                const fuzzy = suggestCategoryFuzzy(nameForMatch, categories);
+                const fuzzy = suggestCategoryFuzzy({
+                    name: item.isFolder
+                        ? item.filename
+                        : path.basename(item.filename, path.extname(item.filename)),
+                    modelFileNames: item.modelFileNames,
+                    pdfTags: item.pdfTags,
+                    readmeText: item.readmeText,
+                    pdfText: item.pdfText,
+                }, categories);
                 return {
                     filename: item.filename,
                     filepath: item.filepath,
@@ -709,6 +881,23 @@ router.get('/preview-image', (req, res) => {
         res.status(500).json({ error: message });
     }
 });
+
+// Record token→category associations from a successful import for future hint lookups
+function recordCategorizationHints(name: string, category: string): void {
+    if (!category || category === 'Uncategorized') return;
+    const tokens = tokenize(name);
+    if (tokens.length === 0) return;
+    try {
+        const stmt = db.prepare(`
+            INSERT INTO categorization_hints (token, category, count)
+            VALUES (?, ?, 1)
+            ON CONFLICT(token, category) DO UPDATE SET count = count + 1
+        `);
+        for (const token of tokens) {
+            stmt.run(token, category);
+        }
+    } catch { /* ignore */ }
+}
 
 // POST /api/ingestion/import
 router.post('/import', async (req, res) => {
@@ -778,6 +967,12 @@ router.post('/import', async (req, res) => {
 
                 const model = await scanner.scanSingleFolder(targetFolderPath, modelDir);
                 results.push({ filepath, success: true, model });
+
+                // Record name tokens → category association for future hint lookups
+                const importName = isFolder
+                    ? path.basename(filepath)
+                    : path.basename(filepath, path.extname(filepath));
+                recordCategorizationHints(importName, category);
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 results.push({ filepath, success: false, error: message });

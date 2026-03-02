@@ -495,7 +495,11 @@ The app integrates with macOS Finder tags to sync print status:
 - **Configurable directory**: Ingestion folder path stored in config table (default: `/Users/kyle/Downloads`)
 - **Auto-scan**: Scans ingestion folder for model files and folders containing model files
 - **AI-powered categorization**: When an Anthropic API key is configured, uses Claude (Sonnet) to suggest categories with rich context: nested model filenames, PDF descriptions/tags/designer info (via `pdftotext`/`pdftohtml`), and README text
-- **Fuzzy matching fallback**: When no API key is set or Claude fails, falls back to fuzzy word-matching with noise word filtering (common 3D printing terms like "free", "3d", "print", "model" are excluded)
+- **Fuzzy matching fallback**: When no API key is set or Claude fails, falls back to multi-signal fuzzy matching:
+  - **Multi-source scoring**: Matches against folder name (primary, unrestricted confidence), model filenames inside the folder (capped at medium), PDF tags (capped at medium), and README/PDF text (capped at low). Reduces Uncategorized results for generically-named downloads.
+  - **Semantic synonym expansion**: Static synonym groups (toys/figures, tools/hardware, animals, vehicles, plants, jewelry, electronics, household, stands) map related words so e.g. "figurine" matches a "Toys" category.
+  - **Learned hints**: Every successful import writes `(token, category, count)` rows to `categorization_hints` DB table. On future scans, if all other sources score zero, the top hint association is returned at low confidence.
+  - Noise word filtering still excludes common 3D printing terms like "free", "3d", "print", "model".
 - **API key management**: Anthropic API key can be configured, updated, or cleared from the ingestion view; stored in config table
 - **Confidence indicators**: Each suggestion shows a colored dot (green=high, yellow=medium, gray=low) indicating match confidence
 - **Editable categories**: Users can accept, change, or type new category names before importing

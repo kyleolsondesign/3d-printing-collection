@@ -238,6 +238,16 @@ function initializeDatabase(): void {
         )
     `);
 
+    // Categorization hints — learned token→category associations from past imports
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS categorization_hints (
+            token TEXT NOT NULL,
+            category TEXT NOT NULL,
+            count INTEGER DEFAULT 1,
+            PRIMARY KEY (token, category)
+        )
+    `);
+
     // Create indexes
     db.exec(`
         CREATE INDEX IF NOT EXISTS idx_models_category ON models(category);
