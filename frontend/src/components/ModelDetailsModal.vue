@@ -356,6 +356,18 @@
                 </button>
 
                 <button
+                  @click="togglePrinting"
+                  class="action-btn action-btn--printing"
+                  :class="{ active: modelDetails.isPrinting }"
+                >
+                  <span v-if="modelDetails.isPrinting" class="printing-pulse-dot"></span>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/>
+                  </svg>
+                  {{ modelDetails.isPrinting ? 'Printing Now' : 'Mark Printing' }}
+                </button>
+
+                <button
                   @click="togglePrinted('good')"
                   class="action-btn"
                   :class="{ active: isPrinted && currentPrintRating === 'good' }"
@@ -433,6 +445,7 @@ interface ModelDetails extends Model {
   zipFiles?: ZipFile[];
   isFavorite: boolean;
   isQueued: boolean;
+  isPrinting: boolean;
   printHistory: PrintRecord[];
   metadata?: ModelMetadata | null;
   tags?: Tag[];
@@ -690,6 +703,17 @@ async function toggleQueue() {
   }
 }
 
+async function togglePrinting() {
+  if (!modelDetails.value) return;
+  try {
+    const response = await queueApi.togglePrinting(modelDetails.value.id);
+    modelDetails.value.isPrinting = response.data.printing;
+    emit('updated', modelDetails.value);
+  } catch (error) {
+    console.error('Failed to toggle printing:', error);
+  }
+}
+
 async function togglePrinted(rating: 'good' | 'bad') {
   if (!modelDetails.value) return;
   try {
@@ -710,8 +734,9 @@ async function togglePrinted(rating: 'good' | 'bad') {
         printed_at: new Date().toISOString(),
         rating, notes: null
       }];
-      // Marking as printed removes from queue
+      // Marking as printed removes from queue and clears printing state
       modelDetails.value.isQueued = false;
+      modelDetails.value.isPrinting = false;
     }
     emit('updated', modelDetails.value);
   } catch (error) {
@@ -1833,6 +1858,33 @@ async function extractZipFile(zipFile: ZipFile) {
 
 .action-btn svg.spinning {
   animation: spin 1s linear infinite;
+}
+
+.action-btn--printing.active {
+  background: rgba(249, 115, 22, 0.15);
+  border-color: #f97316;
+  color: #f97316;
+}
+
+.action-btn--printing.active:hover:not(:disabled) {
+  background: rgba(249, 115, 22, 0.25);
+  border-color: #ea6c00;
+  color: #ea6c00;
+}
+
+.printing-pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  animation: printing-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes printing-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.4); }
 }
 
 /* Metadata Section */

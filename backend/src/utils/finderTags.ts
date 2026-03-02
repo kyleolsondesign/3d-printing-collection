@@ -10,6 +10,7 @@ export const TAG_COLORS = {
     PRINTED_GOOD: 'Green' as FinderTagColor,
     PRINTED_BAD: 'Red' as FinderTagColor,
     QUEUED: 'Blue' as FinderTagColor,
+    PRINTING: 'Orange' as FinderTagColor,
 };
 
 /**
@@ -169,15 +170,18 @@ export function parseModelStateFromTags(tags: string[]): {
     isPrinted: boolean;
     printRating: 'good' | 'bad' | null;
     isQueued: boolean;
+    isPrinting: boolean;
 } {
     const hasGreen = tags.includes('Green');
     const hasRed = tags.includes('Red');
     const hasBlue = tags.includes('Blue');
+    const hasOrange = tags.includes('Orange');
 
     return {
         isPrinted: hasGreen || hasRed,
         printRating: hasGreen ? 'good' : (hasRed ? 'bad' : null),
         isQueued: hasBlue,
+        isPrinting: hasOrange,
     };
 }
 
@@ -188,6 +192,7 @@ export function getTagsForModelState(options: {
     isPrinted: boolean;
     printRating: 'good' | 'bad' | null;
     isQueued: boolean;
+    isPrinting?: boolean;
 }): string[] {
     const tags: string[] = [];
 
@@ -197,6 +202,10 @@ export function getTagsForModelState(options: {
 
     if (options.isQueued) {
         tags.push('Blue');
+    }
+
+    if (options.isPrinting) {
+        tags.push('Orange');
     }
 
     return tags;

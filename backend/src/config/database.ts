@@ -150,6 +150,17 @@ function initializeDatabase(): void {
         )
     `);
 
+    // Currently printing - models actively being printed right now
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS currently_printing (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id INTEGER NOT NULL,
+            started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+            UNIQUE(model_id)
+        )
+    `);
+
     // Configuration
     db.exec(`
         CREATE TABLE IF NOT EXISTS config (
@@ -270,6 +281,7 @@ function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_favorites_model ON favorites(model_id);
         CREATE INDEX IF NOT EXISTS idx_printed_model ON printed_models(model_id);
         CREATE INDEX IF NOT EXISTS idx_queue_priority ON print_queue(priority DESC, added_at);
+        CREATE INDEX IF NOT EXISTS idx_currently_printing ON currently_printing(model_id);
         CREATE INDEX IF NOT EXISTS idx_metadata_platform ON model_metadata(source_platform);
         CREATE INDEX IF NOT EXISTS idx_metadata_designer ON model_metadata(designer);
     `);

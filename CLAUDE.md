@@ -369,6 +369,7 @@ The app integrates with macOS Finder tags to sync print status:
 - **Green tag**: Model has been printed with "good" rating
 - **Red tag**: Model has been printed with "bad" rating
 - **Blue tag**: Model is in the print queue
+- **Orange tag**: Model is currently being printed
 
 **Reading Tags (during scan):**
 - Scanner reads Finder tags from model folders
@@ -378,6 +379,7 @@ The app integrates with macOS Finder tags to sync print status:
 **Writing Tags (on UI changes):**
 - Adding/updating printed status updates folder's Green/Red tag
 - Adding/removing from queue updates folder's Blue tag
+- Marking/clearing currently printing updates folder's Orange tag
 - Tags are synced immediately when changes are made in the UI
 
 **Implementation:**
@@ -439,8 +441,20 @@ The app integrates with macOS Finder tags to sync print status:
 - **Completion summary**: Shows scan type (Sync/Full rebuild/Add-only) and total duration on completion
 - **Polling interval**: Frontend polls scan status every 10 seconds during active scans
 
+### Currently Printing State
+- **New state**: Models can be marked as "currently printing" — distinct from "queued" and "printed"
+- **Toggle from modal**: Model details modal has a "Mark Printing" / "Printing Now" button (orange, pulsing dot when active)
+- **Queue page integration**: Currently printing models appear at the **top of the Queue page** regardless of queue membership, under a "Currently Printing" section header with orange styling
+- **Visual distinction**: Printing items have an orange left border, orange tint background, and an animated "Printing" badge
+- **Printing-only items**: Models marked as printing but NOT in the queue still appear on the Queue page
+- **Auto-clear on printed**: Marking a model as printed (good/bad) automatically clears the currently-printing flag
+- **Finder tag**: Orange = currently printing (Orange tag color supported in `finderTags.ts`)
+- **Database**: `currently_printing` table (`model_id UNIQUE`, `started_at`)
+- **API**: `POST /api/queue/printing/toggle` toggles the state; `GET /api/queue` returns `is_printing` flag and includes printing-only items
+- **Store action**: `togglePrinting(modelId)` in Pinia store
+
 ### Print Workflow
-- **Printed removes from queue**: Marking a model as printed automatically removes it from the print queue
+- **Printed removes from queue**: Marking a model as printed automatically removes it from the print queue and clears printing state
 - **Mark as printed from modal**: Model details modal has good/bad print rating buttons
 - **Mark as printed from queue**: Queue items have a thumbs-up button to mark as printed (removes from queue)
 - **Rating toggle on printed view**: Printed view shows clickable good/bad rating buttons to change rating

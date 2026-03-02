@@ -186,4 +186,82 @@ describe('Queue Routes', () => {
             expect(res.status).toBe(400);
         });
     });
+
+    describe('POST /api/queue/printing/toggle', () => {
+        it('marks a model as currently printing', async () => {
+            const res = await request(app)
+                .post('/api/queue/printing/toggle')
+                .send({ model_id: 1 });
+            expect(res.status).toBe(200);
+            expect(res.body.printing).toBe(true);
+
+            const row = testDb.prepare('SELECT id FROM currently_printing WHERE model_id = 1').get();
+            expect(row).toBeDefined();
+        });
+
+        it('unmarks a model from currently printing', async () => {
+            // First mark as printing
+            testDb.prepare('INSERT INTO currently_printing (model_id) VALUES (1)').run();
+
+            const res = await request(app)
+                .post('/api/queue/printing/toggle')
+                .send({ model_id: 1 });
+            expect(res.status).toBe(200);
+            expect(res.body.printing).toBe(false);
+
+            const row = testDb.prepare('SELECT id FROM currently_printing WHERE model_id = 1').get();
+            expect(row).toBeUndefined();
+        });
+
+        it('requires model_id', async () => {
+            const res = await request(app)
+                .post('/api/queue/printing/toggle')
+                .send({});
+            expect(res.status).toBe(400);
+        });
+    });
+
+    describe('GET /api/queue with printing items', () => {
+        it('includes is_printing flag for queued models that are also printing', async () => {
+            // model_id=2 is in queue (from seed data); mark it as printing too
+            testDb.prepare('INSERT INTO currently_printing (model_id) VALUES (2)').run();
+
+            const res = await request(app).get('/api/queue');
+            expect(res.status).toBe(200);
+            const item = res.body.queue.find((q: any) => q.model_id === 2);
+            expect(item).toBeDefined();
+            expect(item.is_printing).toBe(1);
+        });
+
+        it('includes printing-only models not in the queue', async () => {
+            // model_id=1 is NOT in queue (from seed), mark it as printing
+            testDb.prepare('INSERT INTO currently_printing (model_id) VALUES (1)').run();
+
+            const res = await request(app).get('/api/queue');
+            expect(res.status).toBe(200);
+            const item = res.body.queue.find((q: any) => q.model_id === 1);
+            expect(item).toBeDefined();
+            expect(item.is_printing).toBe(1);
+            expect(item.id).toBeNull(); // no queue row id
+        });
+
+        it('puts printing items before non-printing items', async () => {
+            // model_id=1 is not queued; mark as printing so it appears above model_id=2 (queued, not printing)
+            testDb.prepare('INSERT INTO currently_printing (model_id) VALUES (1)').run();
+
+            const res = await request(app).get('/api/queue');
+            expect(res.status).toBe(200);
+            const queue = res.body.queue;
+            const printingIndex = queue.findIndex((q: any) => q.model_id === 1);
+            const normalIndex = queue.findIndex((q: any) => q.model_id === 2);
+            expect(printingIndex).toBeLessThan(normalIndex);
+        });
+
+        it('normal queued items have is_printing = 0', async () => {
+            const res = await request(app).get('/api/queue');
+            expect(res.status).toBe(200);
+            const item = res.body.queue.find((q: any) => q.model_id === 2);
+            expect(item.is_printing).toBe(0);
+        });
+    });
 });

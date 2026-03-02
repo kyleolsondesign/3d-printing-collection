@@ -75,6 +75,7 @@ router.get('/', (req, res) => {
             const favorite = db.prepare('SELECT id FROM favorites WHERE model_id = ?').get(model.id);
             const queued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model.id);
             const printed = db.prepare('SELECT rating FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC LIMIT 1').get(model.id) as { rating: 'good' | 'bad' | null } | undefined;
+            const printing = db.prepare('SELECT id FROM currently_printing WHERE model_id = ?').get(model.id);
 
             return {
                 ...model,
@@ -82,7 +83,8 @@ router.get('/', (req, res) => {
                 isFavorite: !!favorite,
                 isQueued: !!queued,
                 isPrinted: !!printed,
-                printRating: printed?.rating || null
+                printRating: printed?.rating || null,
+                isPrinting: !!printing
             };
         });
 
@@ -150,6 +152,7 @@ router.get('/recent', (req, res) => {
             const favorite = db.prepare('SELECT id FROM favorites WHERE model_id = ?').get(model.id);
             const queued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model.id);
             const printed = db.prepare('SELECT rating FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC LIMIT 1').get(model.id) as { rating: 'good' | 'bad' | null } | undefined;
+            const printing = db.prepare('SELECT id FROM currently_printing WHERE model_id = ?').get(model.id);
 
             return {
                 ...model,
@@ -157,7 +160,8 @@ router.get('/recent', (req, res) => {
                 isFavorite: !!favorite,
                 isQueued: !!queued,
                 isPrinted: !!printed,
-                printRating: printed?.rating || null
+                printRating: printed?.rating || null,
+                isPrinting: !!printing
             };
         });
 
@@ -218,6 +222,9 @@ router.get('/:id', (req, res) => {
         // Check if in print queue
         const queued = db.prepare('SELECT * FROM print_queue WHERE model_id = ?').get(id);
 
+        // Check if currently printing
+        const printing = db.prepare('SELECT id FROM currently_printing WHERE model_id = ?').get(id);
+
         // Get print history
         const printed = db.prepare('SELECT * FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC').all(id);
 
@@ -269,6 +276,7 @@ router.get('/:id', (req, res) => {
             zipFiles,
             isFavorite: !!favorite,
             isQueued: !!queued,
+            isPrinting: !!printing,
             printHistory: printed,
             metadata,
             tags
@@ -343,6 +351,7 @@ router.get('/search/query', (req, res) => {
             const favorite = db.prepare('SELECT id FROM favorites WHERE model_id = ?').get(model.id);
             const queued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model.id);
             const printed = db.prepare('SELECT rating FROM printed_models WHERE model_id = ? ORDER BY printed_at DESC LIMIT 1').get(model.id) as { rating: 'good' | 'bad' | null } | undefined;
+            const printing = db.prepare('SELECT id FROM currently_printing WHERE model_id = ?').get(model.id);
 
             return {
                 ...model,
@@ -350,7 +359,8 @@ router.get('/search/query', (req, res) => {
                 isFavorite: !!favorite,
                 isQueued: !!queued,
                 isPrinted: !!printed,
-                printRating: printed?.rating || null
+                printRating: printed?.rating || null,
+                isPrinting: !!printing
             };
         });
 

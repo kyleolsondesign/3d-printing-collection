@@ -14,7 +14,7 @@ export function initSchema(db: InstanceType<typeof Database>): void {
     db.exec(`DROP TABLE IF EXISTS models_fts`);
 
     // Drop tables in dependency order
-    const tables = ['recently_viewed', 'make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'print_queue', 'tags', 'config', 'loose_files', 'models', 'categorization_hints', 'ingestion_events'];
+    const tables = ['recently_viewed', 'make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'currently_printing', 'print_queue', 'tags', 'config', 'loose_files', 'models', 'categorization_hints', 'ingestion_events'];
     for (const table of tables) {
         db.exec(`DROP TABLE IF EXISTS ${table}`);
     }
@@ -115,6 +115,16 @@ export function initSchema(db: InstanceType<typeof Database>): void {
     `);
 
     db.exec(`
+        CREATE TABLE currently_printing (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id INTEGER NOT NULL,
+            started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+            UNIQUE(model_id)
+        )
+    `);
+
+    db.exec(`
         CREATE TABLE tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
@@ -206,6 +216,7 @@ export function initSchema(db: InstanceType<typeof Database>): void {
         CREATE INDEX idx_favorites_model ON favorites(model_id);
         CREATE INDEX idx_printed_model ON printed_models(model_id);
         CREATE INDEX idx_queue_priority ON print_queue(priority DESC, added_at);
+        CREATE INDEX idx_currently_printing ON currently_printing(model_id);
     `);
 
     // Full-text search table and triggers

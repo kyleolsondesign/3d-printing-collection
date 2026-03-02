@@ -23,6 +23,7 @@ export interface Model {
     isQueued?: boolean;
     isPrinted?: boolean;
     printRating?: 'good' | 'bad' | null;
+    isPrinting?: boolean;
     designer?: string | null;
     source_platform?: string | null;
     source_url?: string | null;
@@ -65,6 +66,8 @@ export interface QueueItem {
     priority: number;
     notes: string;
     estimated_time_hours: number;
+    is_printing?: number;
+    printing_started_at?: string | null;
 }
 
 export interface Category {
@@ -174,7 +177,8 @@ export const queueApi = {
         api.put(`/queue/${id}`, data),
     delete: (id: number) => api.delete(`/queue/${id}`),
     reorder: (items: { id: number; priority: number }[]) =>
-        api.post('/queue/reorder', { items })
+        api.post('/queue/reorder', { items }),
+    togglePrinting: (modelId: number) => api.post('/queue/printing/toggle', { model_id: modelId })
 };
 
 // Scan modes for the scanner

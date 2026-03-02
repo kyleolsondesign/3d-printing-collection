@@ -122,8 +122,9 @@ router.post('/', async (req, res) => {
             filament_used_grams || null
         );
 
-        // Remove from queue if present
+        // Remove from queue and printing state if present
         db.prepare('DELETE FROM print_queue WHERE model_id = ?').run(model_id);
+        db.prepare('DELETE FROM currently_printing WHERE model_id = ?').run(model_id);
 
         // Update Finder tags
         await updateModelFinderTags(model_id);
@@ -217,11 +218,13 @@ router.post('/bulk', async (req, res) => {
         if (action === 'add') {
             const insert = db.prepare('INSERT OR IGNORE INTO printed_models (model_id, rating) VALUES (?, ?)');
             const removeFromQueue = db.prepare('DELETE FROM print_queue WHERE model_id = ?');
+            const removePrinting = db.prepare('DELETE FROM currently_printing WHERE model_id = ?');
             for (const modelId of model_ids) {
                 const result = insert.run(modelId, rating || 'good');
                 if (result.changes > 0) {
                     affected++;
                     removeFromQueue.run(modelId);
+                    removePrinting.run(modelId);
                     await updateModelFinderTags(modelId);
                 }
             }
@@ -268,11 +271,12 @@ router.post('/toggle', async (req, res) => {
             const insert = db.prepare('INSERT INTO printed_models (model_id, rating) VALUES (?, ?)');
             insert.run(model_id, rating || 'good');
 
-            // Remove from queue if present
+            // Remove from queue and printing state if present
             const wasQueued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model_id);
             if (wasQueued) {
                 db.prepare('DELETE FROM print_queue WHERE model_id = ?').run(model_id);
             }
+            db.prepare('DELETE FROM currently_printing WHERE model_id = ?').run(model_id);
 
             await updateModelFinderTags(model_id);
             res.json({ printed: true, rating: rating || 'good', removedFromQueue: !!wasQueued });
@@ -301,6 +305,7 @@ router.post('/cycle', async (req, res) => {
             if (wasQueued) {
                 db.prepare('DELETE FROM print_queue WHERE model_id = ?').run(model_id);
             }
+            db.prepare('DELETE FROM currently_printing WHERE model_id = ?').run(model_id);
             await updateModelFinderTags(model_id);
             res.json({ printed: true, rating: 'good', removedFromQueue: !!wasQueued });
         } else if (existing.rating === 'good') {

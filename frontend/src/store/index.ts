@@ -95,9 +95,12 @@ export const useAppStore = defineStore('app', () => {
             if (model) {
                 model.isPrinted = response.data.printed;
                 model.printRating = response.data.printed ? response.data.rating : null;
-                // Backend removes from queue when marking as printed
+                // Backend removes from queue and printing state when marking as printed
                 if (response.data.printed && response.data.removedFromQueue) {
                     model.isQueued = false;
+                }
+                if (response.data.printed) {
+                    model.isPrinting = false;
                 }
             }
         } catch (error) {
@@ -115,9 +118,24 @@ export const useAppStore = defineStore('app', () => {
                 if (response.data.removedFromQueue) {
                     model.isQueued = false;
                 }
+                if (response.data.printed) {
+                    model.isPrinting = false;
+                }
             }
         } catch (error) {
             console.error('Failed to cycle printed:', error);
+        }
+    }
+
+    async function togglePrinting(modelId: number) {
+        try {
+            const response = await queueApi.togglePrinting(modelId);
+            const model = models.value.find(m => m.id === modelId);
+            if (model) {
+                model.isPrinting = response.data.printing;
+            }
+        } catch (error) {
+            console.error('Failed to toggle printing:', error);
         }
     }
 
@@ -171,6 +189,7 @@ export const useAppStore = defineStore('app', () => {
         toggleQueue,
         togglePrinted,
         cyclePrinted,
+        togglePrinting,
         loadConfig,
         startScan,
         setGlobalSearch,

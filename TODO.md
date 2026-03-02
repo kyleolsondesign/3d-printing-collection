@@ -73,3 +73,6 @@
 ---
 
 - [ ] Add a new state for models indicating it is currently printing. There should be a button to add it to this state from the modal view. Anything currently printing should show up on the queue page at the top, even if the model does not otherwise have the queue flag. It should be easily visually distinguished from the 'queued but not printing' models.
+- [ ] Add a new bulk recategorization feature. It should be able to search/filter through all models, bulk-select, and recategorize. It should allow creating new categories entirely, splitting off from old ones. Plan out a good user experience for this feature and make sure the code paths are generic enough that we can have some automated recategorization later on, with manual user approval.
+- [ ] Paid model categorization: Paid should be a tag and we should keep the current folder structure for paid models, but "Paid" itself is not a category.
+- [ ] Bulk purge mode: a feature where you suggest models to delete (move to the macOS trash), based on an algorithm we determine via AskUserQuestion and can fine tune over time, including the aged of the model, if it was marked as a bad print, etc.

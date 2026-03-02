@@ -17,6 +17,9 @@ async function updateModelFinderTags(modelId: number): Promise<void> {
         // Check queue status
         const queued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(modelId) as { id: number } | undefined;
 
+        // Check printing status
+        const printing = db.prepare('SELECT id FROM currently_printing WHERE model_id = ?').get(modelId) as { id: number } | undefined;
+
         // Build tags array
         const tags: string[] = [];
 
@@ -28,23 +31,52 @@ async function updateModelFinderTags(modelId: number): Promise<void> {
             tags.push(TAG_COLORS.QUEUED);
         }
 
+        if (printing) {
+            tags.push(TAG_COLORS.PRINTING);
+        }
+
         await setFinderTags(model.filepath, tags);
     } catch (error) {
         console.error('Failed to update Finder tags:', error);
     }
 }
 
-// Get print queue
+// Get print queue (includes currently printing models at the top)
 router.get('/', (req, res) => {
     try {
-        const queue = db.prepare(`
-            SELECT models.*, print_queue.*
+        // Queue items with is_printing flag
+        const queueItems = db.prepare(`
+            SELECT print_queue.id, print_queue.model_id, print_queue.added_at,
+                   print_queue.priority, print_queue.notes, print_queue.estimated_time_hours,
+                   models.filename, models.filepath, models.category, models.file_count,
+                   CASE WHEN cp.model_id IS NOT NULL THEN 1 ELSE 0 END as is_printing,
+                   cp.started_at as printing_started_at
             FROM print_queue
-            JOIN models ON print_queue.model_id = models.id
-            ORDER BY print_queue.priority DESC, print_queue.added_at ASC
+            JOIN models ON print_queue.model_id = models.id AND models.deleted_at IS NULL
+            LEFT JOIN currently_printing cp ON cp.model_id = print_queue.model_id
         `).all() as any[];
 
-        const queueWithImages = queue.map(item => {
+        // Printing-only items not in the queue
+        const printingOnlyItems = db.prepare(`
+            SELECT NULL as id, cp.model_id, cp.started_at as added_at,
+                   999999 as priority, NULL as notes, NULL as estimated_time_hours,
+                   models.filename, models.filepath, models.category, models.file_count,
+                   1 as is_printing, cp.started_at as printing_started_at
+            FROM currently_printing cp
+            JOIN models ON cp.model_id = models.id AND models.deleted_at IS NULL
+            WHERE NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = cp.model_id)
+        `).all() as any[];
+
+        const allItems = [...queueItems, ...printingOnlyItems];
+
+        // Sort: printing items first, then by priority DESC, added_at ASC
+        allItems.sort((a, b) => {
+            if (a.is_printing !== b.is_printing) return b.is_printing - a.is_printing;
+            if (a.priority !== b.priority) return b.priority - a.priority;
+            return a.added_at < b.added_at ? -1 : 1;
+        });
+
+        const queueWithImages = allItems.map(item => {
             const primaryImage = db.prepare(`
                 SELECT filepath FROM model_assets
                 WHERE model_id = ? AND asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
@@ -223,6 +255,32 @@ router.post('/toggle', async (req, res) => {
             insert.run(model_id);
             await updateModelFinderTags(model_id);
             res.json({ queued: true });
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Toggle currently-printing state by model_id
+router.post('/printing/toggle', async (req, res) => {
+    try {
+        const { model_id } = req.body;
+
+        if (!model_id) {
+            return res.status(400).json({ error: 'model_id is required' });
+        }
+
+        const existing = db.prepare('SELECT id FROM currently_printing WHERE model_id = ?').get(model_id);
+
+        if (existing) {
+            db.prepare('DELETE FROM currently_printing WHERE model_id = ?').run(model_id);
+            await updateModelFinderTags(model_id);
+            res.json({ printing: false });
+        } else {
+            db.prepare('INSERT INTO currently_printing (model_id) VALUES (?)').run(model_id);
+            await updateModelFinderTags(model_id);
+            res.json({ printing: true });
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

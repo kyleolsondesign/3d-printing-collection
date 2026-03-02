@@ -102,12 +102,20 @@
       <p>No queue items match your search.</p>
     </div>
 
+    <template v-else>
+    <!-- Currently Printing section header -->
+    <div v-if="printingItems.length > 0" class="printing-section-header">
+      <span class="printing-pulse-dot-lg"></span>
+      <span>Currently Printing</span>
+      <span class="printing-count-badge">{{ printingItems.length }}</span>
+    </div>
+
     <!-- Grid View -->
-    <div v-else-if="viewMode === 'grid'" class="models-grid">
+    <div v-if="viewMode === 'grid'" class="models-grid">
       <div
         v-for="(item, index) in sortedQueue"
-        :key="item.id"
-        :class="['model-card', { selected: selectedItems.has(item.model_id) }]"
+        :key="item.is_printing ? `p-${item.model_id}` : item.id"
+        :class="['model-card', { selected: selectedItems.has(item.model_id), 'model-card--printing': item.is_printing }]"
         :style="{ animationDelay: `${Math.min(index * 30, 300)}ms` }"
         @click="selectionMode ? toggleSelection(item.model_id) : null"
       >
@@ -142,6 +150,10 @@
         <div class="model-info">
           <h3 :title="item.filename" @click="openModal(item)">{{ item.filename }}</h3>
           <div class="model-meta">
+            <span v-if="item.is_printing" class="printing-badge">
+              <span class="printing-dot"></span>
+              Printing
+            </span>
             <span class="category-tag">{{ item.category }}</span>
             <span v-if="item.file_count > 1" class="file-count">{{ item.file_count }} files</span>
           </div>
@@ -156,9 +168,9 @@
               </svg>
             </button>
             <button
-              @click.stop="removeFromQueue(item.id)"
+              @click.stop="item.id ? removeFromQueue(item.id) : stopPrinting(item.model_id)"
               class="action-btn"
-              title="Remove from queue"
+              :title="item.id ? 'Remove from queue' : 'Stop printing'"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6L6 18M6 6l12 12"/>
@@ -238,11 +250,12 @@
         <tbody>
           <tr
             v-for="(item, index) in sortedQueue"
-            :key="item.id"
+            :key="item.is_printing ? `p-${item.model_id}` : item.id"
             :class="{
               selected: selectedItems.has(item.model_id),
               dragging: dragIndex === index,
-              'drag-over': dragOverIndex === index && dragIndex !== index
+              'drag-over': dragOverIndex === index && dragIndex !== index,
+              'row--printing': item.is_printing
             }"
             :style="{ animationDelay: `${Math.min(index * 20, 200)}ms` }"
             :draggable="canDrag"
@@ -290,6 +303,10 @@
             </td>
             <td class="col-name">
               <a class="model-name" :href="modelUrl(item.model_id)" :title="item.filename" @click="onModelLinkClick($event)">{{ item.filename }}</a>
+              <span v-if="item.is_printing" class="printing-badge printing-badge--inline">
+                <span class="printing-dot"></span>
+                Printing
+              </span>
             </td>
             <td class="col-category">
               <span class="category-pill">{{ item.category }}</span>
@@ -309,9 +326,9 @@
                   </svg>
                 </button>
                 <button
-                  @click="removeFromQueue(item.id)"
+                  @click="item.id ? removeFromQueue(item.id) : stopPrinting(item.model_id)"
                   class="action-btn-small"
-                  title="Remove from queue"
+                  :title="item.id ? 'Remove from queue' : 'Stop printing'"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M18 6L6 18M6 6l12 12"/>
@@ -332,6 +349,7 @@
         </tbody>
       </table>
     </div>
+    </template>
 
     <!-- Model Details Modal -->
     <ModelDetailsModal
@@ -380,6 +398,8 @@ const filteredQueue = computed(() => {
   if (!q) return queue.value;
   return queue.value.filter((item: any) => item.filename?.toLowerCase().includes(q));
 });
+
+const printingItems = computed(() => filteredQueue.value.filter((item: any) => item.is_printing));
 
 const sortedQueue = computed(() => {
   // Priority sort is the default from the API (already sorted by priority DESC, added_at ASC)
@@ -459,6 +479,17 @@ async function removeFromQueue(id: number) {
     queue.value = queue.value.filter(q => q.id !== id);
   } catch (error) {
     console.error('Failed to remove from queue:', error);
+  }
+}
+
+async function stopPrinting(modelId: number) {
+  try {
+    await queueApi.togglePrinting(modelId);
+    queue.value = queue.value.filter((q: any) => q.model_id !== modelId || q.id !== null);
+    // Reload to get the accurate state after toggling
+    await loadQueue();
+  } catch (error) {
+    console.error('Failed to stop printing:', error);
   }
 }
 
@@ -1404,5 +1435,78 @@ h2 {
   .models-grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
+}
+
+/* Currently Printing section */
+.printing-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0 0.625rem;
+  color: #f97316;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.printing-pulse-dot-lg {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f97316;
+  flex-shrink: 0;
+  animation: printing-pulse 1.4s ease-in-out infinite;
+}
+
+.printing-count-badge {
+  background: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.model-card--printing {
+  border-left: 3px solid #f97316;
+  background: rgba(249, 115, 22, 0.04);
+}
+
+.row--printing {
+  border-left: 3px solid #f97316;
+  background: rgba(249, 115, 22, 0.04) !important;
+}
+
+.printing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.printing-badge--inline {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.printing-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: printing-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes printing-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.5); }
 }
 </style>
