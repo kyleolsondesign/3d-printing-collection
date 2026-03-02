@@ -374,10 +374,11 @@ describe('Ingestion Routes', () => {
             testDb.prepare(`INSERT INTO categorization_hints (token, category, count) VALUES (?, ?, ?)`)
                 .run('gizmo', 'Gadgets', 5);
 
-            // File name with no direct match to "Gadgets", but token "gizmo" has a hint
+            // File name with no direct match to "Gadgets", but token "gizmo" has a hint.
+            // Strong hint (boost = 0.4 > 0.35 threshold) → medium confidence.
             const item = await scanFilename('gizmo-v2.stl');
             expect(item.suggestedCategory).toBe('Gadgets');
-            expect(item.confidence).toBe('low');
+            expect(item.confidence).toBe('medium');
         });
 
         it('does not use hints for a category that no longer exists', async () => {
@@ -387,6 +388,151 @@ describe('Ingestion Routes', () => {
 
             const item = await scanFilename('gizmo-v2.stl');
             expect(item.suggestedCategory).toBe('Uncategorized');
+        });
+    });
+
+    describe('GET /api/ingestion/scan - debugScores field', () => {
+        beforeEach(() => {
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('ingestion_directory', '/test/ingestion');
+            mockExistsSync.mockReturnValue(true);
+            mockStatSync.mockReturnValue({ size: 1000 });
+        });
+
+        it('includes debugScores array on each scan result', async () => {
+            mockReaddirSync.mockImplementation((dir: string) => {
+                if (dir === '/test/ingestion') {
+                    return [{ name: 'toy-figure.stl', isDirectory: () => false, isFile: () => true }];
+                }
+                return [];
+            });
+            const res = await request(app).get('/api/ingestion/scan');
+            expect(res.status).toBe(200);
+            expect(res.body.items).toHaveLength(1);
+            expect(Array.isArray(res.body.items[0].debugScores)).toBe(true);
+        });
+
+        it('debugScores entries have category, score, and source fields', async () => {
+            testDb.prepare(`INSERT OR IGNORE INTO models (filename, filepath, category, file_count) VALUES (?, ?, ?, 1)`)
+                .run('Toys model', '/test/cat/Toys', 'Toys');
+
+            mockReaddirSync.mockImplementation((dir: string) => {
+                if (dir === '/test/ingestion') {
+                    return [{ name: 'toy-dragon.stl', isDirectory: () => false, isFile: () => true }];
+                }
+                return [];
+            });
+
+            const res = await request(app).get('/api/ingestion/scan');
+            expect(res.status).toBe(200);
+            const item = res.body.items[0];
+            expect(Array.isArray(item.debugScores)).toBe(true);
+            if (item.debugScores.length > 0) {
+                const entry = item.debugScores[0];
+                expect(entry).toHaveProperty('category');
+                expect(entry).toHaveProperty('score');
+                expect(entry).toHaveProperty('source');
+                expect(typeof entry.score).toBe('number');
+                expect(['exact', 'name', 'files', 'tags', 'text', 'hint']).toContain(entry.source);
+            }
+        });
+
+        it('debugScores is sorted descending by score', async () => {
+            testDb.prepare(`INSERT OR IGNORE INTO models (filename, filepath, category, file_count) VALUES (?, ?, ?, 1)`)
+                .run('Toys model', '/test/cat/Toys', 'Toys');
+            testDb.prepare(`INSERT OR IGNORE INTO models (filename, filepath, category, file_count) VALUES (?, ?, ?, 1)`)
+                .run('Tools model', '/test/cat/Tools', 'Tools');
+
+            mockReaddirSync.mockImplementation((dir: string) => {
+                if (dir === '/test/ingestion') {
+                    return [{ name: 'toy-bracket.stl', isDirectory: () => false, isFile: () => true }];
+                }
+                return [];
+            });
+
+            const res = await request(app).get('/api/ingestion/scan');
+            expect(res.status).toBe(200);
+            const scores = res.body.items[0].debugScores.map((d: any) => d.score);
+            for (let i = 1; i < scores.length; i++) {
+                expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
+            }
+        });
+    });
+
+    describe('POST /api/ingestion/import - negative hint on correction', () => {
+        beforeEach(() => {
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('ingestion_directory', '/test/ingestion');
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('model_directory', '/test/models');
+            testDb.exec(`
+                CREATE TABLE IF NOT EXISTS categorization_hints (
+                    token TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    count INTEGER DEFAULT 1,
+                    PRIMARY KEY (token, category)
+                )
+            `);
+            mockMkdirSync.mockReturnValue(undefined);
+            mockRenameSync.mockReturnValue(undefined);
+        });
+
+        function setExistsMock({ sourceExists = true, categoryDirExists = true, targetExists = false } = {}) {
+            mockExistsSync.mockImplementation((p: string) => {
+                if (p === '/test/ingestion/widget-holder.stl') return sourceExists;
+                if (p === '/test/models/Toys' || p === '/test/models/Tools') return categoryDirExists;
+                if (p.includes('/test/models/') && !p.endsWith('.stl')) return targetExists;
+                return true;
+            });
+        }
+
+        it('decrements hint count when user changes the suggested category', async () => {
+            setExistsMock();
+            testDb.prepare(`INSERT OR REPLACE INTO categorization_hints (token, category, count) VALUES (?, ?, ?)`)
+                .run('widget', 'Tools', 5);
+
+            const res = await request(app).post('/api/ingestion/import').send({
+                items: [{ filepath: '/test/ingestion/widget-holder.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Tools' }]
+            });
+            expect(res.status).toBe(200);
+            const row = testDb.prepare(`SELECT count FROM categorization_hints WHERE token = ? AND category = ?`).get('widget', 'Tools') as any;
+            expect(row.count).toBe(4);
+        });
+
+        it('does not decrement below 0', async () => {
+            setExistsMock();
+            testDb.prepare(`INSERT OR REPLACE INTO categorization_hints (token, category, count) VALUES (?, ?, ?)`)
+                .run('widget', 'Tools', 0);
+
+            const res = await request(app).post('/api/ingestion/import').send({
+                items: [{ filepath: '/test/ingestion/widget-holder.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Tools' }]
+            });
+            expect(res.status).toBe(200);
+            const row = testDb.prepare(`SELECT count FROM categorization_hints WHERE token = ? AND category = ?`).get('widget', 'Tools') as any;
+            expect(row.count).toBe(0);
+        });
+
+        it('does not record penalty when category matches suggestion', async () => {
+            setExistsMock();
+            // Use a sentinel token distinct from 'widget'/'holder' to isolate from positive-hint recording
+            testDb.prepare(`INSERT OR REPLACE INTO categorization_hints (token, category, count) VALUES (?, ?, ?)`)
+                .run('sentinel', 'Tools', 5);
+
+            await request(app).post('/api/ingestion/import').send({
+                items: [{ filepath: '/test/ingestion/widget-holder.stl', category: 'Tools', isFolder: false, suggestedCategory: 'Tools' }]
+            });
+            // 'sentinel' is not in the model name so only penalty could reduce it — it should stay at 5
+            const row = testDb.prepare(`SELECT count FROM categorization_hints WHERE token = ? AND category = ?`).get('sentinel', 'Tools') as any;
+            expect(row.count).toBe(5);
+        });
+
+        it('does not record penalty when no suggestedCategory is provided', async () => {
+            setExistsMock();
+            testDb.prepare(`INSERT OR REPLACE INTO categorization_hints (token, category, count) VALUES (?, ?, ?)`)
+                .run('widget', 'Tools', 5);
+
+            await request(app).post('/api/ingestion/import').send({
+                items: [{ filepath: '/test/ingestion/widget-holder.stl', category: 'Toys', isFolder: false }]
+            });
+            const row = testDb.prepare(`SELECT count FROM categorization_hints WHERE token = ? AND category = ?`).get('widget', 'Tools') as any;
+            expect(row.count).toBe(5);
         });
     });
 

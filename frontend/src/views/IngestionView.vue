@@ -283,9 +283,11 @@
         <p>No items match "{{ store.globalSearchQuery }}"</p>
       </div>
       <div v-else class="items-list">
-        <div
+        <template
           v-for="item in filteredItems"
           :key="item.filepath"
+        >
+        <div
           class="item-card"
           :class="{ selected: selectedIds.has(item.filepath), importing: importingPaths.has(item.filepath) }"
           @click="toggleSelect(item.filepath)"
@@ -334,23 +336,51 @@
           </div>
           <div class="item-category" @click.stop>
             <div class="confidence-dot" :class="item.confidence" :title="`${item.confidence} confidence match`"></div>
+            <button
+              class="debug-btn"
+              :class="{ active: activeDebugPath === item.filepath }"
+              @click.stop="toggleDebug(item)"
+              title="Show score breakdown"
+            >?</button>
             <div class="category-select-wrapper">
               <input
                 type="text"
                 :value="item.selectedCategory"
-                @input="updateCategory(item, ($event.target as HTMLInputElement).value)"
-                @focus="showCategoryDropdown(item)"
-                @blur="hideCategoryDropdown"
+                @input="onCategoryInput(item, ($event.target as HTMLInputElement).value)"
+                @focus="onCategoryFocus(item)"
+                @blur="onCategoryBlur"
+                @keydown.escape="onCategoryBlur"
                 class="category-input"
-                list="category-options"
               />
-              <datalist id="category-options">
-                <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-                <option value="Uncategorized">Uncategorized</option>
-              </datalist>
+              <div v-if="activeDropdownPath === item.filepath" class="category-dropdown">
+                <button
+                  v-for="cat in getCategoryOptions(item)"
+                  :key="cat"
+                  class="category-option"
+                  :class="{ current: cat === item.selectedCategory }"
+                  @mousedown.prevent="selectCategory(item, cat)"
+                >
+                  <span class="cat-name">{{ cat }}</span>
+                  <span v-if="getDebugScore(item, cat) !== null" class="cat-score">{{ getDebugScore(item, cat) }}%</span>
+                </button>
+                <div v-if="getCategoryOptions(item).length === 0" class="category-option-empty">No matching categories</div>
+              </div>
             </div>
           </div>
         </div>
+        <div v-if="activeDebugPath === item.filepath" class="debug-panel">
+          <div class="debug-panel-title">Score breakdown — {{ item.filename }}</div>
+          <div v-for="entry in item.debugScores" :key="entry.category" class="debug-row">
+            <span class="debug-cat">{{ entry.category }}</span>
+            <span class="debug-source" :data-source="entry.source">{{ entry.source }}</span>
+            <div class="debug-bar-wrap">
+              <div class="debug-bar" :style="{ width: entry.score + '%' }"></div>
+            </div>
+            <span class="debug-pct">{{ entry.score }}%</span>
+          </div>
+          <div v-if="item.debugScores.length === 0" class="debug-empty">No matching signal found — category was not determinable from filename or context.</div>
+        </div>
+        </template>
       </div>
     </template>
   </div>
@@ -360,6 +390,12 @@
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { ingestionApi, systemApi } from '../services/api';
 import { useAppStore } from '../store';
+
+interface ScoreDebugEntry {
+  category: string;
+  score: number;
+  source: 'exact' | 'name' | 'files' | 'tags' | 'text' | 'hint';
+}
 
 interface IngestionItem {
   filename: string;
@@ -371,6 +407,7 @@ interface IngestionItem {
   suggestedCategory: string;
   confidence: 'high' | 'medium' | 'low';
   selectedCategory: string;
+  debugScores: ScoreDebugEntry[];
 }
 
 interface ImportDetail {
@@ -421,6 +458,11 @@ const aiProgressPercent = computed(() => {
 });
 const importingPaths = ref<Set<string>>(new Set());
 const lastResults = ref<ImportResults | null>(null);
+const activeDebugPath = ref<string | null>(null);
+
+function toggleDebug(item: IngestionItem) {
+  activeDebugPath.value = activeDebugPath.value === item.filepath ? null : item.filepath;
+}
 
 const promptDirty = computed(() =>
   promptValue.value !== savedPromptValue.value
@@ -569,8 +611,10 @@ async function scanFolder() {
     const response = await ingestionApi.scan();
     items.value = (response.data.items || []).map((item: any) => ({
       ...item,
-      selectedCategory: item.suggestedCategory
+      selectedCategory: item.suggestedCategory,
+      debugScores: item.debugScores || []
     }));
+    activeDebugPath.value = null;
     hasScanned.value = true;
   } catch (error: any) {
     console.error('Failed to scan:', error);
@@ -607,6 +651,7 @@ async function categorizeWithAI() {
         existing.suggestedCategory = aiItem.suggestedCategory;
         existing.confidence = aiItem.confidence;
         existing.selectedCategory = aiItem.suggestedCategory;
+        existing.debugScores = aiItem.debugScores || [];
       }
     }
 
@@ -683,12 +728,67 @@ function updateCategory(item: IngestionItem, value: string) {
   }
 }
 
-function showCategoryDropdown(_item: IngestionItem) {
-  // datalist handles this natively
+const activeDropdownPath = ref<string | null>(null);
+const dropdownTyped = ref(false);
+
+function getCategoryOptions(item: IngestionItem): string[] {
+  const typed = item.selectedCategory.toLowerCase();
+  const debugCats = item.debugScores.map(d => d.category);
+  const allCats = [...categories.value];
+
+  // Build ordered list: debug-scored first, then remaining, Uncategorized always present
+  const ordered: string[] = [];
+  for (const cat of debugCats) {
+    if (!ordered.includes(cat)) ordered.push(cat);
+  }
+  for (const cat of allCats) {
+    if (!ordered.includes(cat)) ordered.push(cat);
+  }
+  if (!ordered.includes('Uncategorized')) ordered.push('Uncategorized');
+
+  // Filter by typed text only after user has started typing
+  if (!dropdownTyped.value || typed === '') return ordered;
+  return ordered.filter(cat => cat.toLowerCase().includes(typed));
 }
 
-function hideCategoryDropdown() {
-  // datalist handles this natively
+function getDebugScore(item: IngestionItem, cat: string): number | null {
+  const entry = item.debugScores.find(d => d.category === cat);
+  return entry ? entry.score : null;
+}
+
+function onCategoryFocus(item: IngestionItem) {
+  dropdownTyped.value = false;
+  activeDropdownPath.value = item.filepath;
+}
+
+function onCategoryInput(item: IngestionItem, value: string) {
+  item.selectedCategory = value;
+  dropdownTyped.value = true;
+  activeDropdownPath.value = item.filepath;
+  if (value && !selectedIds.value.has(item.filepath)) {
+    const newSet = new Set(selectedIds.value);
+    newSet.add(item.filepath);
+    selectedIds.value = newSet;
+  }
+}
+
+function onCategoryBlur() {
+  // Small delay so mousedown on option fires first
+  setTimeout(() => {
+    activeDropdownPath.value = null;
+    dropdownTyped.value = false;
+  }, 150);
+}
+
+function selectCategory(item: IngestionItem, cat: string) {
+  item.selectedCategory = cat;
+  activeDropdownPath.value = null;
+  dropdownTyped.value = false;
+  if (!selectedIds.value.has(item.filepath)) {
+    const newSet = new Set(selectedIds.value);
+    newSet.add(item.filepath);
+    selectedIds.value = newSet;
+  }
 }
 
 async function importSelected() {
@@ -708,7 +808,8 @@ async function importSelected() {
     const payload = selectedItems.map(i => ({
       filepath: i.filepath,
       category: i.selectedCategory,
-      isFolder: i.isFolder
+      isFolder: i.isFolder,
+      suggestedCategory: i.suggestedCategory
     }));
 
     const response = await ingestionApi.importItems(payload);
@@ -1607,6 +1708,111 @@ h2 {
 .confidence-dot.medium { background: var(--warning); }
 .confidence-dot.low { background: var(--text-tertiary); }
 
+/* Score debug button */
+.debug-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-base);
+  padding: 0;
+}
+.debug-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.debug-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--bg-deepest);
+}
+
+/* Score debug panel */
+.debug-panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+}
+.debug-panel-title {
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.625rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.debug-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0;
+}
+.debug-cat {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.debug-source {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+.debug-source[data-source="exact"] { background: rgba(34,197,94,0.15); color: var(--success); }
+.debug-source[data-source="name"]  { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.debug-source[data-source="files"] { background: rgba(139,92,246,0.15); color: #a78bfa; }
+.debug-source[data-source="hint"]  { background: rgba(251,146,60,0.15); color: #fb923c; }
+.debug-source[data-source="tags"]  { background: rgba(20,184,166,0.15); color: #2dd4bf; }
+.debug-source[data-source="text"]  { background: rgba(148,163,184,0.15); color: var(--text-secondary); }
+.debug-bar-wrap {
+  width: 80px;
+  height: 5px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.debug-bar {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+.debug-pct {
+  width: 3rem;
+  text-align: right;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+.debug-empty {
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
 .category-select-wrapper {
   position: relative;
 }
@@ -1626,6 +1832,63 @@ h2 {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px var(--accent-primary-dim);
+}
+
+.category-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.category-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  transition: background var(--transition-base);
+  width: 100%;
+}
+
+.category-option:hover,
+.category-option.current {
+  background: var(--bg-hover);
+}
+
+.cat-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-score {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.category-option-empty {
+  padding: 0.5rem 0.75rem;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  font-style: italic;
 }
 
 /* Loading & Empty */

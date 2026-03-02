@@ -498,10 +498,13 @@ The app integrates with macOS Finder tags to sync print status:
 - **Fuzzy matching fallback**: When no API key is set or Claude fails, falls back to multi-signal fuzzy matching:
   - **Multi-source scoring**: Matches against folder name (primary, unrestricted confidence), model filenames inside the folder (capped at medium), PDF tags (capped at medium), and README/PDF text (capped at low). Reduces Uncategorized results for generically-named downloads.
   - **Semantic synonym expansion**: Static synonym groups (toys/figures, tools/hardware, animals, vehicles, plants, jewelry, electronics, household, stands) map related words so e.g. "figurine" matches a "Toys" category.
-  - **Learned hints**: Every successful import writes `(token, category, count)` rows to `categorization_hints` DB table. On future scans, if all other sources score zero, the top hint association is returned at low confidence.
+  - **Learned hints (adaptive)**: Every successful import writes `(token, category, count)` rows to `categorization_hints` DB table. Hints are now applied as an additive per-category boost (`count/5 * 0.4`, max 0.4) in the main scoring loop — not just a last-resort fallback. This means AI-confirmed categorizations gradually improve fuzzy results over time. Confidence thresholds: `high` if exact match or adjusted score ≥ 0.8; `medium` if rawScore > 0 OR adjusted > 0.35; `low` otherwise.
+  - **Correction feedback**: When a user changes a suggested category before importing, the backend decrements hint counts for the wrong suggestion (floor 0) via `recordCategorizationHintPenalty`. Wrong suggestions gradually lose their boost signal.
   - Noise word filtering still excludes common 3D printing terms like "free", "3d", "print", "model".
 - **API key management**: Anthropic API key can be configured, updated, or cleared from the ingestion view; stored in config table
 - **Confidence indicators**: Each suggestion shows a colored dot (green=high, yellow=medium, gray=low) indicating match confidence
+- **Score transparency (`?` button)**: Each item has a `?` button revealing a ranked debug panel with the top 5 candidate categories, their scores (0–100%), and the dominant signal source (exact/name/files/tags/text/hint) color-coded by badge. `GET /api/ingestion/scan` now includes `debugScores: ScoreDebugEntry[]` on each item.
+- **Smart category dropdown**: Replaced native `<datalist>` with a custom dropdown. On focus, shows all categories with best-scored suggestions first (with score %). After typing, filters the ordered list by substring match.
 - **Editable categories**: Users can accept, change, or type new category names before importing
 - **Bulk import**: Select multiple items and import them all at once with per-item results
 - **File organization**: Single files get wrapped in cleaned-up folders; existing folders are moved as-is into the category directory

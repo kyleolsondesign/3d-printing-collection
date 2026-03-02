@@ -213,7 +213,7 @@ export const ingestionApi = {
     scan: () => api.get('/ingestion/scan'),
     categorize: () => api.post('/ingestion/categorize'),
     categorizeStatus: () => api.get('/ingestion/categorize/status'),
-    importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean }>) =>
+    importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean; suggestedCategory?: string }>) =>
         api.post('/ingestion/import', { items }),
     getPreviewImageUrl: (filePath: string) =>
         `/api/ingestion/preview-image?path=${encodeURIComponent(filePath)}`

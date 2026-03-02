@@ -105,6 +105,7 @@ interface IngestionItem {
     suggestedCategory: string;
     confidence: 'high' | 'medium' | 'low';
     imageFile: string | null;
+    debugScores: ScoreDebugEntry[];
 }
 
 interface ScannedItem {
@@ -206,13 +207,13 @@ function scoreNameVsCategory(
     return { score: scoreTokensVsCategory(expandedTokens, catTokens), isExact: false };
 }
 
-// Learned-hint fallback: query categorization_hints for token→category associations.
-// Returns a low-confidence suggestion if any learned associations match, or null.
-function tryHintFallback(
-    tokens: string[],
-    categories: string[]
-): { category: string; confidence: 'high' | 'medium' | 'low' } | null {
-    if (tokens.length === 0) return null;
+// Load per-category hint boosts from learned associations (AI-accepted + manual imports).
+// Returns a Map<category, boost> where boost is in [0, 0.4].
+// The boost is proportional to how many times the item's tokens have been associated
+// with each category relative to the most-associated category — so over time, repeatedly
+// AI-accepted categorizations accumulate enough signal to override weak token matches.
+function loadHintBoosts(tokens: string[], categories: string[]): Map<string, number> {
+    if (tokens.length === 0) return new Map();
     try {
         const placeholders = tokens.map(() => '?').join(',');
         const rows = db.prepare(`
@@ -220,16 +221,22 @@ function tryHintFallback(
             FROM categorization_hints
             WHERE token IN (${placeholders})
             GROUP BY category
-            ORDER BY total DESC
-            LIMIT 1
         `).all(...tokens) as Array<{ category: string; total: number }>;
 
-        if (rows.length === 0) return null;
-        const best = rows[0];
-        if (!categories.includes(best.category)) return null;
-        return { category: best.category, confidence: 'low' };
+        if (rows.length === 0) return new Map();
+
+        const maxTotal = Math.max(...rows.map(r => r.total));
+        const boosts = new Map<string, number>();
+        for (const row of rows) {
+            if (categories.includes(row.category)) {
+                // Normalize to [0, 0.4]: strong enough to tip a weak token match,
+                // but not enough to beat a solid token-based result on its own.
+                boosts.set(row.category, (row.total / maxTotal) * 0.4);
+            }
+        }
+        return boosts;
     } catch {
-        return null;
+        return new Map();
     }
 }
 
@@ -241,10 +248,16 @@ interface FuzzyMatchContext {
     pdfText?: string | null;
 }
 
+interface ScoreDebugEntry {
+    category: string;
+    score: number;  // 0–100 integer percentage
+    source: 'exact' | 'name' | 'files' | 'tags' | 'text' | 'hint';
+}
+
 function suggestCategoryFuzzy(
     item: FuzzyMatchContext,
     categories: string[]
-): { category: string; confidence: 'high' | 'medium' | 'low' } {
+): { category: string; confidence: 'high' | 'medium' | 'low'; debugScores: ScoreDebugEntry[] } {
     // Pre-compute expanded tokens for each source
     const primaryTokens = expandWithSynonyms(tokenize(item.name));
 
@@ -266,18 +279,33 @@ function suggestCategoryFuzzy(
         .substring(0, 500);
     const textTokens = textContent ? expandWithSynonyms(tokenize(textContent)) : [];
 
+    // Load per-category hint boosts before the main loop (single DB query).
+    // Boosts accumulate from prior AI-accepted imports, so over time the fuzzy
+    // matcher learns from correct AI suggestions without user intervention.
+    const allTokensForHints = Array.from(new Set([
+        ...primaryTokens,
+        ...modelFileContexts.flatMap(fc => fc.tokens),
+        ...pdfTagTokens,
+        ...textTokens,
+    ]));
+    const hintBoosts = loadHintBoosts(allTokensForHints, categories);
+
     const hasAnyTokens = primaryTokens.length > 0
         || modelFileContexts.some(fc => fc.tokens.length > 0)
         || pdfTagTokens.length > 0
-        || textTokens.length > 0;
+        || textTokens.length > 0
+        || hintBoosts.size > 0;
 
     if (!hasAnyTokens) {
-        return tryHintFallback([], categories) ?? { category: 'Uncategorized', confidence: 'low' };
+        return { category: 'Uncategorized', confidence: 'low', debugScores: [] };
     }
 
     let bestCategory = 'Uncategorized';
-    let bestScore = 0;
+    let bestRawScore = 0;
+    let bestAdjustedScore = 0;
     let bestIsExact = false;
+
+    const allDebugScores: ScoreDebugEntry[] = [];
 
     for (const category of categories) {
         const isPhraseOnly = PHRASE_ONLY_CATEGORIES.has(category);
@@ -289,8 +317,11 @@ function suggestCategoryFuzzy(
             item.name, primaryTokens, category, catTokens, normalizedCat, isPhraseOnly
         );
 
-        // Sources 2–4: secondary — never override primary for high confidence
-        let secondaryScore = 0;
+        // Sources 2–4: secondary — never override primary for high confidence.
+        // Track each source separately to report the dominant one.
+        let fileScore = 0;
+        let tagScore = 0;
+        let textScore = 0;
 
         if (!isPhraseOnly) {
             // Source 2: Individual model file names
@@ -298,57 +329,75 @@ function suggestCategoryFuzzy(
                 const r = scoreNameVsCategory(
                     fc.name, fc.tokens, category, catTokens, normalizedCat, false
                 );
-                if (r.score > secondaryScore) secondaryScore = r.score;
+                if (r.score > fileScore) fileScore = r.score;
             }
 
             // Source 3: PDF tags (pure token overlap)
             if (pdfTagTokens.length > 0) {
-                const s = scoreTokensVsCategory(pdfTagTokens, catTokens);
-                if (s > secondaryScore) secondaryScore = s;
+                tagScore = scoreTokensVsCategory(pdfTagTokens, catTokens);
             }
 
             // Source 4: Text content (capped lower — noisy signal)
             if (textTokens.length > 0) {
-                const s = Math.min(scoreTokensVsCategory(textTokens, catTokens), 0.5);
-                if (s > secondaryScore) secondaryScore = s;
+                textScore = Math.min(scoreTokensVsCategory(textTokens, catTokens), 0.5);
             }
-
-            // Cap secondary sources below the high-confidence threshold
-            secondaryScore = Math.min(secondaryScore, 0.79);
         }
 
-        const catScore = nameResult.isExact ? 100 : Math.max(nameResult.score, secondaryScore);
+        const secondaryScore = Math.min(Math.max(fileScore, tagScore, textScore), 0.79);
+        const rawScore = nameResult.isExact ? 100 : Math.max(nameResult.score, secondaryScore);
         const catIsExact = nameResult.isExact;
 
-        if (catScore > bestScore || (catScore === bestScore && category.length > bestCategory.length)) {
-            bestScore = catScore;
+        // Apply hint boost additively: AI-accepted categorizations gradually improve
+        // fuzzy results for similar items in the future.
+        const hintBoost = hintBoosts.get(category) ?? 0;
+        const adjustedScore = catIsExact ? 100 : Math.min(rawScore + hintBoost, 0.95);
+
+        // Determine the dominant signal source for this category
+        let source: ScoreDebugEntry['source'];
+        if (catIsExact) {
+            source = 'exact';
+        } else if (rawScore === 0 && hintBoost > 0) {
+            source = 'hint';
+        } else if (nameResult.score >= Math.max(fileScore, tagScore, textScore)) {
+            source = 'name';
+        } else if (fileScore >= Math.max(tagScore, textScore)) {
+            source = 'files';
+        } else if (tagScore >= textScore) {
+            source = 'tags';
+        } else {
+            source = 'text';
+        }
+
+        allDebugScores.push({
+            category,
+            score: adjustedScore === 100 ? 100 : Math.round(adjustedScore * 100),
+            source
+        });
+
+        if (adjustedScore > bestAdjustedScore
+            || (adjustedScore === bestAdjustedScore && category.length > bestCategory.length)) {
+            bestRawScore = rawScore;
+            bestAdjustedScore = adjustedScore;
             bestCategory = category;
             bestIsExact = catIsExact;
         }
     }
 
-    // Hint fallback: if still no match, try learned associations
-    if (bestScore === 0) {
-        const allTokens = [
-            ...primaryTokens,
-            ...modelFileContexts.flatMap(fc => fc.tokens),
-            ...pdfTagTokens,
-            ...textTokens,
-        ];
-        const hintResult = tryHintFallback(allTokens, categories);
-        if (hintResult) return hintResult;
-    }
-
     let confidence: 'high' | 'medium' | 'low';
-    if (bestIsExact || bestScore >= 0.8) {
+    if (bestIsExact || bestAdjustedScore >= 0.8) {
         confidence = 'high';
-    } else if (bestScore > 0) {
+    } else if (bestRawScore > 0 || bestAdjustedScore > 0.35) {
         confidence = 'medium';
     } else {
         confidence = 'low';
     }
 
-    return { category: bestCategory, confidence };
+    const debugScores = allDebugScores
+        .filter(e => e.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+
+    return { category: bestCategory, confidence, debugScores };
 }
 
 // --- Claude-powered categorization ---
@@ -690,7 +739,8 @@ router.get('/scan', async (req, res) => {
                 fileSize: item.fileSize,
                 imageFile: item.imageFile,
                 suggestedCategory: fuzzy.category,
-                confidence: fuzzy.confidence
+                confidence: fuzzy.confidence,
+                debugScores: fuzzy.debugScores
             };
         });
 
@@ -899,6 +949,23 @@ function recordCategorizationHints(name: string, category: string): void {
     } catch { /* ignore */ }
 }
 
+// Decrement hint counts when a user corrects a wrong suggestion (floor at 0).
+// Over time, consistently wrong suggestions lose their boost signal.
+function recordCategorizationHintPenalty(name: string, wrongCategory: string): void {
+    if (!wrongCategory || wrongCategory === 'Uncategorized') return;
+    const tokens = tokenize(name);
+    if (tokens.length === 0) return;
+    try {
+        const stmt = db.prepare(`
+            UPDATE categorization_hints SET count = MAX(0, count - 1)
+            WHERE token = ? AND category = ?
+        `);
+        for (const token of tokens) {
+            stmt.run(token, wrongCategory);
+        }
+    } catch { /* ignore */ }
+}
+
 // POST /api/ingestion/import
 router.post('/import', async (req, res) => {
     try {
@@ -920,7 +987,7 @@ router.post('/import', async (req, res) => {
         }> = [];
 
         for (const item of items) {
-            const { filepath, category, isFolder } = item;
+            const { filepath, category, isFolder, suggestedCategory } = item;
             if (!filepath || !category) {
                 results.push({ filepath: filepath || 'unknown', success: false, error: 'Missing filepath or category' });
                 continue;
@@ -973,6 +1040,10 @@ router.post('/import', async (req, res) => {
                     ? path.basename(filepath)
                     : path.basename(filepath, path.extname(filepath));
                 recordCategorizationHints(importName, category);
+                // If the user changed the suggestion, penalize the wrong category
+                if (suggestedCategory && suggestedCategory !== category) {
+                    recordCategorizationHintPenalty(importName, suggestedCategory);
+                }
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 results.push({ filepath, success: false, error: message });

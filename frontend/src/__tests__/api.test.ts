@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
-import { modelsApi, printedApi, favoritesApi, queueApi, systemApi } from '../services/api';
+import { modelsApi, printedApi, favoritesApi, queueApi, systemApi, ingestionApi } from '../services/api';
 
 vi.mock('axios', () => {
     const mockAxios = {
@@ -136,6 +136,23 @@ describe('API Client', () => {
             await queueApi.reorder(items);
             const mockApi = axios.create() as any;
             expect(mockApi.post).toHaveBeenCalledWith('/queue/reorder', { items });
+        });
+    });
+
+    describe('ingestionApi', () => {
+        it('importItems sends items with suggestedCategory', async () => {
+            const items = [
+                { filepath: '/tmp/model.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Tools' },
+                { filepath: '/tmp/folder', category: 'Tools', isFolder: true }
+            ];
+            await ingestionApi.importItems(items);
+            const mockApi = axios.create() as any;
+            expect(mockApi.post).toHaveBeenCalledWith('/ingestion/import', { items });
+        });
+
+        it('getPreviewImageUrl constructs correct URL', () => {
+            const url = ingestionApi.getPreviewImageUrl('/test/ingestion/preview.jpg');
+            expect(url).toBe('/api/ingestion/preview-image?path=%2Ftest%2Fingestion%2Fpreview.jpg');
         });
     });
 
