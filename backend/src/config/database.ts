@@ -248,6 +248,19 @@ function initializeDatabase(): void {
         )
     `);
 
+    // Ingestion events — per-import event log for tracking categorization quality over time
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ingestion_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            imported_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            item_name TEXT NOT NULL,
+            suggested_category TEXT,
+            chosen_category TEXT NOT NULL,
+            confidence TEXT CHECK(confidence IN ('high', 'medium', 'low')),
+            accepted INTEGER NOT NULL DEFAULT 0
+        )
+    `);
+
     // Create indexes
     db.exec(`
         CREATE INDEX IF NOT EXISTS idx_models_category ON models(category);

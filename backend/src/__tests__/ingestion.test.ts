@@ -645,4 +645,133 @@ describe('Ingestion Routes', () => {
             expect(res.body.items[0].imageFile).toBeNull();
         });
     });
+
+    describe('POST /api/ingestion/import - ingestion_events recording', () => {
+        beforeEach(() => {
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('ingestion_directory', '/test/ingestion');
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('model_directory', '/test/models');
+            mockMkdirSync.mockReturnValue(undefined);
+            mockRenameSync.mockReturnValue(undefined);
+            mockExistsSync.mockImplementation((p: string) => {
+                if (p.includes('/test/ingestion/')) return true;    // source exists
+                if (p === '/test/models/Toys') return true;         // category dir exists
+                if (p === '/test/models/Tools') return true;
+                if (p.includes('/test/models/') && !p.endsWith('.stl')) return false; // target folder free
+                return true;
+            });
+        });
+
+        it('records an event when a file is imported with accepted suggestion', async () => {
+            const res = await request(app).post('/api/ingestion/import').send({
+                items: [{ filepath: '/test/ingestion/dragon-figurine.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Toys', confidence: 'high' }]
+            });
+            expect(res.status).toBe(200);
+            const row = testDb.prepare(`SELECT * FROM ingestion_events WHERE item_name = ?`).get('dragon-figurine') as any;
+            expect(row).toBeTruthy();
+            expect(row.suggested_category).toBe('Toys');
+            expect(row.chosen_category).toBe('Toys');
+            expect(row.confidence).toBe('high');
+            expect(row.accepted).toBe(1);
+        });
+
+        it('records an event with accepted=0 when user changes suggestion', async () => {
+            const res = await request(app).post('/api/ingestion/import').send({
+                items: [{ filepath: '/test/ingestion/dragon-figurine.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Tools', confidence: 'medium' }]
+            });
+            expect(res.status).toBe(200);
+            const row = testDb.prepare(`SELECT * FROM ingestion_events WHERE item_name = ?`).get('dragon-figurine') as any;
+            expect(row).toBeTruthy();
+            expect(row.suggested_category).toBe('Tools');
+            expect(row.chosen_category).toBe('Toys');
+            expect(row.confidence).toBe('medium');
+            expect(row.accepted).toBe(0);
+        });
+
+        it('records an event with null suggested_category when none provided', async () => {
+            const res = await request(app).post('/api/ingestion/import').send({
+                items: [{ filepath: '/test/ingestion/dragon-figurine.stl', category: 'Toys', isFolder: false }]
+            });
+            expect(res.status).toBe(200);
+            const row = testDb.prepare(`SELECT * FROM ingestion_events WHERE item_name = ?`).get('dragon-figurine') as any;
+            expect(row).toBeTruthy();
+            expect(row.suggested_category).toBeNull();
+            expect(row.accepted).toBe(0);
+        });
+
+        it('does not record an event when the import fails', async () => {
+            mockExistsSync.mockImplementation((p: string) => {
+                if (p === '/test/ingestion/missing.stl') return false; // source doesn't exist
+                return true;
+            });
+            await request(app).post('/api/ingestion/import').send({
+                items: [{ filepath: '/test/ingestion/missing.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Toys', confidence: 'high' }]
+            });
+            const count = (testDb.prepare(`SELECT COUNT(*) as c FROM ingestion_events`).get() as any).c;
+            expect(count).toBe(0);
+        });
+    });
+
+    describe('GET /api/ingestion/stats', () => {
+        beforeEach(() => {
+            // Seed some import events with known values
+            const insert = testDb.prepare(`
+                INSERT INTO ingestion_events (imported_at, item_name, suggested_category, chosen_category, confidence, accepted)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `);
+            // 3 accepted high-confidence events
+            insert.run('2026-01-15 10:00:00', 'dragon-figurine', 'Toys', 'Toys', 'high', 1);
+            insert.run('2026-01-20 10:00:00', 'robot-stand', 'Tools', 'Tools', 'high', 1);
+            insert.run('2026-02-01 10:00:00', 'phone-holder', 'Tools', 'Tools', 'medium', 1);
+            // 2 corrected events (accepted=0)
+            insert.run('2026-01-25 10:00:00', 'gizmo-v2', 'Gadgets', 'Toys', 'medium', 0);
+            insert.run('2026-02-05 10:00:00', 'widget-box', 'Gadgets', 'Tools', 'low', 0);
+        });
+
+        it('returns totalImports count', async () => {
+            const res = await request(app).get('/api/ingestion/stats');
+            expect(res.status).toBe(200);
+            expect(res.body.totalImports).toBe(5);
+        });
+
+        it('calculates acceptanceRate as integer percentage', async () => {
+            const res = await request(app).get('/api/ingestion/stats');
+            expect(res.status).toBe(200);
+            // 3 accepted out of 5 = 60%
+            expect(res.body.acceptanceRate).toBe(60);
+        });
+
+        it('returns topCorrected with most-corrected suggestions first', async () => {
+            const res = await request(app).get('/api/ingestion/stats');
+            expect(res.status).toBe(200);
+            expect(Array.isArray(res.body.topCorrected)).toBe(true);
+            // 'Gadgets' was suggested twice but corrected both times
+            expect(res.body.topCorrected[0].category).toBe('Gadgets');
+            expect(res.body.topCorrected[0].count).toBe(2);
+        });
+
+        it('returns topChosen with most-chosen categories first', async () => {
+            const res = await request(app).get('/api/ingestion/stats');
+            expect(res.status).toBe(200);
+            // 'Tools' was chosen 3 times (robot-stand, phone-holder, widget-box)
+            expect(res.body.topChosen[0].category).toBe('Tools');
+            expect(res.body.topChosen[0].count).toBe(3);
+        });
+
+        it('returns byConfidence with acceptance stats per level', async () => {
+            const res = await request(app).get('/api/ingestion/stats');
+            expect(res.status).toBe(200);
+            const high = res.body.byConfidence.find((c: any) => c.confidence === 'high');
+            expect(high).toBeTruthy();
+            expect(high.total).toBe(2);
+            expect(high.accepted).toBe(2);
+        });
+
+        it('returns 200 with zeros when no events exist', async () => {
+            testDb.exec(`DELETE FROM ingestion_events`);
+            const res = await request(app).get('/api/ingestion/stats');
+            expect(res.status).toBe(200);
+            expect(res.body.totalImports).toBe(0);
+            expect(res.body.acceptanceRate).toBe(0);
+        });
+    });
 });

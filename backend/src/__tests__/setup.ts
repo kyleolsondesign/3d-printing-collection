@@ -14,7 +14,7 @@ export function initSchema(db: InstanceType<typeof Database>): void {
     db.exec(`DROP TABLE IF EXISTS models_fts`);
 
     // Drop tables in dependency order
-    const tables = ['recently_viewed', 'make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'print_queue', 'tags', 'config', 'loose_files', 'models'];
+    const tables = ['recently_viewed', 'make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'print_queue', 'tags', 'config', 'loose_files', 'models', 'categorization_hints', 'ingestion_events'];
     for (const table of tables) {
         db.exec(`DROP TABLE IF EXISTS ${table}`);
     }
@@ -174,6 +174,27 @@ export function initSchema(db: InstanceType<typeof Database>): void {
             model_id INTEGER NOT NULL UNIQUE,
             viewed_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS categorization_hints (
+            token TEXT NOT NULL,
+            category TEXT NOT NULL,
+            count INTEGER DEFAULT 1,
+            PRIMARY KEY (token, category)
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ingestion_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            imported_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            item_name TEXT NOT NULL,
+            suggested_category TEXT,
+            chosen_category TEXT NOT NULL,
+            confidence TEXT CHECK(confidence IN ('high', 'medium', 'low')),
+            accepted INTEGER NOT NULL DEFAULT 0
         )
     `);
 

@@ -509,7 +509,10 @@ The app integrates with macOS Finder tags to sync print status:
 - **Bulk import**: Select multiple items and import them all at once with per-item results
 - **File organization**: Single files get wrapped in cleaned-up folders; existing folders are moved as-is into the category directory
 - **Auto-indexing**: After moving files, calls `scanner.scanSingleFolder()` to index the new model
-- **API endpoints**: `GET/POST /api/ingestion/config`, `GET /api/ingestion/scan`, `POST /api/ingestion/import`
+- **Import quality tracking**: Every successfully imported item writes a row to `ingestion_events (id, imported_at, item_name, suggested_category, chosen_category, confidence, accepted)`. `accepted=1` when the user kept the suggestion, `0` when they changed it.
+- **Import stats endpoint**: `GET /api/ingestion/stats` returns `totalImports`, `acceptanceRate` (%), `byWeek` (last 12 weeks), `topCorrected` (most-changed suggestions), `topChosen` (most-imported categories), `byConfidence` (acceptance rate per confidence level).
+- **Stats page section**: The Statistics view shows an "Import Quality" section (visible once any imports have been made) with: total imported, acceptance rate, per-confidence acceptance mini-cards, weekly acceptance-rate line chart, top corrected categories bar chart, top chosen categories bar chart.
+- **API endpoints**: `GET/POST /api/ingestion/config`, `GET /api/ingestion/scan`, `POST /api/ingestion/import`, `GET /api/ingestion/stats`
 
 ## Future Enhancements
 - 3D model preview (STL viewer)

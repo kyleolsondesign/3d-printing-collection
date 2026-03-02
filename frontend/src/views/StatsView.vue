@@ -317,13 +317,119 @@
           </div>
         </div>
       </div>
+
+      <!-- Import Quality Section -->
+      <template v-if="importStats && importStats.totalImports > 0">
+        <div class="section-header">
+          <h3>Import Quality</h3>
+          <span class="section-sub">How well the categorizer is performing over time</span>
+        </div>
+
+        <!-- Import summary cards -->
+        <div class="summary-cards">
+          <div class="stat-card">
+            <div class="stat-icon import-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <path d="M7 10l5 5 5-5M12 15V3"/>
+              </svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ importStats.totalImports.toLocaleString() }}</div>
+              <div class="stat-label">Total Imported</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon accept-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>
+              </svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ importStats.acceptanceRate }}%</div>
+              <div class="stat-label">Acceptance Rate</div>
+            </div>
+          </div>
+          <!-- Confidence breakdown mini stats -->
+          <div v-for="conf in sortedConfidence" :key="conf.confidence" class="stat-card">
+            <div class="stat-icon" :class="conf.confidence + '-conf-icon'">
+              <span class="confidence-badge" :class="conf.confidence">{{ conf.confidence }}</span>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ Math.round((conf.accepted / conf.total) * 100) }}%</div>
+              <div class="stat-label">{{ conf.confidence }} confidence</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="charts-grid">
+          <!-- Acceptance rate over time line chart -->
+          <div class="chart-card wide" v-if="importStats.byWeek.length > 1">
+            <h3 class="chart-title">Acceptance Rate Over Time</h3>
+            <div class="line-chart-wrapper">
+              <svg class="line-chart-svg" :viewBox="`0 0 ${svgW} ${svgH}`" preserveAspectRatio="none">
+                <!-- 100% guideline -->
+                <line :x1="padL" :y1="importYPos(100)" :x2="svgW - padR" :y2="importYPos(100)"
+                  stroke="var(--border-subtle)" stroke-width="1" stroke-dasharray="4 3"/>
+                <!-- Grid lines -->
+                <line v-for="tick in importYTicks" :key="'ig' + tick"
+                  :x1="padL" :y1="importYPos(tick)" :x2="svgW - padR" :y2="importYPos(tick)"
+                  stroke="var(--border-subtle)" stroke-width="1"
+                />
+                <!-- Area fill -->
+                <path :d="importAreaPath" fill="rgba(34,197,94,0.1)" />
+                <!-- Acceptance rate line -->
+                <polyline :points="importLinePoints" fill="none" stroke="var(--success)" stroke-width="2" stroke-linejoin="round"/>
+                <!-- X labels -->
+                <text v-for="(label, i) in importWeekLabels" :key="'ix' + i"
+                  :x="importXPos(i)" :y="svgH - 4"
+                  text-anchor="middle" class="axis-label">{{ label }}</text>
+                <!-- Y labels -->
+                <text v-for="tick in importYTicks" :key="'iy' + tick"
+                  :x="padL - 4" :y="importYPos(tick) + 4"
+                  text-anchor="end" class="axis-label">{{ tick }}%</text>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Top corrected categories -->
+          <div class="chart-card" v-if="importStats.topCorrected.length">
+            <h3 class="chart-title">Most Corrected Suggestions</h3>
+            <p class="chart-sub">Categories the AI suggested but you changed</p>
+            <div class="bar-chart compact">
+              <div v-for="item in importStats.topCorrected" :key="item.category" class="bar-row">
+                <div class="bar-label" :title="item.category">{{ item.category }}</div>
+                <div class="bar-track">
+                  <div class="bar-fill danger" :style="{ width: barWidth(item.count, maxCorrectedCount) }"></div>
+                </div>
+                <div class="bar-value">{{ item.count }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Top chosen categories -->
+          <div class="chart-card" v-if="importStats.topChosen.length">
+            <h3 class="chart-title">Most Imported Into</h3>
+            <p class="chart-sub">Categories you most often chose</p>
+            <div class="bar-chart compact">
+              <div v-for="item in importStats.topChosen" :key="item.category" class="bar-row">
+                <div class="bar-label" :title="item.category">{{ item.category }}</div>
+                <div class="bar-track">
+                  <div class="bar-fill accent" :style="{ width: barWidth(item.count, maxChosenCount) }"></div>
+                </div>
+                <div class="bar-value">{{ item.count }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { systemApi } from '../services/api';
+import { systemApi, ingestionApi } from '../services/api';
 
 interface DetailedStats {
   modelsByCategory: Array<{ category: string; count: number }>;
@@ -339,9 +445,19 @@ interface DetailedStats {
   fileTypes: Array<{ file_type: string; count: number }>;
 }
 
+interface ImportStats {
+  totalImports: number;
+  acceptanceRate: number;
+  byWeek: Array<{ week: string; total: number; accepted: number }>;
+  topCorrected: Array<{ category: string; count: number }>;
+  topChosen: Array<{ category: string; count: number }>;
+  byConfidence: Array<{ confidence: string; total: number; accepted: number }>;
+}
+
 const loading = ref(true);
 const basicStats = ref({ totalModels: 0, totalFavorites: 0, totalPrinted: 0, totalQueued: 0, totalLooseFiles: 0 });
 const detailedStats = ref<DetailedStats | null>(null);
+const importStats = ref<ImportStats | null>(null);
 
 // SVG chart dimensions
 const svgW = 560;
@@ -353,12 +469,14 @@ const padB = 20;
 
 onMounted(async () => {
   try {
-    const [basicRes, detailRes] = await Promise.all([
+    const [basicRes, detailRes, importRes] = await Promise.all([
       systemApi.getStats(),
-      systemApi.getDetailedStats()
+      systemApi.getDetailedStats(),
+      ingestionApi.getImportStats()
     ]);
     basicStats.value = basicRes.data;
     detailedStats.value = detailRes.data;
+    importStats.value = importRes.data;
   } catch (error) {
     console.error('Failed to load stats:', error);
   } finally {
@@ -513,6 +631,59 @@ const maxFileTypeCount = computed(() =>
 // --- Tag stats ---
 const maxTagCount = computed(() =>
   Math.max(...(detailedStats.value?.tagStats.map(x => x.model_count) || [1]))
+);
+
+// --- Import quality ---
+const sortedConfidence = computed(() => {
+  const order = ['high', 'medium', 'low'];
+  return [...(importStats.value?.byConfidence || [])].sort(
+    (a, b) => order.indexOf(a.confidence) - order.indexOf(b.confidence)
+  );
+});
+
+const maxCorrectedCount = computed(() =>
+  Math.max(...(importStats.value?.topCorrected.map(x => x.count) || [1]))
+);
+
+const maxChosenCount = computed(() =>
+  Math.max(...(importStats.value?.topChosen.map(x => x.count) || [1]))
+);
+
+// Import rate line chart — weekly, Y axis is 0–100 (%)
+const importWeekData = computed(() => importStats.value?.byWeek || []);
+
+function importXPos(i: number): number {
+  const n = importWeekData.value.length;
+  if (n <= 1) return padL + (svgW - padL - padR) / 2;
+  return padL + (i / (n - 1)) * (svgW - padL - padR);
+}
+
+function importYPos(val: number): number {
+  return padT + (svgH - padT - padB) * (1 - val / 100);
+}
+
+const importYTicks = [0, 25, 50, 75, 100];
+
+const importLinePoints = computed(() =>
+  importWeekData.value.map((d, i) => {
+    const rate = d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0;
+    return `${importXPos(i)},${importYPos(rate)}`;
+  }).join(' ')
+);
+
+const importAreaPath = computed(() => {
+  if (!importWeekData.value.length) return '';
+  const n = importWeekData.value.length;
+  const base = importYPos(0);
+  const pts = importWeekData.value.map((d, i) => {
+    const rate = d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0;
+    return `${importXPos(i)},${importYPos(rate)}`;
+  }).join(' L ');
+  return `M ${importXPos(0)},${base} L ${pts} L ${importXPos(n - 1)},${base} Z`;
+});
+
+const importWeekLabels = computed(() =>
+  importWeekData.value.map(d => d.week.slice(6)) // "WNN" from "YYYY-WNN"
 );
 </script>
 
@@ -861,6 +1032,55 @@ const maxTagCount = computed(() =>
   font-size: 0.75rem;
   color: var(--text-tertiary);
   text-align: right;
+}
+
+/* Import quality section */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.section-header h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.section-sub {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+.chart-sub {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-top: -0.5rem;
+}
+
+.import-icon { background: rgba(34,211,238,0.12); color: var(--accent-primary); }
+.accept-icon { background: rgba(34,197,94,0.12); color: var(--success); }
+.high-conf-icon { background: rgba(34,197,94,0.12); color: var(--success); }
+.medium-conf-icon { background: rgba(251,191,36,0.12); color: var(--warning); }
+.low-conf-icon { background: rgba(148,163,184,0.12); color: var(--text-tertiary); }
+
+.confidence-badge {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+}
+
+.confidence-badge.high { background: rgba(34,197,94,0.15); color: var(--success); }
+.confidence-badge.medium { background: rgba(251,191,36,0.15); color: var(--warning); }
+.confidence-badge.low { background: var(--bg-elevated); color: var(--text-tertiary); }
+
+.bar-fill.danger {
+  background: linear-gradient(90deg, rgba(239,68,68,0.5), #ef4444);
 }
 
 /* Loading */

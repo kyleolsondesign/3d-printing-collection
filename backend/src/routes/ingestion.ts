@@ -966,6 +966,23 @@ function recordCategorizationHintPenalty(name: string, wrongCategory: string): v
     } catch { /* ignore */ }
 }
 
+// Record a single import event to the ingestion_events log
+function recordIngestionEvent(
+    itemName: string,
+    suggestedCategory: string | undefined,
+    chosenCategory: string,
+    confidence: string | undefined
+): void {
+    try {
+        const accepted = (suggestedCategory && suggestedCategory !== 'Uncategorized' && suggestedCategory === chosenCategory) ? 1 : 0;
+        const validConfidence = ['high', 'medium', 'low'].includes(confidence || '') ? confidence : null;
+        db.prepare(`
+            INSERT INTO ingestion_events (item_name, suggested_category, chosen_category, confidence, accepted)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(itemName, suggestedCategory || null, chosenCategory, validConfidence, accepted);
+    } catch { /* ignore */ }
+}
+
 // POST /api/ingestion/import
 router.post('/import', async (req, res) => {
     try {
@@ -987,7 +1004,7 @@ router.post('/import', async (req, res) => {
         }> = [];
 
         for (const item of items) {
-            const { filepath, category, isFolder, suggestedCategory } = item;
+            const { filepath, category, isFolder, suggestedCategory, confidence } = item;
             if (!filepath || !category) {
                 results.push({ filepath: filepath || 'unknown', success: false, error: 'Missing filepath or category' });
                 continue;
@@ -1044,6 +1061,8 @@ router.post('/import', async (req, res) => {
                 if (suggestedCategory && suggestedCategory !== category) {
                     recordCategorizationHintPenalty(importName, suggestedCategory);
                 }
+                // Log this import event for quality tracking over time
+                recordIngestionEvent(importName, suggestedCategory, category, confidence);
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 results.push({ filepath, success: false, error: message });
@@ -1061,6 +1080,74 @@ router.post('/import', async (req, res) => {
                 failed: failCount
             },
             results
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// GET /api/ingestion/stats — acceptance rate and quality trends over time
+router.get('/stats', (req, res) => {
+    try {
+        // Overall totals
+        const totals = db.prepare(`
+            SELECT COUNT(*) as total, SUM(accepted) as accepted_count
+            FROM ingestion_events
+        `).get() as { total: number; accepted_count: number | null };
+
+        // Weekly breakdown — last 12 weeks
+        const byWeek = db.prepare(`
+            SELECT
+                strftime('%Y-W%W', imported_at) as week,
+                COUNT(*) as total,
+                SUM(accepted) as accepted
+            FROM ingestion_events
+            WHERE imported_at >= datetime('now', '-84 days')
+            GROUP BY week
+            ORDER BY week
+        `).all() as Array<{ week: string; total: number; accepted: number }>;
+
+        // Top corrected categories (suggested but user changed)
+        const topCorrected = db.prepare(`
+            SELECT suggested_category as category, COUNT(*) as count
+            FROM ingestion_events
+            WHERE accepted = 0 AND suggested_category IS NOT NULL
+            GROUP BY suggested_category
+            ORDER BY count DESC
+            LIMIT 5
+        `).all() as Array<{ category: string; count: number }>;
+
+        // Top chosen categories
+        const topChosen = db.prepare(`
+            SELECT chosen_category as category, COUNT(*) as count
+            FROM ingestion_events
+            GROUP BY chosen_category
+            ORDER BY count DESC
+            LIMIT 5
+        `).all() as Array<{ category: string; count: number }>;
+
+        // Acceptance rate by confidence level
+        const byConfidence = db.prepare(`
+            SELECT
+                confidence,
+                COUNT(*) as total,
+                SUM(accepted) as accepted
+            FROM ingestion_events
+            WHERE confidence IS NOT NULL
+            GROUP BY confidence
+        `).all() as Array<{ confidence: string; total: number; accepted: number }>;
+
+        const total = totals.total || 0;
+        const acceptedCount = totals.accepted_count || 0;
+
+        res.json({
+            totalImports: total,
+            acceptanceRate: total > 0 ? Math.round((acceptedCount / total) * 100) : 0,
+            byWeek,
+            topCorrected,
+            topChosen,
+            byConfidence
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

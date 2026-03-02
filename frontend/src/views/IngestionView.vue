@@ -809,7 +809,8 @@ async function importSelected() {
       filepath: i.filepath,
       category: i.selectedCategory,
       isFolder: i.isFolder,
-      suggestedCategory: i.suggestedCategory
+      suggestedCategory: i.suggestedCategory,
+      confidence: i.confidence
     }));
 
     const response = await ingestionApi.importItems(payload);

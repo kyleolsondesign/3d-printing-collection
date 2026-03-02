@@ -150,9 +150,24 @@ describe('API Client', () => {
             expect(mockApi.post).toHaveBeenCalledWith('/ingestion/import', { items });
         });
 
+        it('importItems sends items with confidence field', async () => {
+            const items = [
+                { filepath: '/tmp/model.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Toys', confidence: 'high' }
+            ];
+            await ingestionApi.importItems(items);
+            const mockApi = axios.create() as any;
+            expect(mockApi.post).toHaveBeenCalledWith('/ingestion/import', { items });
+        });
+
         it('getPreviewImageUrl constructs correct URL', () => {
             const url = ingestionApi.getPreviewImageUrl('/test/ingestion/preview.jpg');
             expect(url).toBe('/api/ingestion/preview-image?path=%2Ftest%2Fingestion%2Fpreview.jpg');
+        });
+
+        it('getImportStats calls GET /ingestion/stats', async () => {
+            await ingestionApi.getImportStats();
+            const mockApi = axios.create() as any;
+            expect(mockApi.get).toHaveBeenCalledWith('/ingestion/stats');
         });
     });
 
