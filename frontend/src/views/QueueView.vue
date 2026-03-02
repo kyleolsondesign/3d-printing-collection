@@ -97,17 +97,74 @@
       <p>Add models to your print queue from the Browse page.</p>
     </div>
 
-    <div v-else-if="sortedQueue.length === 0" class="empty">
+    <div v-else-if="sortedQueue.length === 0 && printingItems.length === 0" class="empty">
       <h3>No matches</h3>
       <p>No queue items match your search.</p>
     </div>
 
     <template v-else>
-    <!-- Currently Printing section header -->
-    <div v-if="printingItems.length > 0" class="printing-section-header">
-      <span class="printing-pulse-dot-lg"></span>
-      <span>Currently Printing</span>
-      <span class="printing-count-badge">{{ printingItems.length }}</span>
+    <!-- Currently Printing section — always visible, separate from normal queue -->
+    <div v-if="printingItems.length > 0" class="printing-section">
+      <div class="printing-section-header">
+        <span class="printing-pulse-dot-lg"></span>
+        <span>Currently Printing</span>
+        <span class="printing-count-badge">{{ printingItems.length }}</span>
+      </div>
+      <div class="printing-cards">
+        <div
+          v-for="item in printingItems"
+          :key="`p-${item.model_id}`"
+          class="printing-card"
+          @click="openModal(item)"
+        >
+          <div class="printing-card-image">
+            <img
+              v-if="item.primaryImage"
+              :src="modelsApi.getFileUrl(item.primaryImage)"
+              :alt="item.filename"
+              @error="onImageError"
+              loading="lazy"
+            />
+            <div v-else class="printing-card-no-image">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="printing-card-info">
+            <div class="printing-card-name" :title="item.filename">{{ item.filename }}</div>
+            <div class="printing-card-meta">
+              <span class="printing-card-category">{{ item.category }}</span>
+              <span v-if="item.file_count > 1" class="printing-card-files">{{ item.file_count }} files</span>
+            </div>
+          </div>
+          <div class="printing-card-actions" @click.stop>
+            <button
+              @click="markAsPrinted(item)"
+              class="printing-card-btn printing-card-btn--done"
+              title="Mark as printed (good)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+              </svg>
+              Done
+            </button>
+            <button
+              @click="stopPrinting(item.model_id)"
+              class="printing-card-btn printing-card-btn--stop"
+              title="Stop printing"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="6" width="12" height="12" rx="1"/>
+              </svg>
+              Stop
+            </button>
+          </div>
+        </div>
+      </div>
+      <div v-if="sortedQueue.length > 0" class="queue-section-divider">
+        <span>Next in Queue</span>
+      </div>
     </div>
 
     <!-- Grid View -->
@@ -400,13 +457,15 @@ const filteredQueue = computed(() => {
 });
 
 const printingItems = computed(() => filteredQueue.value.filter((item: any) => item.is_printing));
+const queuedItems = computed(() => filteredQueue.value.filter((item: any) => !item.is_printing));
 
 const sortedQueue = computed(() => {
   // Priority sort is the default from the API (already sorted by priority DESC, added_at ASC)
+  // Only includes non-printing items — printing items are shown in their own section above
   if (sortField.value === 'priority') {
-    return filteredQueue.value;
+    return queuedItems.value;
   }
-  const items = [...filteredQueue.value];
+  const items = [...queuedItems.value];
   items.sort((a, b) => {
     let aVal: string, bVal: string;
     switch (sortField.value) {
@@ -1438,11 +1497,15 @@ h2 {
 }
 
 /* Currently Printing section */
+.printing-section {
+  margin-bottom: 0.5rem;
+}
+
 .printing-section-header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0 0.625rem;
+  padding: 0.25rem 0 0.75rem;
   color: #f97316;
   font-weight: 600;
   font-size: 0.9rem;
@@ -1465,6 +1528,166 @@ h2 {
   font-weight: 700;
   padding: 1px 7px;
   border-radius: 10px;
+}
+
+/* Printing cards — horizontal list, one per row */
+.printing-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.printing-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background: rgba(249, 115, 22, 0.06);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-left: 3px solid #f97316;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.printing-card:hover {
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.printing-card-image {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+}
+
+.printing-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.printing-card-no-image {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.printing-card-no-image svg {
+  width: 24px;
+  height: 24px;
+  color: #f97316;
+  opacity: 0.5;
+}
+
+.printing-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.printing-card-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.printing-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.printing-card-category {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.printing-card-files {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.printing-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.printing-card-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.printing-card-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.printing-card-btn--done {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #16a34a;
+}
+
+.printing-card-btn--done:hover {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #16a34a;
+}
+
+.printing-card-btn--stop {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.3);
+  color: #f97316;
+}
+
+.printing-card-btn--stop:hover {
+  background: rgba(249, 115, 22, 0.2);
+  border-color: #f97316;
+}
+
+/* Divider between printing section and regular queue */
+.queue-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.queue-section-divider::before,
+.queue-section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
 }
 
 .model-card--printing {
