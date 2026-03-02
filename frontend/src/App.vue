@@ -103,16 +103,6 @@
             </span>
             <span class="nav-text">Designers</span>
           </router-link>
-          <router-link to="/ingestion" :class="{ active: $route.name === 'ingestion' }" data-label="Import" class="nav-item">
-            <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <path d="M7 10l5 5 5-5"/>
-                <path d="M12 15V3"/>
-              </svg>
-            </span>
-            <span class="nav-text">Import</span>
-          </router-link>
         </div>
 
         <!-- Push System to bottom -->
@@ -147,23 +137,33 @@
       <!-- Slim Topbar with Search -->
       <header class="topbar">
         <h2 class="page-title">{{ pageTitle }}</h2>
-        <div class="search-wrapper">
-          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="M21 21l-4.35-4.35"/>
-          </svg>
-          <input
-            v-model="searchInput"
-            @keyup.enter="handleSearch"
-            type="text"
-            :placeholder="searchPlaceholder"
-            class="search-input"
-          />
-          <button v-if="searchInput" @click="clearSearch" class="search-clear">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
+        <div class="topbar-right">
+          <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="M21 21l-4.35-4.35"/>
             </svg>
-          </button>
+            <input
+              v-model="searchInput"
+              @keyup.enter="handleSearch"
+              type="text"
+              :placeholder="searchPlaceholder"
+              class="search-input"
+            />
+            <button v-if="searchInput" @click="clearSearch" class="search-clear">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <router-link to="/ingestion" :class="['import-btn', { active: $route.name === 'ingestion' }]" title="Import models">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              <path d="M7 10l5 5 5-5"/>
+              <path d="M12 15V3"/>
+            </svg>
+            <span>Import</span>
+          </router-link>
         </div>
       </header>
 
@@ -629,6 +629,48 @@ const pageTitle = computed(() => {
   color: var(--text-tertiary);
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* ─── Topbar right group ──────────────────────────────────── */
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.import-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.import-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.import-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+.import-btn.active {
+  border-color: rgba(34, 211, 238, 0.2);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
 }
 
 /* ─── Search ──────────────────────────────────────────────── */
