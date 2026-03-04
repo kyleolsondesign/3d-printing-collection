@@ -255,7 +255,6 @@
               <svg
                 class="line-chart-svg"
                 :viewBox="`0 0 ${svgW} ${svgH}`"
-                preserveAspectRatio="none"
               >
                 <!-- 100% guideline -->
                 <line
@@ -468,7 +467,12 @@
               class="bar-row"
             >
               <div class="bar-label" :title="item.category">
-                {{ item.category }}
+                <router-link
+                  v-if="item.category"
+                  :to="{ name: 'browse', query: { category: item.category } }"
+                  class="stat-link"
+                >{{ item.category }}</router-link>
+                <span v-else>Uncategorized</span>
               </div>
               <div class="bar-track">
                 <div
@@ -493,7 +497,6 @@
             <svg
               class="line-chart-svg"
               :viewBox="`0 0 ${svgW} ${svgH}`"
-              preserveAspectRatio="none"
             >
               <!-- Grid lines -->
               <line
@@ -524,6 +527,23 @@
                 stroke-width="1.5"
                 stroke-dasharray="4 2"
                 stroke-linejoin="round"
+              />
+              <!-- Dots for each data point (visible when n=1) -->
+              <circle
+                v-for="(d, i) in printData"
+                :key="`total-dot-${i}`"
+                :cx="xPos(i)"
+                :cy="yPos(d.total)"
+                r="3"
+                fill="var(--accent-primary)"
+              />
+              <circle
+                v-for="(d, i) in printData"
+                :key="`good-dot-${i}`"
+                :cx="xPos(i)"
+                :cy="yPos(d.good_count)"
+                r="2.5"
+                fill="var(--success)"
               />
               <!-- X axis labels -->
               <text
@@ -592,7 +612,12 @@
               class="bar-row"
             >
               <div class="bar-label" :title="item.category">
-                {{ item.category || 'Uncategorized' }}
+                <router-link
+                  v-if="item.category"
+                  :to="{ name: 'browse', query: { category: item.category } }"
+                  class="stat-link"
+                >{{ item.category }}</router-link>
+                <span v-else>Uncategorized</span>
               </div>
               <div class="bar-track">
                 <div
@@ -615,7 +640,6 @@
             <svg
               class="line-chart-svg"
               :viewBox="`0 0 ${svgW} ${svgH}`"
-              preserveAspectRatio="none"
             >
               <line
                 v-for="tick in addedYTicks"
@@ -634,6 +658,14 @@
                 stroke="var(--accent-primary)"
                 stroke-width="2"
                 stroke-linejoin="round"
+              />
+              <circle
+                v-for="(d, i) in addedData"
+                :key="`added-dot-${i}`"
+                :cx="addedXPos(i)"
+                :cy="addedYPos(d.count)"
+                r="3"
+                fill="var(--accent-primary)"
               />
               <text
                 v-for="(item, i) in addedMonthLabels"
@@ -753,6 +785,17 @@
               <div class="stat-label">Avg Models/Designer</div>
             </div>
           </div>
+          <div class="stat-card">
+            <div class="stat-icon designer-fav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+              </svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ designerStats.favoritedDesigners.toLocaleString() }}</div>
+              <div class="stat-label">Favorited</div>
+            </div>
+          </div>
         </div>
 
         <div class="charts-grid">
@@ -765,7 +808,9 @@
                 :key="item.name"
                 class="bar-row"
               >
-                <div class="bar-label" :title="item.name">{{ item.name }}</div>
+                <div class="bar-label" :title="item.name">
+                  <router-link :to="`/designers/${item.id}`" class="stat-link">{{ item.name }}</router-link>
+                </div>
                 <div class="bar-track">
                   <div
                     class="bar-fill purple"
@@ -786,7 +831,9 @@
                 :key="item.name"
                 class="bar-row"
               >
-                <div class="bar-label" :title="item.name">{{ item.name }}</div>
+                <div class="bar-label" :title="item.name">
+                  <router-link :to="`/designers/${item.id}`" class="stat-link">{{ item.name }}</router-link>
+                </div>
                 <div class="bar-track">
                   <div
                     class="bar-fill accent"
@@ -808,7 +855,9 @@
                 :key="item.name"
                 class="bar-row designer-quality-row"
               >
-                <div class="bar-label" :title="item.name">{{ item.name }}</div>
+                <div class="bar-label" :title="item.name">
+                  <router-link :to="`/designers/${item.id}`" class="stat-link">{{ item.name }}</router-link>
+                </div>
                 <div class="bar-track">
                   <div
                     class="bar-fill"
@@ -851,10 +900,11 @@ interface DetailedStats {
 
 interface DesignerStats {
   totalDesigners: number;
+  favoritedDesigners: number;
   modelsWithDesigner: number;
-  topByModelCount: Array<{ name: string; model_count: number }>;
-  topByPrintCount: Array<{ name: string; print_count: number }>;
-  printQuality: Array<{ name: string; good_count: number; bad_count: number; total_prints: number }>;
+  topByModelCount: Array<{ id: number; name: string; model_count: number }>;
+  topByPrintCount: Array<{ id: number; name: string; print_count: number }>;
+  printQuality: Array<{ id: number; name: string; good_count: number; bad_count: number; total_prints: number }>;
 }
 
 interface ImportStats {
@@ -1349,6 +1399,15 @@ const importWeekLabels = computed(
   text-align: right;
 }
 
+.stat-link {
+  color: inherit;
+  text-decoration: none;
+}
+.stat-link:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
 .bar-track {
   height: 10px;
   background: var(--bg-elevated);
@@ -1462,7 +1521,7 @@ const importWeekLabels = computed(
 
 .line-chart-svg {
   width: 100%;
-  height: 140px;
+  aspect-ratio: 560 / 140;
   overflow: visible;
 }
 
