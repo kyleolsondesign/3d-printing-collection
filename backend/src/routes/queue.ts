@@ -52,11 +52,10 @@ router.get('/', (req, res) => {
                    models.date_added, models.date_created,
                    CASE WHEN cp.model_id IS NOT NULL THEN 1 ELSE 0 END as is_printing,
                    cp.started_at as printing_started_at,
-                   pm.rating as printRating
+                   (SELECT rating FROM printed_models WHERE model_id = print_queue.model_id ORDER BY printed_at DESC LIMIT 1) as printRating
             FROM print_queue
             JOIN models ON print_queue.model_id = models.id AND models.deleted_at IS NULL
             LEFT JOIN currently_printing cp ON cp.model_id = print_queue.model_id
-            LEFT JOIN printed_models pm ON pm.model_id = print_queue.model_id
         `).all() as any[];
 
         // Printing-only items not in the queue
@@ -66,10 +65,9 @@ router.get('/', (req, res) => {
                    models.filename, models.filepath, models.category, models.file_count,
                    models.date_added, models.date_created,
                    1 as is_printing, cp.started_at as printing_started_at,
-                   pm.rating as printRating
+                   (SELECT rating FROM printed_models WHERE model_id = cp.model_id ORDER BY printed_at DESC LIMIT 1) as printRating
             FROM currently_printing cp
             JOIN models ON cp.model_id = models.id AND models.deleted_at IS NULL
-            LEFT JOIN printed_models pm ON pm.model_id = cp.model_id
             WHERE NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = cp.model_id)
         `).all() as any[];
 
