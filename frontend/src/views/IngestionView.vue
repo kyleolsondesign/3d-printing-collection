@@ -408,6 +408,7 @@ interface IngestionItem {
   confidence: 'high' | 'medium' | 'low';
   selectedCategory: string;
   debugScores: ScoreDebugEntry[];
+  designer: string | null;
 }
 
 interface ImportDetail {
@@ -810,7 +811,8 @@ async function importSelected() {
       category: i.selectedCategory,
       isFolder: i.isFolder,
       suggestedCategory: i.suggestedCategory,
-      confidence: i.confidence
+      confidence: i.confidence,
+      designer: i.designer
     }));
 
     const response = await ingestionApi.importItems(payload);

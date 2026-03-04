@@ -18,6 +18,10 @@ router.get('/', (req, res) => {
         const sort = req.query.sort as string || 'date_added';
         const order = req.query.order as string || 'desc';
         const includeDeleted = req.query.includeDeleted === 'true';
+        const filterPrinted = req.query.filterPrinted as string || '';
+        const filterQueued = req.query.filterQueued as string || '';
+        const filterFavorites = req.query.filterFavorites as string || '';
+        // Legacy support
         const hidePrinted = req.query.hidePrinted === 'true';
         const hideQueued = req.query.hideQueued === 'true';
         const offset = (page - 1) * limit;
@@ -36,12 +40,28 @@ router.get('/', (req, res) => {
             params.push(category);
         }
 
-        if (hidePrinted) {
+        // 3-state filters (new)
+        if (filterPrinted === 'hide') {
+            conditions.push('NOT EXISTS (SELECT 1 FROM printed_models WHERE printed_models.model_id = models.id)');
+        } else if (filterPrinted === 'only') {
+            conditions.push('EXISTS (SELECT 1 FROM printed_models WHERE printed_models.model_id = models.id)');
+        } else if (hidePrinted) {
+            // Legacy boolean fallback
             conditions.push('NOT EXISTS (SELECT 1 FROM printed_models WHERE printed_models.model_id = models.id)');
         }
 
-        if (hideQueued) {
+        if (filterQueued === 'hide') {
             conditions.push('NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)');
+        } else if (filterQueued === 'only') {
+            conditions.push('EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)');
+        } else if (hideQueued) {
+            conditions.push('NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)');
+        }
+
+        if (filterFavorites === 'hide') {
+            conditions.push('NOT EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)');
+        } else if (filterFavorites === 'only') {
+            conditions.push('EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)');
         }
 
         if (conditions.length > 0) {
@@ -100,11 +120,24 @@ router.get('/', (req, res) => {
             countConditions.push('category = ?');
             countParams.push(category);
         }
-        if (hidePrinted) {
+        if (filterPrinted === 'hide') {
+            countConditions.push('NOT EXISTS (SELECT 1 FROM printed_models WHERE printed_models.model_id = models.id)');
+        } else if (filterPrinted === 'only') {
+            countConditions.push('EXISTS (SELECT 1 FROM printed_models WHERE printed_models.model_id = models.id)');
+        } else if (hidePrinted) {
             countConditions.push('NOT EXISTS (SELECT 1 FROM printed_models WHERE printed_models.model_id = models.id)');
         }
-        if (hideQueued) {
+        if (filterQueued === 'hide') {
             countConditions.push('NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)');
+        } else if (filterQueued === 'only') {
+            countConditions.push('EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)');
+        } else if (hideQueued) {
+            countConditions.push('NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)');
+        }
+        if (filterFavorites === 'hide') {
+            countConditions.push('NOT EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)');
+        } else if (filterFavorites === 'only') {
+            countConditions.push('EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)');
         }
         if (countConditions.length > 0) {
             countQuery += ' WHERE ' + countConditions.join(' AND ');

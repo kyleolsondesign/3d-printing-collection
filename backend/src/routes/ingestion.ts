@@ -106,6 +106,7 @@ interface IngestionItem {
     confidence: 'high' | 'medium' | 'low';
     imageFile: string | null;
     debugScores: ScoreDebugEntry[];
+    designer: string | null;
 }
 
 interface ScannedItem {
@@ -740,7 +741,8 @@ router.get('/scan', async (req, res) => {
                 imageFile: item.imageFile,
                 suggestedCategory: fuzzy.category,
                 confidence: fuzzy.confidence,
-                debugScores: fuzzy.debugScores
+                debugScores: fuzzy.debugScores,
+                designer: item.designer
             };
         });
 
@@ -1050,6 +1052,37 @@ router.post('/import', async (req, res) => {
                 }
 
                 const model = await scanner.scanSingleFolder(targetFolderPath, modelDir);
+
+                // Assign designer if detected
+                if (model?.modelId) {
+                    let designerName: string | null = item.designer || null;
+
+                    // Fallback: check model_metadata (just extracted by scanSingleFolder)
+                    if (!designerName) {
+                        const mm = db.prepare('SELECT designer FROM model_metadata WHERE model_id = ?').get(model.modelId) as { designer: string | null } | undefined;
+                        if (mm?.designer) designerName = mm.designer;
+                    }
+
+                    if (designerName) {
+                        let designer = db.prepare('SELECT * FROM designers WHERE LOWER(name) = LOWER(?)').get(designerName) as any;
+                        if (!designer) {
+                            const result = db.prepare('INSERT OR IGNORE INTO designers (name) VALUES (?)').run(designerName);
+                            designer = db.prepare('SELECT * FROM designers WHERE id = ?').get(result.lastInsertRowid) as any;
+                            if (!designer) {
+                                designer = db.prepare('SELECT * FROM designers WHERE LOWER(name) = LOWER(?)').get(designerName) as any;
+                            }
+                        }
+                        if (designer) {
+                            db.prepare('UPDATE models SET designer_id = ? WHERE id = ?').run(designer.id, model.modelId);
+                            // Update profile URL from metadata if available
+                            const mm = db.prepare('SELECT designer_url FROM model_metadata WHERE model_id = ?').get(model.modelId) as { designer_url: string | null } | undefined;
+                            if (mm?.designer_url && !designer.profile_url) {
+                                db.prepare('UPDATE designers SET profile_url = ? WHERE id = ?').run(mm.designer_url, designer.id);
+                            }
+                        }
+                    }
+                }
+
                 results.push({ filepath, success: true, model });
 
                 // Record name tokens → category association for future hint lookups

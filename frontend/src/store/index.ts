@@ -115,11 +115,9 @@ export const useAppStore = defineStore('app', () => {
             if (model) {
                 model.isPrinted = response.data.printed;
                 model.printRating = response.data.rating || null;
+                model.isPrinting = !!response.data.printing;
                 if (response.data.removedFromQueue) {
                     model.isQueued = false;
-                }
-                if (response.data.printed) {
-                    model.isPrinting = false;
                 }
             }
         } catch (error) {

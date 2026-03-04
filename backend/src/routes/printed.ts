@@ -69,15 +69,56 @@ async function updateModelFinderTags(modelId: number): Promise<void> {
     }
 }
 
-// Get all printed models
+// Get printed models with pagination
 router.get('/', (req, res) => {
     try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const sort = req.query.sort as string || 'printed_at';
+        const order = req.query.order as string || 'desc';
+        const filterFavorites = req.query.filterFavorites as string || '';
+        const filterQueued = req.query.filterQueued as string || '';
+        const offset = (page - 1) * limit;
+
+        const validSorts: Record<string, string> = {
+            printed_at: 'printed_models.printed_at',
+            date_added: 'models.date_added',
+            date_created: 'models.date_created',
+            name: 'models.filename',
+            category: 'models.category'
+        };
+        const sortCol = validSorts[sort] || 'printed_models.printed_at';
+        const sortDir = order === 'asc' ? 'ASC' : 'DESC';
+
+        let conditions = '';
+        const params: any[] = [];
+
+        if (filterFavorites === 'only') {
+            conditions += ' AND EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)';
+        } else if (filterFavorites === 'hide') {
+            conditions += ' AND NOT EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)';
+        }
+        if (filterQueued === 'only') {
+            conditions += ' AND EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)';
+        } else if (filterQueued === 'hide') {
+            conditions += ' AND NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = models.id)';
+        }
+
+        const total = (db.prepare(`
+            SELECT COUNT(*) as count
+            FROM printed_models
+            JOIN models ON printed_models.model_id = models.id
+            WHERE 1=1${conditions}
+        `).get(...params) as { count: number }).count;
+
         const printed = db.prepare(`
             SELECT printed_models.*, models.*
             FROM printed_models
             JOIN models ON printed_models.model_id = models.id
-            ORDER BY printed_models.printed_at DESC, models.date_added DESC
-        `).all() as any[];
+            WHERE 1=1${conditions}
+            ORDER BY ${sortCol} ${sortDir}, models.date_added DESC
+            LIMIT ? OFFSET ?
+        `).all(...params, limit, offset) as any[];
 
         const printedWithImages = printed.map(item => {
             const primaryImage = db.prepare(`
@@ -89,7 +130,15 @@ router.get('/', (req, res) => {
             return { ...item, primaryImage: primaryImage?.filepath || null };
         });
 
-        res.json({ printed: printedWithImages });
+        res.json({
+            printed: printedWithImages,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });
@@ -287,7 +336,7 @@ router.post('/toggle', async (req, res) => {
     }
 });
 
-// Cycle printed status: not printed → good → bad → not printed
+// Cycle printed status: not printed → printing → good → bad → not printed
 router.post('/cycle', async (req, res) => {
     try {
         const { model_id } = req.body;
@@ -297,9 +346,15 @@ router.post('/cycle', async (req, res) => {
         }
 
         const existing = db.prepare('SELECT * FROM printed_models WHERE model_id = ?').get(model_id) as any;
+        const isPrinting = db.prepare('SELECT id FROM currently_printing WHERE model_id = ?').get(model_id);
 
-        if (!existing) {
-            // Not printed → good
+        if (!existing && !isPrinting) {
+            // Not printed → printing
+            db.prepare('INSERT OR IGNORE INTO currently_printing (model_id) VALUES (?)').run(model_id);
+            await updateModelFinderTags(model_id);
+            res.json({ printed: false, rating: null, printing: true });
+        } else if (!existing && isPrinting) {
+            // Printing → good
             db.prepare('INSERT INTO printed_models (model_id, rating) VALUES (?, ?)').run(model_id, 'good');
             const wasQueued = db.prepare('SELECT id FROM print_queue WHERE model_id = ?').get(model_id);
             if (wasQueued) {
@@ -308,7 +363,7 @@ router.post('/cycle', async (req, res) => {
             db.prepare('DELETE FROM currently_printing WHERE model_id = ?').run(model_id);
             await updateModelFinderTags(model_id);
             res.json({ printed: true, rating: 'good', removedFromQueue: !!wasQueued });
-        } else if (existing.rating === 'good') {
+        } else if (existing && existing.rating === 'good') {
             // Good → bad
             db.prepare('UPDATE printed_models SET rating = ? WHERE model_id = ?').run('bad', model_id);
             await updateModelFinderTags(model_id);
@@ -316,6 +371,7 @@ router.post('/cycle', async (req, res) => {
         } else {
             // Bad (or null) → not printed
             db.prepare('DELETE FROM printed_models WHERE model_id = ?').run(model_id);
+            db.prepare('DELETE FROM currently_printing WHERE model_id = ?').run(model_id);
             await updateModelFinderTags(model_id);
             res.json({ printed: false, rating: null });
         }

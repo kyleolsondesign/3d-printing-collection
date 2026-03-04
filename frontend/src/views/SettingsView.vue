@@ -178,6 +178,36 @@
       <div class="section-header">
         <div class="section-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+            <path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Designer Sync</h3>
+          <p class="section-description">Detect designers from Paid folder structure and PDF metadata. Runs automatically during scans.</p>
+        </div>
+      </div>
+      <div class="designer-sync-row">
+        <button
+          @click="syncDesigners"
+          :disabled="designerSyncing || scanStatus.scanning"
+          class="btn-secondary"
+        >
+          <svg :class="{ spin: designerSyncing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+          {{ designerSyncing ? 'Syncing...' : 'Sync Designers' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="section-header">
+        <div class="section-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
           </svg>
         </div>
@@ -285,7 +315,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { systemApi, type ScanMode, type WatcherStatus } from '../services/api';
+import { systemApi, designersApi, type ScanMode, type WatcherStatus } from '../services/api';
 
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');
 const scanMode = ref<ScanMode>('full_sync');
@@ -315,6 +345,8 @@ const scanStatus = ref({
 });
 const watcherStatus = ref<WatcherStatus>({ enabled: false, active: false, lastTriggered: null, pendingChanges: 0 });
 const watcherToggling = ref(false);
+const designerSyncing = ref(false);
+let designerSyncPollTimer: ReturnType<typeof setInterval> | null = null;
 
 const stats = ref({
   totalModels: 0,
@@ -368,6 +400,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopTimer();
+  if (designerSyncPollTimer) { clearInterval(designerSyncPollTimer); designerSyncPollTimer = null; }
 });
 
 async function loadConfig() {
@@ -473,6 +506,29 @@ async function toggleWatcher() {
     showMessage('Failed to toggle file watcher', 'error');
   } finally {
     watcherToggling.value = false;
+  }
+}
+
+async function syncDesigners() {
+  designerSyncing.value = true;
+  try {
+    await designersApi.sync();
+    designerSyncPollTimer = setInterval(async () => {
+      try {
+        const res = await designersApi.syncStatus();
+        if (!res.data.active) {
+          if (designerSyncPollTimer) { clearInterval(designerSyncPollTimer); designerSyncPollTimer = null; }
+          designerSyncing.value = false;
+          showMessage(`Designer sync: ${res.data.created} new, ${res.data.linked} linked`, 'success');
+        }
+      } catch {
+        if (designerSyncPollTimer) { clearInterval(designerSyncPollTimer); designerSyncPollTimer = null; }
+        designerSyncing.value = false;
+      }
+    }, 2000);
+  } catch (error) {
+    showMessage('Failed to sync designers', 'error');
+    designerSyncing.value = false;
   }
 }
 
@@ -1067,5 +1123,11 @@ h2 {
   font-size: 0.8rem;
   color: var(--text-tertiary);
   line-height: 1.5;
+}
+
+.designer-sync-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 </style>

@@ -3,9 +3,14 @@
     <div class="header">
       <div class="header-left">
         <h2>Printed</h2>
-        <span class="count-badge" v-if="printed.length > 0">{{ printed.length }}</span>
+        <span class="count-badge" v-if="totalCount > 0">{{ totalCount }}</span>
       </div>
-      <div class="header-actions" v-if="printed.length > 0">
+    </div>
+    <p class="subtitle">Your printing history and quality ratings</p>
+
+    <!-- View Controls -->
+    <div v-if="printed.length > 0 || hasActiveFilters" class="view-controls">
+      <div class="controls-left">
         <div class="sort-controls">
           <select v-model="sortField" class="sort-select">
             <option value="printed_at">Print Date</option>
@@ -23,32 +28,53 @@
             </svg>
           </button>
         </div>
-        <div class="view-toggle">
+        <div class="filter-toggles">
           <button
-            @click="viewMode = 'grid'"
-            :class="['view-btn', { active: viewMode === 'grid' }]"
-            title="Grid view"
+            @click="filterFavorites = cycleFilter(filterFavorites)"
+            :class="['filter-toggle-btn', { active: filterFavorites, 'filter-hide': filterFavorites === 'hide' }]"
+            :title="filterFavorites === 'only' ? 'Only favorites (click to hide)' : filterFavorites === 'hide' ? 'Hiding favorites (click to clear)' : 'Click to show only favorites'"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7" rx="1"/>
-              <rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/>
-              <rect x="14" y="14" width="7" height="7" rx="1"/>
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
             </svg>
+            <span>{{ filterLabel(filterFavorites, 'Favorites') }}</span>
           </button>
           <button
-            @click="viewMode = 'table'"
-            :class="['view-btn', { active: viewMode === 'table' }]"
-            title="Table view"
+            @click="filterQueued = cycleFilter(filterQueued)"
+            :class="['filter-toggle-btn', { active: filterQueued, 'filter-hide': filterQueued === 'hide' }]"
+            :title="filterQueued === 'only' ? 'Only queued (click to hide)' : filterQueued === 'hide' ? 'Hiding queued (click to clear)' : 'Click to show only queued'"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
             </svg>
+            <span>{{ filterLabel(filterQueued, 'Queued') }}</span>
           </button>
         </div>
       </div>
+      <div class="view-toggle">
+        <button
+          @click="viewMode = 'grid'"
+          :class="['view-btn', { active: viewMode === 'grid' }]"
+          title="Grid view"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </button>
+        <button
+          @click="viewMode = 'table'"
+          :class="['view-btn', { active: viewMode === 'table' }]"
+          title="Table view"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+          </svg>
+        </button>
+      </div>
     </div>
-    <p class="subtitle">Your printing history and quality ratings</p>
 
     <div v-if="loading" class="loading">
       <div class="loading-spinner"></div>
@@ -274,6 +300,14 @@
       </table>
     </div>
 
+    <!-- Infinite scroll sentinel -->
+    <div v-if="!isSearchActive && hasMore" ref="loadMoreSentinel" class="load-more-sentinel">
+      <div v-if="loadingMore" class="loading-more">
+        <div class="loading-spinner small"></div>
+        <span>Loading more...</span>
+      </div>
+    </div>
+
     <!-- Model Details Modal -->
     <ModelDetailsModal
       v-if="selectedModelId"
@@ -287,7 +321,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { printedApi, modelsApi, systemApi } from '../services/api';
 import { useAppStore } from '../store';
@@ -298,32 +332,48 @@ const route = useRoute();
 const router = useRouter();
 const printed = ref<any[]>([]);
 const loading = ref(true);
+const loadingMore = ref(false);
 const selectedModelId = ref<number | null>(null);
 const viewMode = ref<'grid' | 'table'>('grid');
 const sortField = ref('printed_at');
 const sortOrder = ref<'asc' | 'desc'>('desc');
 
-const filteredPrinted = computed(() => {
-  const q = store.globalSearchQuery.toLowerCase();
-  if (!q) return printed.value;
-  return printed.value.filter((item: any) => item.filename?.toLowerCase().includes(q));
-});
+// Pagination state
+const currentPage = ref(1);
+const totalCount = ref(0);
+const pageSize = 50;
+const hasMore = computed(() => printed.value.length < totalCount.value);
+
+// Intersection observer
+const loadMoreSentinel = ref<HTMLElement | null>(null);
+let observer: IntersectionObserver | null = null;
+
+// 3-state filters
+type FilterState = '' | 'only' | 'hide';
+const filterFavorites = ref<FilterState>('');
+const filterQueued = ref<FilterState>('');
+const hasActiveFilters = computed(() => filterFavorites.value || filterQueued.value);
+
+const isSearchActive = computed(() => !!store.globalSearchQuery);
+
+function cycleFilter(current: FilterState): FilterState {
+  if (current === '') return 'only';
+  if (current === 'only') return 'hide';
+  return '';
+}
+
+function filterLabel(state: FilterState, name: string): string {
+  if (state === 'only') return `Only ${name}`;
+  if (state === 'hide') return `Hide ${name}`;
+  return name;
+}
 
 const sortedPrinted = computed(() => {
-  const items = [...filteredPrinted.value];
-  items.sort((a, b) => {
-    let aVal: string, bVal: string;
-    switch (sortField.value) {
-      case 'name': aVal = (a.filename || '').toLowerCase(); bVal = (b.filename || '').toLowerCase(); break;
-      case 'category': aVal = (a.category || '').toLowerCase(); bVal = (b.category || '').toLowerCase(); break;
-      case 'date_added': aVal = a.date_added || ''; bVal = b.date_added || ''; break;
-      case 'date_created': aVal = a.date_created || ''; bVal = b.date_created || ''; break;
-      case 'printed_at': aVal = a.printed_at || ''; bVal = b.printed_at || ''; break;
-      default: return 0;
-    }
-    const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-    return sortOrder.value === 'asc' ? cmp : -cmp;
-  });
+  let items = printed.value;
+  const q = store.globalSearchQuery.toLowerCase();
+  if (q) {
+    items = items.filter((item: any) => item.filename?.toLowerCase().includes(q));
+  }
   return items;
 });
 
@@ -353,27 +403,101 @@ function updateQueryParams() {
   router.replace({ query });
 }
 
-watch([viewMode, sortField, sortOrder, selectedModelId], () => {
+watch([viewMode, selectedModelId], () => {
   updateQueryParams();
+});
+
+// Reload from page 1 when sort or filters change
+watch([sortField, sortOrder, filterFavorites, filterQueued], () => {
+  updateQueryParams();
+  resetAndLoad();
 });
 
 onMounted(async () => {
   initFromQueryParams();
   await loadPrinted();
+  await nextTick();
+  setupObserver();
 });
 
 onUnmounted(() => {
   if (store.globalSearchQuery) store.clearGlobalSearch();
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
 });
+
+function setupObserver() {
+  if (observer) observer.disconnect();
+  observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0];
+      if (entry.isIntersecting && hasMore.value && !loading.value && !loadingMore.value && !isSearchActive.value) {
+        loadMore();
+      }
+    },
+    { rootMargin: '200px' }
+  );
+  if (loadMoreSentinel.value) {
+    observer.observe(loadMoreSentinel.value);
+  }
+}
+
+// Watch for sentinel element appearing in DOM
+watch(loadMoreSentinel, (el) => {
+  if (el && observer) {
+    observer.observe(el);
+  }
+});
+
+async function resetAndLoad() {
+  currentPage.value = 1;
+  printed.value = [];
+  totalCount.value = 0;
+  loading.value = true;
+  await loadPrinted();
+}
 
 async function loadPrinted() {
   try {
-    const response = await printedApi.getAll();
+    const response = await printedApi.getAll({
+      page: currentPage.value,
+      limit: pageSize,
+      sort: sortField.value,
+      order: sortOrder.value,
+      filterFavorites: filterFavorites.value || undefined,
+      filterQueued: filterQueued.value || undefined
+    });
     printed.value = response.data.printed;
+    totalCount.value = response.data.pagination.total;
   } catch (error) {
     console.error('Failed to load printed models:', error);
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadMore() {
+  if (loadingMore.value || !hasMore.value || isSearchActive.value) return;
+  loadingMore.value = true;
+  try {
+    const nextPage = currentPage.value + 1;
+    const response = await printedApi.getAll({
+      page: nextPage,
+      limit: pageSize,
+      sort: sortField.value,
+      order: sortOrder.value,
+      filterFavorites: filterFavorites.value || undefined,
+      filterQueued: filterQueued.value || undefined
+    });
+    printed.value = [...printed.value, ...response.data.printed];
+    currentPage.value = nextPage;
+    totalCount.value = response.data.pagination.total;
+  } catch (error) {
+    console.error('Failed to load more printed models:', error);
+  } finally {
+    loadingMore.value = false;
   }
 }
 
@@ -403,7 +527,7 @@ function onModelLinkClick(event: MouseEvent) {
 }
 
 function handleModelUpdated() {
-  loadPrinted();
+  resetAndLoad();
 }
 
 function onImageError(e: Event) {
@@ -484,10 +608,55 @@ h2 {
   margin-top: -0.5rem;
 }
 
-.header-actions {
+/* View Controls */
+.view-controls {
   display: flex;
-  gap: 0.75rem;
+  justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.controls-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.filter-toggles {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.filter-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+.filter-toggle-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+.filter-toggle-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-secondary);
+}
+.filter-toggle-btn.active {
+  background: var(--accent-primary-dim);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.filter-toggle-btn.filter-hide {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* Sort controls */
@@ -1041,6 +1210,28 @@ h2 {
 .empty p {
   color: var(--text-secondary);
   font-size: 0.95rem;
+}
+
+/* Load more sentinel */
+.load-more-sentinel {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0;
+  min-height: 1px;
+}
+
+.loading-more {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.loading-spinner.small {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
 }
 
 /* Responsive */

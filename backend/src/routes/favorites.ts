@@ -7,9 +7,12 @@ const router = express.Router();
 router.get('/', (req, res) => {
     try {
         const favorites = db.prepare(`
-            SELECT favorites.*, models.*
+            SELECT favorites.id, favorites.model_id, favorites.notes, favorites.added_at,
+                   models.filename, models.filepath, models.category, models.file_count,
+                   models.date_added, models.date_created
             FROM favorites
             JOIN models ON favorites.model_id = models.id
+            WHERE models.deleted_at IS NULL
             ORDER BY favorites.added_at DESC
         `).all() as any[];
 

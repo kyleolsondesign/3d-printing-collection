@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
-import { modelsApi, printedApi, favoritesApi, queueApi, systemApi, ingestionApi } from '../services/api';
+import { modelsApi, printedApi, favoritesApi, queueApi, systemApi, ingestionApi, designersApi } from '../services/api';
 
 vi.mock('axios', () => {
     const mockAxios = {
@@ -168,6 +168,38 @@ describe('API Client', () => {
             await ingestionApi.getImportStats();
             const mockApi = axios.create() as any;
             expect(mockApi.get).toHaveBeenCalledWith('/ingestion/stats');
+        });
+    });
+
+    describe('designersApi', () => {
+        it('getAll calls GET /designers without filter', async () => {
+            await designersApi.getAll();
+            const mockApi = axios.create() as any;
+            expect(mockApi.get).toHaveBeenCalledWith('/designers', { params: { filter: undefined } });
+        });
+
+        it('getAll passes paid filter', async () => {
+            await designersApi.getAll('paid');
+            const mockApi = axios.create() as any;
+            expect(mockApi.get).toHaveBeenCalledWith('/designers', { params: { filter: 'paid' } });
+        });
+
+        it('getAll passes free filter', async () => {
+            await designersApi.getAll('free');
+            const mockApi = axios.create() as any;
+            expect(mockApi.get).toHaveBeenCalledWith('/designers', { params: { filter: 'free' } });
+        });
+
+        it('syncStatus calls GET /designers/sync/status', async () => {
+            await designersApi.syncStatus();
+            const mockApi = axios.create() as any;
+            expect(mockApi.get).toHaveBeenCalledWith('/designers/sync/status');
+        });
+
+        it('sync calls POST /designers/sync', async () => {
+            await designersApi.sync();
+            const mockApi = axios.create() as any;
+            expect(mockApi.post).toHaveBeenCalledWith('/designers/sync');
         });
     });
 

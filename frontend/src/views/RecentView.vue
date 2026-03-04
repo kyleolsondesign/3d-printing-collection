@@ -5,33 +5,68 @@
         <h2>Recently Viewed</h2>
         <span class="count-badge" v-if="recentModels.length > 0">{{ recentModels.length }}</span>
       </div>
-      <div class="header-actions" v-if="recentModels.length > 0">
-        <div class="view-toggle">
-          <button
-            @click="viewMode = 'grid'"
-            :class="['view-btn', { active: viewMode === 'grid' }]"
-            title="Grid view"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7" rx="1"/>
-              <rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/>
-              <rect x="14" y="14" width="7" height="7" rx="1"/>
-            </svg>
-          </button>
-          <button
-            @click="viewMode = 'table'"
-            :class="['view-btn', { active: viewMode === 'table' }]"
-            title="Table view"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-            </svg>
-          </button>
-        </div>
-      </div>
     </div>
     <p class="subtitle">Models you've recently opened</p>
+
+    <!-- View Controls -->
+    <div v-if="recentModels.length > 0 || hasActiveFilters" class="view-controls">
+      <div class="filter-toggles">
+        <button
+          @click="filterFavorites = cycleFilter(filterFavorites)"
+          :class="['filter-toggle-btn', { active: filterFavorites, 'filter-hide': filterFavorites === 'hide' }]"
+          :title="filterFavorites === 'only' ? 'Only favorites (click to hide)' : filterFavorites === 'hide' ? 'Hiding favorites (click to clear)' : 'Click to show only favorites'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+          </svg>
+          <span>{{ filterLabel(filterFavorites, 'Favorites') }}</span>
+        </button>
+        <button
+          @click="filterQueued = cycleFilter(filterQueued)"
+          :class="['filter-toggle-btn', { active: filterQueued, 'filter-hide': filterQueued === 'hide' }]"
+          :title="filterQueued === 'only' ? 'Only queued (click to hide)' : filterQueued === 'hide' ? 'Hiding queued (click to clear)' : 'Click to show only queued'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+          </svg>
+          <span>{{ filterLabel(filterQueued, 'Queued') }}</span>
+        </button>
+        <button
+          @click="filterPrinted = cycleFilter(filterPrinted)"
+          :class="['filter-toggle-btn', { active: filterPrinted, 'filter-hide': filterPrinted === 'hide' }]"
+          :title="filterPrinted === 'only' ? 'Only printed (click to hide)' : filterPrinted === 'hide' ? 'Hiding printed (click to clear)' : 'Click to show only printed'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 12l2 2 4-4"/>
+            <circle cx="12" cy="12" r="10"/>
+          </svg>
+          <span>{{ filterLabel(filterPrinted, 'Printed') }}</span>
+        </button>
+      </div>
+      <div class="view-toggle">
+        <button
+          @click="viewMode = 'grid'"
+          :class="['view-btn', { active: viewMode === 'grid' }]"
+          title="Grid view"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </button>
+        <button
+          @click="viewMode = 'table'"
+          :class="['view-btn', { active: viewMode === 'table' }]"
+          title="Table view"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+          </svg>
+        </button>
+      </div>
+    </div>
 
     <div v-if="loading" class="loading">
       <div class="loading-spinner"></div>
@@ -190,10 +225,38 @@ const loading = ref(true);
 const selectedModelId = ref<number | null>(null);
 const viewMode = ref<'grid' | 'table'>('grid');
 
+// 3-state filters
+type FilterState = '' | 'only' | 'hide';
+const filterPrinted = ref<FilterState>('');
+const filterQueued = ref<FilterState>('');
+const filterFavorites = ref<FilterState>('');
+const hasActiveFilters = computed(() => filterPrinted.value || filterQueued.value || filterFavorites.value);
+
+function cycleFilter(current: FilterState): FilterState {
+  if (current === '') return 'only';
+  if (current === 'only') return 'hide';
+  return '';
+}
+
+function filterLabel(state: FilterState, name: string): string {
+  if (state === 'only') return `Only ${name}`;
+  if (state === 'hide') return `Hide ${name}`;
+  return name;
+}
+
 const filteredModels = computed(() => {
+  let items = recentModels.value;
   const q = store.globalSearchQuery.toLowerCase();
-  if (!q) return recentModels.value;
-  return recentModels.value.filter((m: any) => m.filename?.toLowerCase().includes(q));
+  if (q) {
+    items = items.filter((m: any) => m.filename?.toLowerCase().includes(q));
+  }
+  if (filterFavorites.value === 'only') items = items.filter((m: any) => m.isFavorite);
+  if (filterFavorites.value === 'hide') items = items.filter((m: any) => !m.isFavorite);
+  if (filterQueued.value === 'only') items = items.filter((m: any) => m.isQueued);
+  if (filterQueued.value === 'hide') items = items.filter((m: any) => !m.isQueued);
+  if (filterPrinted.value === 'only') items = items.filter((m: any) => m.isPrinted);
+  if (filterPrinted.value === 'hide') items = items.filter((m: any) => !m.isPrinted);
+  return items;
 });
 
 function initFromQueryParams() {
@@ -330,10 +393,48 @@ h2 {
   margin-top: -0.5rem;
 }
 
-.header-actions {
+/* View Controls */
+.view-controls {
   display: flex;
-  gap: 0.75rem;
+  justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.filter-toggles {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.filter-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+.filter-toggle-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+.filter-toggle-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-secondary);
+}
+.filter-toggle-btn.active {
+  background: var(--accent-primary-dim);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.filter-toggle-btn.filter-hide {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* View toggle */

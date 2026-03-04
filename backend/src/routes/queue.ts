@@ -44,16 +44,19 @@ async function updateModelFinderTags(modelId: number): Promise<void> {
 // Get print queue (includes currently printing models at the top)
 router.get('/', (req, res) => {
     try {
-        // Queue items with is_printing flag
+        // Queue items with is_printing flag and print rating
         const queueItems = db.prepare(`
             SELECT print_queue.id, print_queue.model_id, print_queue.added_at,
                    print_queue.priority, print_queue.notes, print_queue.estimated_time_hours,
                    models.filename, models.filepath, models.category, models.file_count,
+                   models.date_added, models.date_created,
                    CASE WHEN cp.model_id IS NOT NULL THEN 1 ELSE 0 END as is_printing,
-                   cp.started_at as printing_started_at
+                   cp.started_at as printing_started_at,
+                   pm.rating as printRating
             FROM print_queue
             JOIN models ON print_queue.model_id = models.id AND models.deleted_at IS NULL
             LEFT JOIN currently_printing cp ON cp.model_id = print_queue.model_id
+            LEFT JOIN printed_models pm ON pm.model_id = print_queue.model_id
         `).all() as any[];
 
         // Printing-only items not in the queue
@@ -61,9 +64,12 @@ router.get('/', (req, res) => {
             SELECT NULL as id, cp.model_id, cp.started_at as added_at,
                    999999 as priority, NULL as notes, NULL as estimated_time_hours,
                    models.filename, models.filepath, models.category, models.file_count,
-                   1 as is_printing, cp.started_at as printing_started_at
+                   models.date_added, models.date_created,
+                   1 as is_printing, cp.started_at as printing_started_at,
+                   pm.rating as printRating
             FROM currently_printing cp
             JOIN models ON cp.model_id = models.id AND models.deleted_at IS NULL
+            LEFT JOIN printed_models pm ON pm.model_id = cp.model_id
             WHERE NOT EXISTS (SELECT 1 FROM print_queue WHERE print_queue.model_id = cp.model_id)
         `).all() as any[];
 

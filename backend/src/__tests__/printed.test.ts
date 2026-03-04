@@ -37,18 +37,35 @@ describe('Printed Routes', () => {
     });
 
     describe('GET /api/printed', () => {
-        it('returns all printed models with primaryImage', async () => {
+        it('returns printed models with pagination', async () => {
             const res = await request(app).get('/api/printed');
             expect(res.status).toBe(200);
             expect(res.body.printed).toHaveLength(1);
             expect(res.body.printed[0].model_id).toBe(1);
             expect(res.body.printed[0].primaryImage).toBe('/test/models/a/image1.jpg');
+            expect(res.body.pagination).toBeDefined();
+            expect(res.body.pagination.total).toBe(1);
+            expect(res.body.pagination.page).toBe(1);
+            expect(res.body.pagination.totalPages).toBe(1);
         });
 
         it('excludes hidden assets from primaryImage', async () => {
             testDb.prepare('UPDATE model_assets SET is_hidden = 1 WHERE id = 1').run();
             const res = await request(app).get('/api/printed');
             expect(res.body.printed[0].primaryImage).toBe('/test/models/a/image2.jpg');
+        });
+
+        it('supports pagination params', async () => {
+            const res = await request(app).get('/api/printed?page=1&limit=10');
+            expect(res.status).toBe(200);
+            expect(res.body.pagination.page).toBe(1);
+            expect(res.body.pagination.limit).toBe(10);
+        });
+
+        it('supports sort params', async () => {
+            const res = await request(app).get('/api/printed?sort=name&order=asc');
+            expect(res.status).toBe(200);
+            expect(res.body.printed).toHaveLength(1);
         });
     });
 
@@ -97,7 +114,22 @@ describe('Printed Routes', () => {
     });
 
     describe('POST /api/printed/cycle', () => {
-        it('cycles from not printed to good', async () => {
+        it('cycles from not printed to printing', async () => {
+            const res = await request(app)
+                .post('/api/printed/cycle')
+                .send({ model_id: 2 });
+            expect(res.status).toBe(200);
+            expect(res.body.printed).toBe(false);
+            expect(res.body.printing).toBe(true);
+
+            const printing = testDb.prepare('SELECT id FROM currently_printing WHERE model_id = 2').get();
+            expect(printing).toBeDefined();
+        });
+
+        it('cycles from printing to good', async () => {
+            // First cycle to printing
+            await request(app).post('/api/printed/cycle').send({ model_id: 2 });
+            // Second cycle to good
             const res = await request(app)
                 .post('/api/printed/cycle')
                 .send({ model_id: 2 });
@@ -107,6 +139,9 @@ describe('Printed Routes', () => {
         });
 
         it('removes from queue when cycling to good', async () => {
+            // First cycle to printing
+            await request(app).post('/api/printed/cycle').send({ model_id: 2 });
+            // Second cycle to good
             const res = await request(app)
                 .post('/api/printed/cycle')
                 .send({ model_id: 2 });

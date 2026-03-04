@@ -34,25 +34,35 @@
         <div class="view-controls">
           <div class="filter-toggles">
             <button
-              @click="toggleHidePrinted"
-              :class="['filter-toggle-btn', { active: hidePrinted }]"
-              title="Hide printed models"
+              @click="filterFavorites = cycleFilter(filterFavorites)"
+              :class="['filter-toggle-btn', { active: filterFavorites, 'filter-hide': filterFavorites === 'hide' }]"
+              :title="filterFavorites === 'only' ? 'Only favorites (click to hide)' : filterFavorites === 'hide' ? 'Hiding favorites (click to clear)' : 'Click to show only favorites'"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+              </svg>
+              <span>{{ filterLabel(filterFavorites, 'Favorites') }}</span>
+            </button>
+            <button
+              @click="filterQueued = cycleFilter(filterQueued)"
+              :class="['filter-toggle-btn', { active: filterQueued, 'filter-hide': filterQueued === 'hide' }]"
+              :title="filterQueued === 'only' ? 'Only queued (click to hide)' : filterQueued === 'hide' ? 'Hiding queued (click to clear)' : 'Click to show only queued'"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+              </svg>
+              <span>{{ filterLabel(filterQueued, 'Queued') }}</span>
+            </button>
+            <button
+              @click="filterPrinted = cycleFilter(filterPrinted)"
+              :class="['filter-toggle-btn', { active: filterPrinted, 'filter-hide': filterPrinted === 'hide' }]"
+              :title="filterPrinted === 'only' ? 'Only printed (click to hide)' : filterPrinted === 'hide' ? 'Hiding printed (click to clear)' : 'Click to show only printed'"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M9 12l2 2 4-4"/>
                 <circle cx="12" cy="12" r="10"/>
               </svg>
-              <span>Hide Printed</span>
-            </button>
-            <button
-              @click="toggleHideQueued"
-              :class="['filter-toggle-btn', { active: hideQueued }]"
-              title="Hide queued models"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-              </svg>
-              <span>Hide Queued</span>
+              <span>{{ filterLabel(filterPrinted, 'Printed') }}</span>
             </button>
           </div>
           <button
@@ -232,8 +242,70 @@
       <p>Go to Settings to configure your model directory and run a scan.</p>
     </div>
 
+    <template v-else>
+    <!-- Currently Printing -->
+    <div v-if="printingModels.length > 0" class="printing-section">
+      <div class="printing-section-header">
+        <span class="printing-pulse-dot-lg"></span>
+        <span>Currently Printing</span>
+        <span class="printing-count-badge">{{ printingModels.length }}</span>
+      </div>
+      <div class="printing-cards">
+        <div
+          v-for="model in printingModels"
+          :key="`printing-${model.id}`"
+          class="printing-card"
+          @click="openModal(model)"
+        >
+          <div class="printing-card-image">
+            <img
+              v-if="model.primaryImage"
+              :src="modelsApi.getFileUrl(model.primaryImage)"
+              :alt="model.filename"
+              @error="onImageError"
+              loading="lazy"
+            />
+            <div v-else class="printing-card-no-image">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="printing-card-info">
+            <div class="printing-card-name" :title="model.filename">{{ model.filename }}</div>
+            <div class="printing-card-meta">
+              <span class="printing-card-category">{{ model.category }}</span>
+              <span v-if="model.file_count > 1" class="printing-card-files">{{ model.file_count }} files</span>
+            </div>
+          </div>
+          <div class="printing-card-actions" @click.stop>
+            <button
+              @click="store.cyclePrinted(model.id)"
+              class="printing-card-btn printing-card-btn--done"
+              title="Mark as printed (good)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+              </svg>
+              Done
+            </button>
+            <button
+              @click="store.togglePrinting(model.id)"
+              class="printing-card-btn printing-card-btn--stop"
+              title="Stop printing"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="6" width="12" height="12" rx="1"/>
+              </svg>
+              Stop
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Grid View -->
-    <div v-else-if="viewMode === 'grid'" class="models-grid">
+    <div v-if="viewMode === 'grid'" class="models-grid">
       <div
         v-for="(model, index) in store.models"
         :key="model.id"
@@ -301,10 +373,10 @@
             </button>
             <button
               @click="store.cyclePrinted(model.id)"
-              :class="['action-btn', { active: model.isPrinted, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]"
-              :title="model.isPrinted && model.printRating === 'good' ? 'Mark as bad print' : model.isPrinted ? 'Remove from printed' : 'Mark as printed'"
+              :class="['action-btn', { active: model.isPrinted || model.isPrinting, 'printed-printing': model.isPrinting && !model.isPrinted, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]"
+              :title="model.isPrinting && !model.isPrinted ? 'Mark as printed (good)' : model.printRating === 'good' ? 'Mark as bad print' : model.isPrinted ? 'Remove from printed' : 'Mark as printing'"
             >
-              <svg viewBox="0 0 24 24" :fill="model.isPrinted ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+              <svg viewBox="0 0 24 24" :fill="model.isPrinted || model.isPrinting ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
                 <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
                 <path d="M6 14h12v8H6z"/>
               </svg>
@@ -431,10 +503,10 @@
                 </button>
                 <button
                   @click="store.cyclePrinted(model.id)"
-                  :class="['action-btn-small', { active: model.isPrinted, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]"
-                  title="Printed"
+                  :class="['action-btn-small', { active: model.isPrinted || model.isPrinting, 'printed-printing': model.isPrinting && !model.isPrinted, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]"
+                  :title="model.isPrinting && !model.isPrinted ? 'Printing' : 'Printed'"
                 >
-                  <svg viewBox="0 0 24 24" :fill="model.isPrinted ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                  <svg viewBox="0 0 24 24" :fill="model.isPrinted || model.isPrinting ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
                     <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
                     <path d="M6 14h12v8H6z"/>
                   </svg>
@@ -454,6 +526,7 @@
         </tbody>
       </table>
     </div>
+    </template>
 
     <!-- Infinite scroll sentinel (disabled during search) -->
     <div v-if="!isSearchActive" ref="loadMoreSentinel" class="load-more-sentinel">
@@ -492,8 +565,23 @@ const router = useRouter();
 const viewMode = ref<'grid' | 'table'>('grid');
 const sortField = ref('date_added');
 const sortOrder = ref<'asc' | 'desc'>('desc');
-const hidePrinted = ref(true);
-const hideQueued = ref(false);
+// 3-state filters: '' = off, 'only' = show only, 'hide' = hide
+type FilterState = '' | 'only' | 'hide';
+const filterPrinted = ref<FilterState>('hide');
+const filterQueued = ref<FilterState>('');
+const filterFavorites = ref<FilterState>('');
+
+function cycleFilter(current: FilterState): FilterState {
+  if (current === '') return 'only';
+  if (current === 'only') return 'hide';
+  return '';
+}
+
+function filterLabel(state: FilterState, name: string): string {
+  if (state === 'only') return `Only ${name}`;
+  if (state === 'hide') return `Hide ${name}`;
+  return name;
+}
 const categoryScrollRef = ref<HTMLElement | null>(null);
 const loadMoreSentinel = ref<HTMLElement | null>(null);
 const totalModels = ref(0);
@@ -514,6 +602,7 @@ const bulkTagInput = ref('');
 const showBulkCategoryPicker = ref(false);
 const bulkCategoryTarget = ref('');
 
+const printingModels = computed(() => store.models.filter(m => m.isPrinting && !m.isPrinted));
 const hasMoreModels = computed(() => !isSearchActive.value && store.models.length < totalModels.value);
 const selectedCount = computed(() => selectedModels.value.size);
 const allSelected = computed(() => store.models.length > 0 && selectedModels.value.size === store.models.length);
@@ -548,11 +637,13 @@ function initFromQueryParams() {
     }
   }
 
-  const { hidePrinted: hp, hideQueued: hq } = route.query;
-  if (hp === 'false') hidePrinted.value = false;
-  if (hp === 'true') hidePrinted.value = true;
-  if (hq === 'true') hideQueued.value = true;
-  if (hq === 'false') hideQueued.value = false;
+  const { fp, fq, ff } = route.query;
+  if (fp === 'only' || fp === 'hide') filterPrinted.value = fp;
+  else if (fp === '') filterPrinted.value = '';
+  if (fq === 'only' || fq === 'hide') filterQueued.value = fq;
+  else if (fq === '') filterQueued.value = '';
+  if (ff === 'only' || ff === 'hide') filterFavorites.value = ff;
+  else if (ff === '') filterFavorites.value = '';
 }
 
 // Update URL query params when state changes
@@ -576,11 +667,14 @@ function updateQueryParams() {
   if (viewMode.value !== 'grid') {
     query.view = viewMode.value;
   }
-  if (!hidePrinted.value) {
-    query.hidePrinted = 'false';
+  if (filterPrinted.value) {
+    query.fp = filterPrinted.value;
   }
-  if (hideQueued.value) {
-    query.hideQueued = 'true';
+  if (filterQueued.value) {
+    query.fq = filterQueued.value;
+  }
+  if (filterFavorites.value) {
+    query.ff = filterFavorites.value;
   }
   if (selectedModelId.value) {
     query.model = String(selectedModelId.value);
@@ -615,7 +709,7 @@ onUnmounted(() => {
 });
 
 // Watch for changes that require reloading
-watch([sortField, sortOrder, hidePrinted, hideQueued], () => {
+watch([sortField, sortOrder, filterPrinted, filterQueued, filterFavorites], () => {
   if (!isSearchActive.value) {
     resetAndLoad();
   }
@@ -656,8 +750,9 @@ async function loadInitialModels() {
     limit: 50,
     sort: sortField.value,
     order: sortOrder.value,
-    hidePrinted: hidePrinted.value,
-    hideQueued: hideQueued.value
+    filterPrinted: filterPrinted.value || undefined,
+    filterQueued: filterQueued.value || undefined,
+    filterFavorites: filterFavorites.value || undefined
   });
   store.models = response.data.models;
   store.currentPage = 1;
@@ -794,15 +889,6 @@ function handleHeaderSort(field: string) {
   // Handled by watcher
 }
 
-function toggleHidePrinted() {
-  hidePrinted.value = !hidePrinted.value;
-  // Handled by watcher
-}
-
-function toggleHideQueued() {
-  hideQueued.value = !hideQueued.value;
-  // Handled by watcher
-}
 
 function onImageError(event: Event) {
   const target = event.target as HTMLImageElement;
@@ -1261,6 +1347,12 @@ async function bulkAddTag() {
   color: var(--accent-primary);
 }
 
+.filter-toggle-btn.filter-hide {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 /* Selection mode toggle */
 .select-btn {
   display: flex;
@@ -1523,6 +1615,12 @@ async function bulkAddTag() {
   border-color: var(--accent-primary);
 }
 
+.action-btn.printed-printing {
+  background: var(--warning);
+  color: var(--bg-deepest);
+  border-color: var(--warning);
+}
+
 .action-btn.printed-good {
   background: var(--success);
   color: var(--bg-deepest);
@@ -1533,6 +1631,10 @@ async function bulkAddTag() {
   background: var(--danger);
   color: var(--bg-deepest);
   border-color: var(--danger);
+}
+
+.action-btn-small.printed-printing {
+  color: var(--warning);
 }
 
 .action-btn-small.printed-good {
@@ -2067,5 +2169,182 @@ async function bulkAddTag() {
   .models-grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
+}
+
+/* Currently Printing section */
+.printing-section {
+  margin-bottom: 0.5rem;
+}
+
+.printing-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0 0.75rem;
+  color: #f97316;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.printing-pulse-dot-lg {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f97316;
+  flex-shrink: 0;
+  animation: printing-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes printing-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.printing-count-badge {
+  background: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.printing-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.printing-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background: rgba(249, 115, 22, 0.06);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-left: 3px solid #f97316;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.printing-card:hover {
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.printing-card-image {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+}
+
+.printing-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.printing-card-no-image {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.printing-card-no-image svg {
+  width: 24px;
+  height: 24px;
+  color: #f97316;
+  opacity: 0.5;
+}
+
+.printing-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.printing-card-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.printing-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.printing-card-category {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.printing-card-files {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.printing-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.printing-card-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.printing-card-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.printing-card-btn--done {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #16a34a;
+}
+
+.printing-card-btn--done:hover {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #16a34a;
+}
+
+.printing-card-btn--stop {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.3);
+  color: #f97316;
+}
+
+.printing-card-btn--stop:hover {
+  background: rgba(249, 115, 22, 0.2);
+  border-color: #f97316;
 }
 </style>

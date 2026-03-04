@@ -5,7 +5,12 @@
         <h2>Favorites</h2>
         <span class="count-badge" v-if="favorites.length > 0">{{ favorites.length }}</span>
       </div>
-      <div class="header-actions" v-if="favorites.length > 0">
+    </div>
+    <p class="subtitle">Your starred 3D models</p>
+
+    <!-- View Controls -->
+    <div v-if="favorites.length > 0 || hasActiveFilters" class="view-controls">
+      <div class="controls-left">
         <button
           @click="toggleSelectionMode"
           :class="['select-btn', { active: selectionMode }]"
@@ -33,32 +38,54 @@
             </svg>
           </button>
         </div>
-        <div class="view-toggle">
+        <div class="filter-toggles">
           <button
-            @click="viewMode = 'grid'"
-            :class="['view-btn', { active: viewMode === 'grid' }]"
-            title="Grid view"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7" rx="1"/>
-              <rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/>
-              <rect x="14" y="14" width="7" height="7" rx="1"/>
-            </svg>
-          </button>
-          <button
-            @click="viewMode = 'table'"
-            :class="['view-btn', { active: viewMode === 'table' }]"
-            title="Table view"
+            @click="filterQueued = cycleFilter(filterQueued)"
+            :class="['filter-toggle-btn', { active: filterQueued, 'filter-hide': filterQueued === 'hide' }]"
+            :title="filterQueued === 'only' ? 'Only queued (click to hide)' : filterQueued === 'hide' ? 'Hiding queued (click to clear)' : 'Click to show only queued'"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
             </svg>
+            <span>{{ filterLabel(filterQueued, 'Queued') }}</span>
+          </button>
+          <button
+            @click="filterPrinted = cycleFilter(filterPrinted)"
+            :class="['filter-toggle-btn', { active: filterPrinted, 'filter-hide': filterPrinted === 'hide' }]"
+            :title="filterPrinted === 'only' ? 'Only printed (click to hide)' : filterPrinted === 'hide' ? 'Hiding printed (click to clear)' : 'Click to show only printed'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 12l2 2 4-4"/>
+              <circle cx="12" cy="12" r="10"/>
+            </svg>
+            <span>{{ filterLabel(filterPrinted, 'Printed') }}</span>
           </button>
         </div>
       </div>
+      <div class="view-toggle">
+        <button
+          @click="viewMode = 'grid'"
+          :class="['view-btn', { active: viewMode === 'grid' }]"
+          title="Grid view"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </button>
+        <button
+          @click="viewMode = 'table'"
+          :class="['view-btn', { active: viewMode === 'table' }]"
+          title="Table view"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+          </svg>
+        </button>
+      </div>
     </div>
-    <p class="subtitle">Your starred 3D models</p>
 
     <!-- Bulk actions bar -->
     <div v-if="selectionMode" class="bulk-actions-bar">
@@ -322,10 +349,35 @@ const bulkLoading = ref(false);
 const selectedCount = computed(() => selectedItems.value.size);
 const allSelected = computed(() => favorites.value.length > 0 && selectedItems.value.size === favorites.value.length);
 
+// 3-state filters
+type FilterState = '' | 'only' | 'hide';
+const filterPrinted = ref<FilterState>('');
+const filterQueued = ref<FilterState>('');
+const hasActiveFilters = computed(() => filterPrinted.value || filterQueued.value);
+
+function cycleFilter(current: FilterState): FilterState {
+  if (current === '') return 'only';
+  if (current === 'only') return 'hide';
+  return '';
+}
+
+function filterLabel(state: FilterState, name: string): string {
+  if (state === 'only') return `Only ${name}`;
+  if (state === 'hide') return `Hide ${name}`;
+  return name;
+}
+
 const filteredFavorites = computed(() => {
+  let items = favorites.value;
   const q = store.globalSearchQuery.toLowerCase();
-  if (!q) return favorites.value;
-  return favorites.value.filter((f: any) => f.filename?.toLowerCase().includes(q));
+  if (q) {
+    items = items.filter((f: any) => f.filename?.toLowerCase().includes(q));
+  }
+  if (filterQueued.value === 'only') items = items.filter((f: any) => f.isQueued);
+  if (filterQueued.value === 'hide') items = items.filter((f: any) => !f.isQueued);
+  if (filterPrinted.value === 'only') items = items.filter((f: any) => f.printRating);
+  if (filterPrinted.value === 'hide') items = items.filter((f: any) => !f.printRating);
+  return items;
 });
 
 const sortedFavorites = computed(() => {
@@ -545,10 +597,55 @@ h2 {
   margin-top: -0.5rem;
 }
 
-.header-actions {
+/* View Controls */
+.view-controls {
   display: flex;
-  gap: 0.75rem;
+  justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.controls-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.filter-toggles {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.filter-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+.filter-toggle-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+.filter-toggle-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-secondary);
+}
+.filter-toggle-btn.active {
+  background: var(--accent-primary-dim);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.filter-toggle-btn.filter-hide {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* Sort controls */

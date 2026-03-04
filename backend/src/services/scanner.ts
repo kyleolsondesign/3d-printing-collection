@@ -10,6 +10,7 @@ import { isModelFile, isImageFile, isDocumentFile, isArchiveFile } from '../util
 import { cleanupFolderName } from '../utils/nameCleanup.js';
 import { getFinderTags, parseModelStateFromTags } from '../utils/finderTags.js';
 import { extractMetadataFromPdf } from '../utils/pdfMetadata.js';
+import { syncDesignersCore } from '../routes/designers.js';
 
 export type ScanMode = 'full' | 'full_sync' | 'add_only';
 
@@ -17,7 +18,7 @@ export type ScanMode = 'full' | 'full_sync' | 'add_only';
 // This prevents the scanner from blocking API requests
 const yieldToEventLoop = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
-type ScanStep = 'idle' | 'discovering' | 'indexing' | 'extracting' | 'metadata' | 'deduplicating' | 'tagging' | 'cleanup' | 'complete';
+type ScanStep = 'idle' | 'discovering' | 'indexing' | 'extracting' | 'metadata' | 'deduplicating' | 'tagging' | 'cleanup' | 'designer_sync' | 'complete';
 
 interface ScanProgress {
     totalFiles: number;
@@ -167,6 +168,15 @@ class Scanner {
                 this.removeOrphanedModels();
             }
 
+            // Phase 5: Sync designers from folder structure and PDF metadata
+            this.progress.currentStep = 'designer_sync';
+            this.progress.stepDescription = 'Syncing designers...';
+            this.progress.overallProgress = 97;
+            const designerResult = syncDesignersCore(modelDirectory);
+            if (designerResult.created > 0 || designerResult.linked > 0) {
+                console.log(`Designer sync: ${designerResult.created} new, ${designerResult.linked} linked`);
+            }
+
             this.progress.currentStep = 'complete';
             this.progress.stepDescription = 'Scan complete';
             this.progress.overallProgress = 100;
@@ -294,12 +304,70 @@ class Scanner {
                 await this.extractImageFromArchives(modelId, folderPath);
             }
 
+            // Extract PDF metadata for designer detection and tags
+            await this.extractMetadataForModel(modelId);
+
             console.log(`Indexed single folder: ${path.relative(rootPath, folderPath)}`);
             return { modelId, filename: cleanedName };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error(`Error scanning single folder ${folderPath}:`, message);
             throw error;
+        }
+    }
+
+    /**
+     * Extract PDF metadata for a single model (used by scanSingleFolder).
+     * Looks for PDF assets and extracts designer, tags, etc.
+     */
+    private async extractMetadataForModel(modelId: number): Promise<void> {
+        const pdfAsset = db.prepare(`
+            SELECT filepath FROM model_assets WHERE model_id = ? AND asset_type = 'pdf' LIMIT 1
+        `).get(modelId) as { filepath: string } | undefined;
+
+        if (!pdfAsset) return;
+
+        // Skip if metadata already exists
+        const existing = db.prepare('SELECT model_id FROM model_metadata WHERE model_id = ?').get(modelId);
+        if (existing) return;
+
+        try {
+            const metadata = await extractMetadataFromPdf(pdfAsset.filepath);
+
+            db.prepare(`
+                INSERT OR REPLACE INTO model_metadata (model_id, source_platform, source_url, designer, designer_url, description, license, license_url, extracted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                modelId,
+                metadata.source_platform,
+                metadata.source_url,
+                metadata.designer,
+                metadata.designer_url,
+                metadata.description,
+                metadata.license,
+                metadata.license_url,
+                new Date().toISOString()
+            );
+
+            // Insert tags from PDF
+            if (metadata.tags.length > 0) {
+                const insertTag = db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+                const getTagId = db.prepare('SELECT id FROM tags WHERE name = ?');
+                const insertModelTag = db.prepare('INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)');
+                for (const tag of metadata.tags) {
+                    insertTag.run(tag);
+                    const tagRow = getTagId.get(tag) as { id: number } | undefined;
+                    if (tagRow) {
+                        insertModelTag.run(modelId, tagRow.id);
+                    }
+                }
+            }
+        } catch {
+            // Insert empty record to avoid re-processing
+            db.prepare(`
+                INSERT OR REPLACE INTO model_metadata (model_id, extracted_at)
+                VALUES (?, ?)
+            `).run(modelId, new Date().toISOString());
         }
     }
 
@@ -606,11 +674,23 @@ class Scanner {
             // - Depth 1 (category folders like "Toys", "Tools"): never a model
             // - Folders starting with "~": organizational containers, never models
             // - Direct children of "Paid" folder: designer/creator folders, never models
-            if (currentPath !== rootPath && !this.isContainerFolder(currentPath, rootPath) &&
-                (this.isModelFolder(currentPath) || this.isPaidModelFolder(currentPath, rootPath))) {
-                // Register this folder as a model and collect all files from it + subfolders
-                this.registerModelFolder(currentPath);
-                return; // Don't recurse further - subfolders belong to this model
+            if (currentPath !== rootPath && !this.isContainerFolder(currentPath, rootPath)) {
+                const relativePath = path.relative(rootPath, currentPath);
+                const parts = relativePath.split(path.sep);
+
+                // Depth-2 folders (category/model) are always the model level.
+                // Use registerModelFolder (which collects files recursively) so model files
+                // in nested subfolders are attributed to this folder, not indexed separately.
+                if (parts.length === 2 || this.isPaidModelFolder(currentPath, rootPath)) {
+                    this.registerModelFolder(currentPath);
+                    return;
+                }
+
+                // Deeper folders (e.g., under ~ containers): only register if they directly contain model files
+                if (this.isModelFolder(currentPath)) {
+                    this.registerModelFolder(currentPath);
+                    return;
+                }
             }
 
             // Not a model folder - scan for loose files and recurse into subdirectories
@@ -631,7 +711,8 @@ class Scanner {
                     this.progress.totalFiles++;
 
                     // Model files in non-model folders are loose files
-                    if (isModelFile(fullPath) || isArchiveFile(fullPath)) {
+                    // Skip files starting with "!" (same ignore convention as folders)
+                    if ((isModelFile(fullPath) || isArchiveFile(fullPath)) && !entry.name.startsWith('!')) {
                         this.trackLooseFile(fullPath);
                         this.progress.looseFilesFound++;
                     }
@@ -678,14 +759,14 @@ class Scanner {
             return true;
         }
 
-        // Direct children of "Paid" are designer folders at any depth
-        // e.g., root/Paid/DesignerName OR root/Shared 3D Models/Paid/DesignerName
+        // The "Paid" folder itself and its direct children (designer folders) are containers
+        // e.g., Shared Models/Paid/ OR Shared Models/Paid/DesignerName/
         const paidIndex = parts.indexOf('Paid');
         if (paidIndex >= 0) {
             const depthAfterPaid = parts.length - paidIndex;
-            // "Paid" itself (depthAfterPaid=1) is handled as a category container by depth-1 check
-            // or will be recursed into. Designer folders are direct children of Paid (depthAfterPaid=2).
-            if (depthAfterPaid === 2) {
+            // depthAfterPaid=1: this IS the Paid folder (e.g., Shared Models/Paid/) → container
+            // depthAfterPaid=2: designer folder (e.g., Shared Models/Paid/Designer/) → container
+            if (depthAfterPaid === 1 || depthAfterPaid === 2) {
                 return true;
             }
         }
