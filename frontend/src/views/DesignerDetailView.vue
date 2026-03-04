@@ -20,6 +20,16 @@
           </svg>
           Profile
         </a>
+        <button
+          @click="toggleFavorite"
+          :class="['favorite-btn', { active: designer.is_favorite }]"
+          :title="designer.is_favorite ? 'Remove from favorites' : 'Add to favorites'"
+        >
+          <svg viewBox="0 0 24 24" :fill="designer.is_favorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+          </svg>
+          {{ designer.is_favorite ? 'Favorited' : 'Favorite' }}
+        </button>
         <button @click="startEditDesigner" class="edit-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
@@ -464,6 +474,19 @@ function formatDate(dateString: string | null): string {
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+async function toggleFavorite() {
+  if (!designer.value) return;
+  const prev = designer.value.is_favorite;
+  designer.value.is_favorite = prev ? 0 : 1;
+  try {
+    const res = await designersApi.toggleFavorite(designer.value.id);
+    designer.value.is_favorite = res.data.is_favorite ? 1 : 0;
+  } catch (error) {
+    designer.value.is_favorite = prev;
+    console.error('Failed to toggle favorite:', error);
+  }
+}
+
 function startEditDesigner() {
   if (!designer.value) return;
   editingDesigner.value = true;
@@ -587,7 +610,7 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.profile-link-btn, .edit-btn {
+.profile-link-btn, .edit-btn, .favorite-btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -603,14 +626,26 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.profile-link-btn:hover, .edit-btn:hover {
+.profile-link-btn:hover, .edit-btn:hover, .favorite-btn:hover {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
 
-.profile-link-btn svg, .edit-btn svg {
+.profile-link-btn svg, .edit-btn svg, .favorite-btn svg {
   width: 14px;
   height: 14px;
+}
+
+.favorite-btn.active {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: #f87171;
+  color: #f87171;
+}
+
+.favorite-btn.active:hover {
+  background: rgba(248, 113, 113, 0.2);
+  border-color: #f87171;
+  color: #f87171;
 }
 
 .detail-notes {

@@ -217,14 +217,14 @@ function classifyPrintablesLink(link: string, result: Omit<PdfMetadata, 'descrip
 }
 
 function classifyThangsLink(link: string, result: Omit<PdfMetadata, 'description'>, seenTags: Set<string>): void {
-    // Source URL: https://thangs.com/designer/Name/3d-model/Title-123456
+    // Source URL: https://thangs.com/[prints/]designer/Name/3d-model/Title-123456
     // May have /memberships suffix — strip it
-    if (!result.source_url && /thangs\.com\/designer\/[^/]+\/3d-model\//.test(link)) {
+    if (!result.source_url && /thangs\.com\/(?:prints\/)?designer\/[^/]+\/3d-model\//.test(link)) {
         result.source_url = link.replace(/\/memberships\/?$/, '');
     }
 
-    // Designer profile: https://thangs.com/designer/Name (no further subpath beyond designer name)
-    if (!result.designer_url && /thangs\.com\/designer\/[^/]+\/?$/.test(link)) {
+    // Designer profile: https://thangs.com/[prints/]designer/Name (no further subpath beyond designer name)
+    if (!result.designer_url && /thangs\.com\/(?:prints\/)?designer\/[^/]+\/?$/.test(link)) {
         result.designer_url = link;
         const match = link.match(/\/designer\/([^/?#]+)/);
         if (match) result.designer = decodeURIComponent(match[1]);
@@ -232,12 +232,12 @@ function classifyThangsLink(link: string, result: Omit<PdfMetadata, 'description
 
     // Also extract designer from 3d-model URL if no profile link found
     if (!result.designer) {
-        const match = link.match(/thangs\.com\/designer\/([^/]+)/);
+        const match = link.match(/thangs\.com\/(?:prints\/)?designer\/([^/]+)/);
         if (match) result.designer = decodeURIComponent(match[1]);
     }
 
-    // Tags: https://thangs.com/tag/kitchen
-    const tagMatch = link.match(/thangs\.com\/tag\/([^/?#]+)/);
+    // Tags: https://thangs.com/[prints/]tag/kitchen
+    const tagMatch = link.match(/thangs\.com\/(?:prints\/)?tag\/([^/?#]+)/);
     if (tagMatch) {
         const tag = decodeURIComponent(tagMatch[1]).toLowerCase().trim();
         if (tag && !seenTags.has(tag)) {
@@ -267,13 +267,22 @@ export function parseLicenseFromUrl(url: string): string {
  */
 export async function extractMetadataFromPdf(pdfPath: string): Promise<PdfMetadata> {
     const filename = path.basename(pdfPath);
-    const platform = detectPlatform(filename);
+    let platform = detectPlatform(filename);
 
     let links: string[] = [];
     try {
         links = await extractLinksFromPdf(pdfPath);
     } catch {
         // pdftohtml failed — fall back to filename-only extraction
+    }
+
+    // If filename didn't reveal the platform, infer it from the links themselves
+    if (!platform && links.length > 0) {
+        for (const link of links) {
+            if (link.includes('thangs.com')) { platform = 'thangs'; break; }
+            if (link.includes('makerworld.com')) { platform = 'makerworld'; break; }
+            if (link.includes('printables.com')) { platform = 'printables'; break; }
+        }
     }
 
     const classified = classifyLinks(links, platform);

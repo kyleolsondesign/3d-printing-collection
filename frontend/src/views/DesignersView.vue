@@ -149,7 +149,7 @@
         :key="designer.id"
         class="designer-card"
         :style="{ animationDelay: `${Math.min(index * 20, 300)}ms` }"
-        @click="openDesigner(designer)"
+        @click="openDesigner(designer, $event)"
       >
         <!-- Image collage / avatar -->
         <div class="designer-preview">
@@ -530,7 +530,11 @@ onUnmounted(() => {
   if (appStore.globalSearchQuery) appStore.clearGlobalSearch();
 });
 
-function openDesigner(designer: Designer) {
+function openDesigner(designer: Designer, event?: MouseEvent) {
+  if (event?.metaKey || event?.ctrlKey) {
+    window.open(`/designers/${designer.id}`, '_blank');
+    return;
+  }
   router.push(`/designers/${designer.id}`);
 }
 

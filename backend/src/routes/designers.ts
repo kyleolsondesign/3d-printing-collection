@@ -132,7 +132,13 @@ router.get('/:id', (req, res) => {
         const filterQueued = req.query.filterQueued as string | undefined;
         const filterFavorites = req.query.filterFavorites as string | undefined;
 
-        const designer = db.prepare('SELECT * FROM designers WHERE id = ?').get(id) as any;
+        const designer = db.prepare(`
+            SELECT d.*,
+                CASE WHEN df.designer_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite
+            FROM designers d
+            LEFT JOIN designer_favorites df ON df.designer_id = d.id
+            WHERE d.id = ?
+        `).get(id) as any;
         if (!designer) {
             return res.status(404).json({ error: 'Designer not found' });
         }

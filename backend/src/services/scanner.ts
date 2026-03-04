@@ -1091,13 +1091,16 @@ class Scanner {
      * and pdftotext for description text.
      */
     private async extractMetadataFromPdfs(): Promise<void> {
-        // Find models with PDF assets but no metadata record
+        // Find models with PDF assets that either have no metadata record, or have a
+        // failed/empty placeholder record (source_platform and designer both null, no tags)
         const modelsWithPdfs = db.prepare(`
             SELECT DISTINCT m.id as model_id, ma.filepath as pdf_path
             FROM models m
             JOIN model_assets ma ON ma.model_id = m.id AND ma.asset_type = 'pdf'
             LEFT JOIN model_metadata mm ON mm.model_id = m.id
-            WHERE mm.model_id IS NULL AND m.deleted_at IS NULL
+            LEFT JOIN model_tags mt ON mt.model_id = m.id
+            WHERE (mm.model_id IS NULL OR (mm.source_platform IS NULL AND mm.designer IS NULL AND mt.model_id IS NULL))
+              AND m.deleted_at IS NULL
             GROUP BY m.id
         `).all() as Array<{ model_id: number; pdf_path: string }>;
 

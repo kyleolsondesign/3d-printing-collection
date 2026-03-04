@@ -221,6 +221,23 @@ describe('Designers Routes', () => {
             expect(res.body.total).toBe(1);
         });
 
+        it('includes is_favorite=0 when not favorited', async () => {
+            testDb.prepare('INSERT INTO designers (id, name) VALUES (?, ?)').run(1, 'TestDesigner');
+
+            const res = await request(app).get('/api/designers/1');
+            expect(res.status).toBe(200);
+            expect(res.body.is_favorite).toBe(0);
+        });
+
+        it('includes is_favorite=1 when favorited', async () => {
+            testDb.prepare('INSERT INTO designers (id, name) VALUES (?, ?)').run(1, 'TestDesigner');
+            testDb.prepare('INSERT INTO designer_favorites (designer_id) VALUES (?)').run(1);
+
+            const res = await request(app).get('/api/designers/1');
+            expect(res.status).toBe(200);
+            expect(res.body.is_favorite).toBe(1);
+        });
+
         it('returns 404 for unknown designer', async () => {
             const res = await request(app).get('/api/designers/999');
             expect(res.status).toBe(404);

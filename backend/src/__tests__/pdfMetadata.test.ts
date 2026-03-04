@@ -175,6 +175,42 @@ describe('classifyLinks - Thangs', () => {
     });
 });
 
+describe('classifyLinks - Thangs /prints/ URL variant', () => {
+    // Thangs "Order" PDFs use thangs.com/prints/... paths instead of thangs.com/...
+    const links = [
+        'https://thangs.com/prints/designer/JanBremec',
+        'https://thangs.com/designer/JanBremec/3d-model/Monkey-D-Luffy-1515660/memberships',
+        'https://thangs.com/prints/tag/One%20Piece',
+        'https://thangs.com/prints/tag/Monkey%20D%20Luffy',
+        'https://thangs.com/prints/tag/Anime%20Figure',
+    ];
+
+    it('extracts designer from /prints/designer/ profile URL', () => {
+        const result = classifyLinks(links, 'thangs');
+        expect(result.designer).toBe('JanBremec');
+    });
+
+    it('extracts source URL from /designer/.../3d-model/ URL', () => {
+        const result = classifyLinks(links, 'thangs');
+        expect(result.source_url).toBe('https://thangs.com/designer/JanBremec/3d-model/Monkey-D-Luffy-1515660');
+    });
+
+    it('extracts tags from /prints/tag/ URLs', () => {
+        const result = classifyLinks(links, 'thangs');
+        expect(result.tags).toContain('one piece');
+        expect(result.tags).toContain('monkey d luffy');
+        expect(result.tags).toContain('anime figure');
+    });
+
+    it('extracts source URL from /prints/designer/.../3d-model/ URL', () => {
+        const printLinks = [
+            'https://thangs.com/prints/designer/JanBremec/3d-model/Monkey-D-Luffy-1515660/memberships',
+        ];
+        const result = classifyLinks(printLinks, 'thangs');
+        expect(result.source_url).toBe('https://thangs.com/prints/designer/JanBremec/3d-model/Monkey-D-Luffy-1515660');
+    });
+});
+
 describe('parseLicenseFromUrl', () => {
     it('parses CC-BY-NC-4.0', () => {
         expect(parseLicenseFromUrl('https://creativecommons.org/licenses/by-nc/4.0/')).toBe('CC-BY-NC-4.0');
