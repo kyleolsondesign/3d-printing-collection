@@ -61,7 +61,9 @@ const NOISE_WORDS = new Set([
     'free', '3d', 'print', 'model', 'stl', 'file', 'files', 'download',
     'printable', 'printing', 'printer', 'printed', 'the', 'and', 'for',
     'with', 'from', 'this', 'that', 'new', 'set', 'version', 'design',
-    'ready', 'high', 'quality', 'low', 'poly', 'obj', 'fbx', 'gcode'
+    'ready', 'high', 'quality', 'low', 'poly', 'obj', 'fbx', 'gcode',
+    // Platform/source names — zero categorization signal
+    'maker', 'world', 'makerworld', 'thangs', 'printables', 'patreon', 'thingiverse', 'com',
 ]);
 
 // Semantic synonym groups for 3D printing categories.
@@ -77,7 +79,7 @@ const SYNONYM_GROUPS: string[][] = [
     // Vehicles, transportation
     ['vehicle', 'vehicles', 'car', 'truck', 'boat', 'airplane', 'aircraft', 'ship', 'tank'],
     // Animals, creatures
-    ['animal', 'animals', 'dog', 'cat', 'bird', 'dragon', 'fish', 'creature', 'beast', 'dinosaur'],
+    ['animal', 'animals', 'dog', 'cat', 'bird', 'fish', 'creature', 'beast', 'dinosaur'],
     // Jewelry, accessories
     ['jewelry', 'keychain', 'pendant', 'ring', 'earring', 'necklace', 'charm', 'accessory'],
     // Electronics, tech
@@ -226,13 +228,14 @@ function loadHintBoosts(tokens: string[], categories: string[]): Map<string, num
 
         if (rows.length === 0) return new Map();
 
-        const maxTotal = Math.max(...rows.map(r => r.total));
         const boosts = new Map<string, number>();
         for (const row of rows) {
-            if (categories.includes(row.category)) {
-                // Normalize to [0, 0.4]: strong enough to tip a weak token match,
-                // but not enough to beat a solid token-based result on its own.
-                boosts.set(row.category, (row.total / maxTotal) * 0.4);
+            if (categories.includes(row.category) && row.total > 0) {
+                // Absolute formula: ~5 confirmed imports reach max boost (0.4).
+                // count=1 → 0.08 (negligible alone), count=5+ → 0.4 (max).
+                // Avoids the relative normalization problem where one dominating
+                // category suppresses all others.
+                boosts.set(row.category, Math.min(row.total / 5, 1) * 0.4);
             }
         }
         return boosts;
@@ -753,6 +756,30 @@ router.get('/scan', async (req, res) => {
     }
 });
 
+// State for import job progress (polled by frontend)
+let importJobProgress: {
+    active: boolean;
+    totalItems: number;
+    processedItems: number;
+    currentItem: string;
+    status: string;
+    results: Array<{ filepath: string; success: boolean; error?: string; model?: { modelId: number; filename: string } | null }>;
+    summary: { total: number; succeeded: number; failed: number };
+} = {
+    active: false,
+    totalItems: 0,
+    processedItems: 0,
+    currentItem: '',
+    status: '',
+    results: [],
+    summary: { total: 0, succeeded: 0, failed: 0 }
+};
+
+// GET /api/ingestion/import/status — poll import job progress
+router.get('/import/status', (_req, res) => {
+    res.json(importJobProgress);
+});
+
 // State for AI categorization progress (polled by frontend)
 let aiCategorizationProgress = {
     active: false,
@@ -987,137 +1014,154 @@ function recordIngestionEvent(
 
 // POST /api/ingestion/import
 router.post('/import', async (req, res) => {
-    try {
-        const { items } = req.body;
-        if (!items || !Array.isArray(items) || items.length === 0) {
-            return res.status(400).json({ error: 'items array is required' });
-        }
+    if (importJobProgress.active) {
+        return res.status(409).json({ error: 'Import already in progress' });
+    }
 
-        const modelDir = getConfig('model_directory');
-        if (!modelDir) {
-            return res.status(500).json({ error: 'Model directory not configured' });
-        }
+    const { items } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'items array is required' });
+    }
 
-        const results: Array<{
-            filepath: string;
-            success: boolean;
-            error?: string;
-            model?: { modelId: number; filename: string } | null;
-        }> = [];
+    const modelDir = getConfig('model_directory');
+    if (!modelDir) {
+        return res.status(500).json({ error: 'Model directory not configured' });
+    }
 
-        for (const item of items) {
-            const { filepath, category, isFolder, suggestedCategory, confidence } = item;
-            if (!filepath || !category) {
-                results.push({ filepath: filepath || 'unknown', success: false, error: 'Missing filepath or category' });
-                continue;
-            }
+    importJobProgress = {
+        active: true,
+        totalItems: items.length,
+        processedItems: 0,
+        currentItem: '',
+        status: `Starting import of ${items.length} item${items.length !== 1 ? 's' : ''}...`,
+        results: [],
+        summary: { total: items.length, succeeded: 0, failed: 0 }
+    };
 
-            try {
-                if (!fs.existsSync(filepath)) {
-                    results.push({ filepath, success: false, error: 'Source file not found' });
+    // Respond immediately so the client is never blocked
+    res.status(202).json({ message: 'Import started' });
+
+    // Process items in the background after response is sent
+    setImmediate(async () => {
+        try {
+            for (const item of items) {
+                const { filepath, category, isFolder, suggestedCategory, confidence } = item;
+                const displayName = path.basename(filepath || 'unknown');
+                importJobProgress.currentItem = displayName;
+                importJobProgress.status = `Importing ${displayName} (${importJobProgress.processedItems + 1}/${importJobProgress.totalItems})`;
+
+                if (!filepath || !category) {
+                    importJobProgress.results.push({ filepath: filepath || 'unknown', success: false, error: 'Missing filepath or category' });
+                    importJobProgress.summary.failed++;
+                    importJobProgress.processedItems++;
                     continue;
                 }
 
-                // Ensure category folder exists
-                const categoryDir = path.join(modelDir, category);
-                if (!fs.existsSync(categoryDir)) {
-                    fs.mkdirSync(categoryDir, { recursive: true });
-                }
-
-                let targetFolderPath: string;
-
-                if (isFolder) {
-                    const folderName = path.basename(filepath);
-                    targetFolderPath = path.join(categoryDir, folderName);
-
-                    if (fs.existsSync(targetFolderPath)) {
-                        results.push({ filepath, success: false, error: `Target folder already exists: ${category}/${folderName}` });
+                try {
+                    if (!fs.existsSync(filepath)) {
+                        importJobProgress.results.push({ filepath, success: false, error: 'Source file not found' });
+                        importJobProgress.summary.failed++;
+                        importJobProgress.processedItems++;
                         continue;
                     }
 
-                    fs.renameSync(filepath, targetFolderPath);
-                } else {
-                    const baseName = path.basename(filepath, path.extname(filepath));
-                    const cleanedName = cleanupFolderName(baseName);
-                    targetFolderPath = path.join(categoryDir, cleanedName);
-
-                    if (fs.existsSync(targetFolderPath)) {
-                        results.push({ filepath, success: false, error: `Target folder already exists: ${category}/${cleanedName}` });
-                        continue;
+                    // Ensure category folder exists
+                    const categoryDir = path.join(modelDir, category);
+                    if (!fs.existsSync(categoryDir)) {
+                        fs.mkdirSync(categoryDir, { recursive: true });
                     }
 
-                    fs.mkdirSync(targetFolderPath, { recursive: true });
-                    const targetFilePath = path.join(targetFolderPath, path.basename(filepath));
-                    fs.renameSync(filepath, targetFilePath);
-                }
+                    let targetFolderPath: string;
 
-                const model = await scanner.scanSingleFolder(targetFolderPath, modelDir);
+                    if (isFolder) {
+                        const folderName = path.basename(filepath);
+                        targetFolderPath = path.join(categoryDir, folderName);
 
-                // Assign designer if detected
-                if (model?.modelId) {
-                    let designerName: string | null = item.designer || null;
+                        if (fs.existsSync(targetFolderPath)) {
+                            importJobProgress.results.push({ filepath, success: false, error: `Target folder already exists: ${category}/${folderName}` });
+                            importJobProgress.summary.failed++;
+                            importJobProgress.processedItems++;
+                            continue;
+                        }
 
-                    // Fallback: check model_metadata (just extracted by scanSingleFolder)
-                    if (!designerName) {
-                        const mm = db.prepare('SELECT designer FROM model_metadata WHERE model_id = ?').get(model.modelId) as { designer: string | null } | undefined;
-                        if (mm?.designer) designerName = mm.designer;
+                        fs.renameSync(filepath, targetFolderPath);
+                    } else {
+                        const baseName = path.basename(filepath, path.extname(filepath));
+                        const cleanedName = cleanupFolderName(baseName);
+                        targetFolderPath = path.join(categoryDir, cleanedName);
+
+                        if (fs.existsSync(targetFolderPath)) {
+                            importJobProgress.results.push({ filepath, success: false, error: `Target folder already exists: ${category}/${cleanedName}` });
+                            importJobProgress.summary.failed++;
+                            importJobProgress.processedItems++;
+                            continue;
+                        }
+
+                        fs.mkdirSync(targetFolderPath, { recursive: true });
+                        const targetFilePath = path.join(targetFolderPath, path.basename(filepath));
+                        fs.renameSync(filepath, targetFilePath);
                     }
 
-                    if (designerName) {
-                        let designer = db.prepare('SELECT * FROM designers WHERE LOWER(name) = LOWER(?)').get(designerName) as any;
-                        if (!designer) {
-                            const result = db.prepare('INSERT OR IGNORE INTO designers (name) VALUES (?)').run(designerName);
-                            designer = db.prepare('SELECT * FROM designers WHERE id = ?').get(result.lastInsertRowid) as any;
+                    const model = await scanner.scanSingleFolder(targetFolderPath, modelDir);
+
+                    // Assign designer if detected
+                    if (model?.modelId) {
+                        let designerName: string | null = item.designer || null;
+
+                        // Fallback: check model_metadata (just extracted by scanSingleFolder)
+                        if (!designerName) {
+                            const mm = db.prepare('SELECT designer FROM model_metadata WHERE model_id = ?').get(model.modelId) as { designer: string | null } | undefined;
+                            if (mm?.designer) designerName = mm.designer;
+                        }
+
+                        if (designerName) {
+                            let designer = db.prepare('SELECT * FROM designers WHERE LOWER(name) = LOWER(?)').get(designerName) as any;
                             if (!designer) {
-                                designer = db.prepare('SELECT * FROM designers WHERE LOWER(name) = LOWER(?)').get(designerName) as any;
+                                const result = db.prepare('INSERT OR IGNORE INTO designers (name) VALUES (?)').run(designerName);
+                                designer = db.prepare('SELECT * FROM designers WHERE id = ?').get(result.lastInsertRowid) as any;
+                                if (!designer) {
+                                    designer = db.prepare('SELECT * FROM designers WHERE LOWER(name) = LOWER(?)').get(designerName) as any;
+                                }
                             }
-                        }
-                        if (designer) {
-                            db.prepare('UPDATE models SET designer_id = ? WHERE id = ?').run(designer.id, model.modelId);
-                            // Update profile URL from metadata if available
-                            const mm = db.prepare('SELECT designer_url FROM model_metadata WHERE model_id = ?').get(model.modelId) as { designer_url: string | null } | undefined;
-                            if (mm?.designer_url && !designer.profile_url) {
-                                db.prepare('UPDATE designers SET profile_url = ? WHERE id = ?').run(mm.designer_url, designer.id);
+                            if (designer) {
+                                db.prepare('UPDATE models SET designer_id = ? WHERE id = ?').run(designer.id, model.modelId);
+                                // Update profile URL from metadata if available
+                                const mm = db.prepare('SELECT designer_url FROM model_metadata WHERE model_id = ?').get(model.modelId) as { designer_url: string | null } | undefined;
+                                if (mm?.designer_url && !designer.profile_url) {
+                                    db.prepare('UPDATE designers SET profile_url = ? WHERE id = ?').run(mm.designer_url, designer.id);
+                                }
                             }
                         }
                     }
-                }
 
-                results.push({ filepath, success: true, model });
+                    importJobProgress.results.push({ filepath, success: true, model });
+                    importJobProgress.summary.succeeded++;
 
-                // Record name tokens → category association for future hint lookups
-                const importName = isFolder
-                    ? path.basename(filepath)
-                    : path.basename(filepath, path.extname(filepath));
-                recordCategorizationHints(importName, category);
-                // If the user changed the suggestion, penalize the wrong category
-                if (suggestedCategory && suggestedCategory !== category) {
-                    recordCategorizationHintPenalty(importName, suggestedCategory);
+                    // Record name tokens → category association for future hint lookups
+                    const importName = isFolder
+                        ? path.basename(filepath)
+                        : path.basename(filepath, path.extname(filepath));
+                    recordCategorizationHints(importName, category);
+                    // If the user changed the suggestion, penalize the wrong category
+                    if (suggestedCategory && suggestedCategory !== category) {
+                        recordCategorizationHintPenalty(importName, suggestedCategory);
+                    }
+                    // Log this import event for quality tracking over time
+                    recordIngestionEvent(importName, suggestedCategory, category, confidence);
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    importJobProgress.results.push({ filepath, success: false, error: message });
+                    importJobProgress.summary.failed++;
+                } finally {
+                    importJobProgress.processedItems++;
                 }
-                // Log this import event for quality tracking over time
-                recordIngestionEvent(importName, suggestedCategory, category, confidence);
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                results.push({ filepath, success: false, error: message });
             }
+        } finally {
+            const { succeeded, failed } = importJobProgress.summary;
+            importJobProgress.active = false;
+            importJobProgress.status = `Import complete: ${succeeded} succeeded, ${failed} failed`;
         }
-
-        const successCount = results.filter(r => r.success).length;
-        const failCount = results.filter(r => !r.success).length;
-
-        res.json({
-            success: true,
-            summary: {
-                total: items.length,
-                succeeded: successCount,
-                failed: failCount
-            },
-            results
-        });
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        res.status(500).json({ error: message });
-    }
+    });
 });
 
 // GET /api/ingestion/stats — acceptance rate and quality trends over time

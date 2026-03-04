@@ -270,9 +270,9 @@ describe('Ingestion Routes', () => {
             expect(item.suggestedCategory).toBe('Tools');
         });
 
-        it('matches "Animals" category via synonym "dragon"', async () => {
+        it('matches "Animals" category via synonym "dinosaur"', async () => {
             seedCategory('Animals');
-            const item = await scanFilename('dragon-skull.stl');
+            const item = await scanFilename('dinosaur-skull.stl');
             expect(item.suggestedCategory).toBe('Animals');
         });
     });
@@ -491,7 +491,8 @@ describe('Ingestion Routes', () => {
             const res = await request(app).post('/api/ingestion/import').send({
                 items: [{ filepath: '/test/ingestion/widget-holder.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Tools' }]
             });
-            expect(res.status).toBe(200);
+            expect(res.status).toBe(202);
+            await new Promise(resolve => setImmediate(resolve));
             const row = testDb.prepare(`SELECT count FROM categorization_hints WHERE token = ? AND category = ?`).get('widget', 'Tools') as any;
             expect(row.count).toBe(4);
         });
@@ -504,7 +505,8 @@ describe('Ingestion Routes', () => {
             const res = await request(app).post('/api/ingestion/import').send({
                 items: [{ filepath: '/test/ingestion/widget-holder.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Tools' }]
             });
-            expect(res.status).toBe(200);
+            expect(res.status).toBe(202);
+            await new Promise(resolve => setImmediate(resolve));
             const row = testDb.prepare(`SELECT count FROM categorization_hints WHERE token = ? AND category = ?`).get('widget', 'Tools') as any;
             expect(row.count).toBe(0);
         });
@@ -665,7 +667,8 @@ describe('Ingestion Routes', () => {
             const res = await request(app).post('/api/ingestion/import').send({
                 items: [{ filepath: '/test/ingestion/dragon-figurine.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Toys', confidence: 'high' }]
             });
-            expect(res.status).toBe(200);
+            expect(res.status).toBe(202);
+            await new Promise(resolve => setImmediate(resolve));
             const row = testDb.prepare(`SELECT * FROM ingestion_events WHERE item_name = ?`).get('dragon-figurine') as any;
             expect(row).toBeTruthy();
             expect(row.suggested_category).toBe('Toys');
@@ -678,7 +681,8 @@ describe('Ingestion Routes', () => {
             const res = await request(app).post('/api/ingestion/import').send({
                 items: [{ filepath: '/test/ingestion/dragon-figurine.stl', category: 'Toys', isFolder: false, suggestedCategory: 'Tools', confidence: 'medium' }]
             });
-            expect(res.status).toBe(200);
+            expect(res.status).toBe(202);
+            await new Promise(resolve => setImmediate(resolve));
             const row = testDb.prepare(`SELECT * FROM ingestion_events WHERE item_name = ?`).get('dragon-figurine') as any;
             expect(row).toBeTruthy();
             expect(row.suggested_category).toBe('Tools');
@@ -691,7 +695,8 @@ describe('Ingestion Routes', () => {
             const res = await request(app).post('/api/ingestion/import').send({
                 items: [{ filepath: '/test/ingestion/dragon-figurine.stl', category: 'Toys', isFolder: false }]
             });
-            expect(res.status).toBe(200);
+            expect(res.status).toBe(202);
+            await new Promise(resolve => setImmediate(resolve));
             const row = testDb.prepare(`SELECT * FROM ingestion_events WHERE item_name = ?`).get('dragon-figurine') as any;
             expect(row).toBeTruthy();
             expect(row.suggested_category).toBeNull();
