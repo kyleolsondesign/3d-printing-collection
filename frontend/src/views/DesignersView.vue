@@ -3,37 +3,65 @@
     <div class="header">
       <div class="header-left">
         <h2>Designers</h2>
-        <span class="count-badge" v-if="designers.length > 0">{{ designers.length }}</span>
-      </div>
-      <div class="header-actions">
-        <button @click="syncDesigners" class="sync-btn" :disabled="syncing" title="Sync designers from folder structure">
-          <svg :class="{ spinning: syncing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6M1 20v-6h6"/>
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-          </svg>
-          {{ syncing ? 'Syncing...' : 'Sync Designers' }}
-        </button>
-        <button @click="showAddDesigner = true" class="add-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          Add Designer
-        </button>
+        <span class="count-badge" v-if="designers.length > 0">{{ filteredDesigners.length }}</span>
       </div>
     </div>
 
-    <div v-if="syncResult" class="sync-result">
-      Synced: {{ syncResult.created }} new designers, {{ syncResult.linked }} models linked.
-      <button @click="syncResult = null" class="dismiss-btn">×</button>
-    </div>
-
-    <!-- Add Designer Form -->
-    <div v-if="showAddDesigner" class="add-designer-form">
-      <input v-model="newDesignerName" placeholder="Designer name" class="form-input" @keydown.enter="createDesigner" @keydown.escape="showAddDesigner = false" />
-      <input v-model="newDesignerUrl" placeholder="Profile URL (optional)" class="form-input" type="url" />
-      <div class="form-actions">
-        <button @click="createDesigner" class="confirm-btn" :disabled="!newDesignerName.trim()">Create</button>
-        <button @click="showAddDesigner = false; newDesignerName = ''; newDesignerUrl = ''" class="cancel-btn">Cancel</button>
+    <!-- Sort & Filter Controls -->
+    <div v-if="!loading && designers.length > 0 " class="view-controls">
+      <div class="controls-left">
+        <div class="sort-controls">
+          <select v-model="sortField" class="sort-select">
+            <option value="model_count">Model Count</option>
+            <option value="name">Name</option>
+            <option value="paid_model_count">Paid Count</option>
+            <option value="latest_model_date">Latest Model</option>
+          </select>
+          <button @click="toggleSortOrder" class="sort-order-btn"
+                  :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
+            <svg v-if="sortOrder === 'desc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M19 12l-7 7-7-7"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 19V5M5 12l7-7 7 7"/>
+            </svg>
+          </button>
+        </div>
+        <div class="filter-toggles">
+          <button
+            @click="cyclePaidFilter"
+            :class="['filter-toggle-btn', { active: activeFilter !== 'all', 'filter-hide': activeFilter === 'free' }]"
+            :title="activeFilter === 'all' ? 'Click to show only paid designers' : activeFilter === 'paid' ? 'Click to show only free designers' : 'Click to clear filter'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+            </svg>
+            <span>{{ paidFilterLabel }}</span>
+          </button>
+          <button
+            @click="hideSmall = !hideSmall"
+            :class="['filter-toggle-btn', { active: hideSmall }]"
+            title="Hide designers with fewer than 2 models"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <line x1="18" y1="8" x2="23" y2="8"/>
+            </svg>
+            <span>Hide &lt; 2 models</span>
+          </button>
+          <button
+            @click="toggleFavoritesFilter"
+            :class="['filter-toggle-btn', { active: favoritesOnly }]"
+            title="Show only favorited designers"
+          >
+            <svg viewBox="0 0 24 24" :fill="favoritesOnly ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+            </svg>
+            <span>Favorites</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -52,11 +80,11 @@
         </svg>
       </div>
       <h3>No designers yet</h3>
-      <p>Click "Sync Designers" to automatically detect designers from your Paid folder structure.</p>
+      <p>Run a scan from Settings to automatically detect designers from your folder structure and PDF metadata.</p>
     </div>
 
-    <!-- Designer list view (no model selected) -->
-    <div v-else-if="!selectedDesigner" class="designers-grid">
+    <!-- Designer list -->
+    <div v-else class="designers-grid">
       <div
         v-for="designer in filteredDesigners"
         :key="designer.id"
@@ -70,6 +98,7 @@
           <div class="designer-name">{{ designer.name }}</div>
           <div class="designer-meta">
             <span class="model-count">{{ designer.model_count }} model{{ designer.model_count !== 1 ? 's' : '' }}</span>
+            <span v-if="designer.paid_model_count > 0" class="paid-badge">{{ designer.paid_model_count }} paid</span>
             <a v-if="designer.profile_url" :href="designer.profile_url" target="_blank" rel="noopener" class="profile-link" @click.stop>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
@@ -81,87 +110,23 @@
           </div>
           <div v-if="designer.notes" class="designer-notes">{{ designer.notes }}</div>
         </div>
-        <button class="edit-designer-btn" @click.stop="startEditDesigner(designer)" title="Edit designer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Designer detail view -->
-    <div v-else class="designer-detail">
-      <div class="detail-header">
-        <button @click="selectedDesigner = null" class="back-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M12 5l-7 7 7 7"/>
-          </svg>
-          All Designers
-        </button>
-        <div class="detail-title">
-          <h3>{{ selectedDesigner.name }}</h3>
-          <span class="model-count">{{ selectedDesigner.total }} model{{ selectedDesigner.total !== 1 ? 's' : '' }}</span>
-        </div>
-        <div class="detail-actions">
-          <a v-if="selectedDesigner.profile_url" :href="selectedDesigner.profile_url" target="_blank" rel="noopener" class="profile-link-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-              <path d="M15 3h6v6"/>
-              <path d="M10 14L21 3"/>
+        <div class="card-actions">
+          <button
+            :class="['favorite-designer-btn', { active: designer.is_favorite }]"
+            @click.stop="toggleFavorite(designer)"
+            :title="designer.is_favorite ? 'Remove from favorites' : 'Add to favorites'"
+          >
+            <svg viewBox="0 0 24 24" :fill="designer.is_favorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
             </svg>
-            View Profile
-          </a>
-          <button @click="startEditDesigner(selectedDesigner)" class="edit-btn">
+          </button>
+          <button class="edit-designer-btn" @click.stop="startEditDesigner(designer)" title="Edit designer">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
-            Edit
           </button>
         </div>
-      </div>
-
-      <div v-if="selectedDesigner.notes" class="detail-notes">{{ selectedDesigner.notes }}</div>
-
-      <div v-if="loadingModels" class="loading">
-        <div class="loading-spinner"></div>
-        <span>Loading models...</span>
-      </div>
-      <div v-else class="models-grid">
-        <div
-          v-for="model in selectedDesigner.models"
-          :key="model.id"
-          class="model-card"
-          @click="openModel(model.id)"
-        >
-          <div class="model-image">
-            <img
-              v-if="model.primaryImage"
-              :src="getFileUrl(model.primaryImage)"
-              :alt="model.filename"
-              @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'"
-            />
-            <div v-else class="no-image">📦</div>
-          </div>
-          <div class="model-info">
-            <div class="model-name">{{ model.filename }}</div>
-            <div class="model-meta">
-              <span class="file-count">{{ model.file_count }} file{{ model.file_count !== 1 ? 's' : '' }}</span>
-              <span v-if="model.isPrinted" :class="['print-badge', model.printRating]">{{ model.printRating === 'good' ? '👍' : '👎' }}</span>
-              <span v-if="model.isFavorite" class="fav-badge">★</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="selectedDesigner.totalPages > 1" class="pagination">
-        <button
-          v-for="p in selectedDesigner.totalPages"
-          :key="p"
-          @click="loadDesignerPage(p)"
-          :class="['page-btn', { active: currentPage === p }]"
-        >{{ p }}</button>
       </div>
     </div>
 
@@ -190,59 +155,155 @@
         </div>
       </div>
     </div>
-
-    <!-- Model Details Modal -->
-    <ModelDetailsModal
-      v-if="selectedModelId"
-      :modelId="selectedModelId"
-      @close="selectedModelId = null"
-      @updated="handleModelUpdated"
-      @navigate="selectedModelId = $event"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { designersApi, modelsApi, type Designer } from '../services/api';
-import ModelDetailsModal from '../components/ModelDetailsModal.vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { designersApi, type Designer } from '../services/api';
+import { useAppStore } from '../store';
 
-interface DesignerWithModels extends Designer {
-  models: any[];
-  total: number;
-  totalPages: number;
-}
+const route = useRoute();
+const router = useRouter();
+
+const store = useAppStore();
 
 const loading = ref(true);
-const syncing = ref(false);
-const loadingModels = ref(false);
 const designers = ref<Designer[]>([]);
-const selectedDesigner = ref<DesignerWithModels | null>(null);
-const selectedModelId = ref<number | null>(null);
-const currentPage = ref(1);
-const syncResult = ref<{ created: number; linked: number } | null>(null);
 
-// Add designer form
-const showAddDesigner = ref(false);
-const newDesignerName = ref('');
-const newDesignerUrl = ref('');
+// Filter: 3-state cycle: all → paid → free → all
+const activeFilter = ref<'all' | 'paid' | 'free'>('all');
+
+function cyclePaidFilter() {
+  if (activeFilter.value === 'all') activeFilter.value = 'paid';
+  else if (activeFilter.value === 'paid') activeFilter.value = 'free';
+  else activeFilter.value = 'all';
+  loadDesigners();
+}
+
+const paidFilterLabel = computed(() => {
+  if (activeFilter.value === 'paid') return 'Only Paid';
+  if (activeFilter.value === 'free') return 'Only Free';
+  return 'Paid/Free';
+});
+
+// Sort & hide
+const sortField = ref('model_count');
+const sortOrder = ref<'asc' | 'desc'>('desc');
+const hideSmall = ref(true);
+const favoritesOnly = ref(false);
 
 // Edit designer
 const editingDesigner = ref<Designer | null>(null);
 const editForm = ref({ name: '', profile_url: '', notes: '' });
 
 const filteredDesigners = computed(() => {
-  return designers.value.filter(d => d.model_count && d.model_count > 0 || true);
+  let items = [...designers.value];
+
+  // Search filter
+  const q = store.globalSearchQuery.toLowerCase();
+  if (q) {
+    items = items.filter(d =>
+      d.name.toLowerCase().includes(q) ||
+      (d.notes && d.notes.toLowerCase().includes(q))
+    );
+  }
+
+  // Hide small designers
+  if (hideSmall.value) {
+    items = items.filter(d => (d.model_count || 0) >= 2);
+  }
+
+  // Sort
+  items.sort((a, b) => {
+    let aVal: any, bVal: any;
+    switch (sortField.value) {
+      case 'name':
+        aVal = (a.name || '').toLowerCase();
+        bVal = (b.name || '').toLowerCase();
+        break;
+      case 'model_count':
+        aVal = a.model_count || 0;
+        bVal = b.model_count || 0;
+        break;
+      case 'paid_model_count':
+        aVal = a.paid_model_count || 0;
+        bVal = b.paid_model_count || 0;
+        break;
+      case 'latest_model_date':
+        aVal = (a as any).latest_model_date || '';
+        bVal = (b as any).latest_model_date || '';
+        break;
+      default:
+        return 0;
+    }
+    const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+    return sortOrder.value === 'asc' ? cmp : -cmp;
+  });
+
+  return items;
+});
+
+function toggleSortOrder() {
+  sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+}
+
+function toggleFavoritesFilter() {
+  favoritesOnly.value = !favoritesOnly.value;
+  loadDesigners();
+}
+
+async function toggleFavorite(designer: Designer) {
+  try {
+    const res = await designersApi.toggleFavorite(designer.id);
+    designer.is_favorite = res.data.is_favorite ? 1 : 0;
+  } catch (error) {
+    console.error('Failed to toggle favorite:', error);
+  }
+}
+
+function initFromQueryParams() {
+  const { sort, order, hideSmall: hs } = route.query;
+  if (sort && typeof sort === 'string' && ['name', 'model_count', 'paid_model_count', 'latest_model_date'].includes(sort)) {
+    sortField.value = sort;
+  }
+  if (order && typeof order === 'string' && ['asc', 'desc'].includes(order)) {
+    sortOrder.value = order as 'asc' | 'desc';
+  }
+  if (hs === 'false') {
+    hideSmall.value = false;
+  }
+}
+
+function updateQueryParams() {
+  const query: Record<string, string> = {};
+  if (sortField.value !== 'model_count') query.sort = sortField.value;
+  if (sortOrder.value !== 'desc') query.order = sortOrder.value;
+  if (!hideSmall.value) query.hideSmall = 'false';
+  router.replace({ query });
+}
+
+watch([sortField, sortOrder, hideSmall], () => {
+  updateQueryParams();
 });
 
 onMounted(async () => {
+  initFromQueryParams();
   await loadDesigners();
+});
+
+onUnmounted(() => {
+  if (store.globalSearchQuery) store.clearGlobalSearch();
 });
 
 async function loadDesigners() {
   loading.value = true;
   try {
-    const res = await designersApi.getAll();
+    const res = await designersApi.getAll(
+      activeFilter.value === 'all' ? undefined : activeFilter.value,
+      favoritesOnly.value || undefined
+    );
     designers.value = res.data;
   } catch (error) {
     console.error('Failed to load designers:', error);
@@ -251,61 +312,11 @@ async function loadDesigners() {
   }
 }
 
-async function syncDesigners() {
-  syncing.value = true;
-  syncResult.value = null;
-  try {
-    const res = await designersApi.sync();
-    syncResult.value = res.data;
-    await loadDesigners();
-  } catch (error) {
-    console.error('Failed to sync designers:', error);
-  } finally {
-    syncing.value = false;
-  }
+function openDesigner(designer: Designer) {
+  router.push(`/designers/${designer.id}`);
 }
 
-async function openDesigner(designer: Designer) {
-  loadingModels.value = true;
-  currentPage.value = 1;
-  try {
-    const res = await designersApi.getById(designer.id, 1);
-    selectedDesigner.value = res.data;
-  } catch (error) {
-    console.error('Failed to load designer details:', error);
-  } finally {
-    loadingModels.value = false;
-  }
-}
-
-async function loadDesignerPage(page: number) {
-  if (!selectedDesigner.value) return;
-  loadingModels.value = true;
-  currentPage.value = page;
-  try {
-    const res = await designersApi.getById(selectedDesigner.value.id, page);
-    selectedDesigner.value = res.data;
-  } catch (error) {
-    console.error('Failed to load page:', error);
-  } finally {
-    loadingModels.value = false;
-  }
-}
-
-async function createDesigner() {
-  if (!newDesignerName.value.trim()) return;
-  try {
-    await designersApi.create({ name: newDesignerName.value.trim(), profile_url: newDesignerUrl.value || undefined });
-    newDesignerName.value = '';
-    newDesignerUrl.value = '';
-    showAddDesigner.value = false;
-    await loadDesigners();
-  } catch (error) {
-    console.error('Failed to create designer:', error);
-  }
-}
-
-function startEditDesigner(designer: Designer | DesignerWithModels) {
+function startEditDesigner(designer: Designer) {
   editingDesigner.value = designer;
   editForm.value = {
     name: designer.name,
@@ -328,11 +339,6 @@ async function saveEdit() {
     });
     editingDesigner.value = null;
     await loadDesigners();
-    // Refresh detail view if open
-    if (selectedDesigner.value) {
-      const res = await designersApi.getById(selectedDesigner.value.id, currentPage.value);
-      selectedDesigner.value = res.data;
-    }
   } catch (error) {
     console.error('Failed to update designer:', error);
   }
@@ -344,26 +350,10 @@ async function deleteDesigner() {
   try {
     await designersApi.delete(editingDesigner.value.id);
     editingDesigner.value = null;
-    if (selectedDesigner.value?.id === editingDesigner.value?.id) {
-      selectedDesigner.value = null;
-    }
     await loadDesigners();
-    selectedDesigner.value = null;
   } catch (error) {
     console.error('Failed to delete designer:', error);
   }
-}
-
-function openModel(modelId: number) {
-  selectedModelId.value = modelId;
-}
-
-function handleModelUpdated() {
-  // Reload model list if needed
-}
-
-function getFileUrl(filepath: string): string {
-  return modelsApi.getFileUrl(filepath);
 }
 </script>
 
@@ -407,93 +397,96 @@ function getFileUrl(filepath: string): string {
   color: var(--text-tertiary);
 }
 
-.header-actions {
+/* View Controls (sort + filters) */
+.view-controls {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.controls-left {
+  display: flex;
+  align-items: center;
   gap: 0.75rem;
-  align-items: center;
+  flex-wrap: wrap;
 }
 
-.sync-btn, .add-btn {
+.sort-controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.sort-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.sort-select:hover { border-color: var(--border-strong); }
+
+.sort-order-btn {
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
   border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.sync-btn {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
+  cursor: pointer;
 }
-
-.sync-btn:hover:not(:disabled) {
+.sort-order-btn svg { width: 16px; height: 16px; }
+.sort-order-btn:hover {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
 
-.sync-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.filter-toggles {
+  display: flex;
+  gap: 0.5rem;
 }
 
-.sync-btn svg {
-  width: 16px;
-  height: 16px;
+.filter-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
 }
-
-.add-btn {
-  background: var(--accent-primary-dim);
-  border: 1px solid rgba(34, 211, 238, 0.3);
+.filter-toggle-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.filter-toggle-btn:hover {
+  border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
-
-.add-btn:hover {
-  background: var(--accent-primary);
-  color: var(--bg-deepest);
+.filter-toggle-btn.active {
+  background: var(--accent-primary-dim);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.filter-toggle-btn.filter-hide {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
 }
 
-.add-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.sync-result {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--bg-surface);
-  border: 1px solid var(--success);
-  border-radius: var(--radius-md);
-  padding: 0.75rem 1rem;
-  color: var(--success);
-  font-size: 0.875rem;
-}
-
-.dismiss-btn {
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  font-size: 1.125rem;
-  padding: 0;
-  line-height: 1;
-}
-
-/* Add Designer Form */
-.add-designer-form {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 1rem;
-  flex-wrap: wrap;
+/* Paid Badge */
+.paid-badge {
+  font-size: 0.75rem;
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warning);
+  padding: 0.0625rem 0.375rem;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
 }
 
 .form-input {
@@ -664,6 +657,44 @@ function getFileUrl(filepath: string): string {
   text-overflow: ellipsis;
 }
 
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.favorite-designer-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: all var(--transition-base);
+}
+
+.favorite-designer-btn.active {
+  opacity: 1;
+  color: #f87171;
+}
+
+.designer-card:hover .favorite-designer-btn {
+  opacity: 1;
+}
+
+.favorite-designer-btn:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.favorite-designer-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 .edit-designer-btn {
   background: none;
   border: none;
@@ -689,213 +720,6 @@ function getFileUrl(filepath: string): string {
   width: 16px;
   height: 16px;
   display: block;
-}
-
-/* Designer Detail View */
-.designer-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.detail-header {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.back-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  padding: 0.5rem 0.875rem;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.back-btn:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-}
-
-.back-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.detail-title {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;
-}
-
-.detail-title h3 {
-  font-size: 1.375rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.detail-actions {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.profile-link-btn, .edit-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.875rem;
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-base);
-  text-decoration: none;
-}
-
-.profile-link-btn {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-}
-
-.profile-link-btn:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-}
-
-.profile-link-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-.edit-btn {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-}
-
-.edit-btn:hover {
-  border-color: var(--border-default);
-  color: var(--text-primary);
-}
-
-.edit-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-.detail-notes {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 0.875rem 1rem;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-/* Models Grid (in detail view) */
-.models-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1rem;
-}
-
-.model-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.model-card:hover {
-  border-color: var(--accent-primary);
-  transform: translateY(-2px);
-}
-
-.model-image {
-  aspect-ratio: 1;
-  background: var(--bg-elevated);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.model-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.no-image {
-  font-size: 2.5rem;
-}
-
-.model-info {
-  padding: 0.75rem;
-}
-
-.model-name {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 0.25rem;
-}
-
-.model-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-}
-
-.print-badge {
-  font-size: 0.875rem;
-}
-
-.fav-badge {
-  color: var(--warning);
-}
-
-/* Pagination */
-.pagination {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.page-btn {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  padding: 0.375rem 0.75rem;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.page-btn:hover, .page-btn.active {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  background: var(--accent-primary-dim);
 }
 
 /* Edit Modal */
@@ -984,10 +808,6 @@ function getFileUrl(filepath: string): string {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-.spinning {
-  animation: spin 0.8s linear infinite;
 }
 
 .empty {

@@ -14,12 +14,23 @@ export function initSchema(db: InstanceType<typeof Database>): void {
     db.exec(`DROP TABLE IF EXISTS models_fts`);
 
     // Drop tables in dependency order
-    const tables = ['recently_viewed', 'make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'currently_printing', 'print_queue', 'tags', 'config', 'loose_files', 'models', 'categorization_hints', 'ingestion_events'];
+    const tables = ['recently_viewed', 'make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'currently_printing', 'print_queue', 'tags', 'config', 'loose_files', 'models', 'designer_favorites', 'designers', 'categorization_hints', 'ingestion_events'];
     for (const table of tables) {
         db.exec(`DROP TABLE IF EXISTS ${table}`);
     }
 
     db.pragma('foreign_keys = ON');
+
+    db.exec(`
+        CREATE TABLE designers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            profile_url TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
 
     db.exec(`
         CREATE TABLE models (
@@ -36,7 +47,8 @@ export function initSchema(db: InstanceType<typeof Database>): void {
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             last_scanned TEXT DEFAULT CURRENT_TIMESTAMP,
             deleted_at TEXT,
-            notes TEXT
+            notes TEXT,
+            designer_id INTEGER REFERENCES designers(id) ON DELETE SET NULL
         )
     `);
 
@@ -205,6 +217,14 @@ export function initSchema(db: InstanceType<typeof Database>): void {
             chosen_category TEXT NOT NULL,
             confidence TEXT CHECK(confidence IN ('high', 'medium', 'low')),
             accepted INTEGER NOT NULL DEFAULT 0
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS designer_favorites (
+            designer_id INTEGER PRIMARY KEY,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (designer_id) REFERENCES designers(id) ON DELETE CASCADE
         )
     `);
 

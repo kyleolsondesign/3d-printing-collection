@@ -77,7 +77,7 @@ export interface Category {
 
 // Models API
 export const modelsApi = {
-    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean }) =>
+    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string }) =>
         api.get('/models', { params }),
 
     getById: (id: number) =>
@@ -142,7 +142,8 @@ export interface MakeImage {
 }
 
 export const printedApi = {
-    getAll: () => api.get('/printed'),
+    getAll: (params?: { page?: number; limit?: number; sort?: string; order?: string; filterFavorites?: string; filterQueued?: string }) =>
+        api.get('/printed', { params }),
     toggle: (modelId: number, rating: 'good' | 'bad' = 'good') => api.post('/printed/toggle', { model_id: modelId, rating }),
     cycle: (modelId: number) => api.post('/printed/cycle', { model_id: modelId }),
     bulk: (modelIds: number[], action: 'add' | 'remove', rating: 'good' | 'bad' = 'good') =>
@@ -217,7 +218,7 @@ export const ingestionApi = {
     scan: () => api.get('/ingestion/scan'),
     categorize: () => api.post('/ingestion/categorize'),
     categorizeStatus: () => api.get('/ingestion/categorize/status'),
-    importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean; suggestedCategory?: string; confidence?: string }>) =>
+    importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean; suggestedCategory?: string; confidence?: string; designer?: string | null }>) =>
         api.post('/ingestion/import', { items }),
     getPreviewImageUrl: (filePath: string) =>
         `/api/ingestion/preview-image?path=${encodeURIComponent(filePath)}`,
@@ -231,18 +232,32 @@ export interface Designer {
     profile_url: string | null;
     notes: string | null;
     model_count?: number;
+    paid_model_count?: number;
     latest_model_date?: string | null;
+    is_favorite?: number;
     created_at?: string;
     updated_at?: string;
 }
 
+export interface SyncProgress {
+    active: boolean;
+    phase: 'idle' | 'paid_models' | 'metadata_models' | 'complete';
+    phaseDescription: string;
+    totalItems: number;
+    processedItems: number;
+    created: number;
+    linked: number;
+}
+
 export const designersApi = {
-    getAll: () => api.get('/designers'),
-    getById: (id: number, page?: number) => api.get(`/designers/${id}`, { params: { page } }),
+    getAll: (filter?: 'paid' | 'free', favoritesOnly?: boolean) => api.get('/designers', { params: { filter, favoritesOnly: favoritesOnly || undefined } }),
+    getById: (id: number, opts?: { page?: number; sort?: string; order?: string; q?: string; filterPrinted?: string; filterQueued?: string; filterFavorites?: string }) => api.get(`/designers/${id}`, { params: opts }),
     create: (data: { name: string; profile_url?: string; notes?: string }) => api.post('/designers', data),
     update: (id: number, data: { name?: string; profile_url?: string; notes?: string }) => api.patch(`/designers/${id}`, data),
     delete: (id: number) => api.delete(`/designers/${id}`),
-    sync: () => api.post('/designers/sync')
+    toggleFavorite: (id: number) => api.post(`/designers/${id}/favorite`),
+    sync: () => api.post('/designers/sync'),
+    syncStatus: () => api.get('/designers/sync/status')
 };
 
 // Tags API

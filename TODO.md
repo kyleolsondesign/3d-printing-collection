@@ -69,10 +69,20 @@
 - [x] Image gallery mode: A full-screen, image-focused browsing mode with larger thumbnails in a masonry or justified grid layout. Clicking opens the model details. Good for visual browsing when you know what something looks like but not its name.
 - [x] Print time and filament tracking: The `printed_models` table already has `print_time_hours` and `filament_used_grams` columns. Add UI in the printed view and modal to record and display these, with totals in the stats dashboard.
 - [x] File system watcher: Use `fs.watch` or `chokidar` to monitor the model directory for changes and automatically trigger incremental scans when files are added, moved, or deleted. Eliminates the need for manual re-scans.
+- [x] Add a new state for models indicating it is currently printing. There should be a button to add it to this state from the modal view. Anything currently printing should show up on the queue page at the top, even if the model does not otherwise have the queue flag. It should be easily visually distinguished from the 'queued but not printing' models.
 
 ---
 
-- [ ] Add a new state for models indicating it is currently printing. There should be a button to add it to this state from the modal view. Anything currently printing should show up on the queue page at the top, even if the model does not otherwise have the queue flag. It should be easily visually distinguished from the 'queued but not printing' models.
+- [ ] Sort does not work on the search results view
+- [ ] Add the "currently printing" row at the top of the browse page as well
 - [ ] Add a new bulk recategorization feature. It should be able to search/filter through all models, bulk-select, and recategorize. It should allow creating new categories entirely, splitting off from old ones. Plan out a good user experience for this feature and make sure the code paths are generic enough that we can have some automated recategorization later on, with manual user approval.
 - [ ] Paid model categorization: Paid should be a tag and we should keep the current folder structure for paid models, but "Paid" itself is not a category.
 - [ ] Bulk purge mode: a feature where you suggest models to delete (move to the macOS trash), based on an algorithm we determine via AskUserQuestion and can fine tune over time, including the aged of the model, if it was marked as a bad print, etc.
+- [ ] If I have manually selected a new primary image for a model, do not overwrite it on sync
+- [x] Ignore loose files that start with `!`
+- [x] On the card view, make the print icon first toggle a "printing" state (orange), then toggle good print and then bad print, as it does currently. Add this toggle to the card when in queue view as well
+- [ ] Any time a change is made to a model, whether it's via a button on the card/table row or within a modal, all instances of that model should update on the current page. For example, on the designer page card view if you click "printed", it is not reflected in the UI
+- [x] Paginate the print history view using infinite scrolling
+- [x] Support favoriting designers, and filtering by favorites in the main designer page
+- [ ] Add sorting to the queue page, with the default being sort by when the item was added to the queue. Also support a random sort
+- [ ] Be consistent with icons across all buttons. For instance the queue icon has the hamburger lines in some places, and the + and a check mark on the browse page. In general all the icons for queue are bad. Let's figure something better out

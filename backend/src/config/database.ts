@@ -259,6 +259,15 @@ function initializeDatabase(): void {
         )
     `);
 
+    // Designer favorites — user's favorited designers
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS designer_favorites (
+            designer_id INTEGER PRIMARY KEY,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (designer_id) REFERENCES designers(id) ON DELETE CASCADE
+        )
+    `);
+
     // Ingestion events — per-import event log for tracking categorization quality over time
     db.exec(`
         CREATE TABLE IF NOT EXISTS ingestion_events (
