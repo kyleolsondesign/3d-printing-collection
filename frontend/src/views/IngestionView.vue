@@ -272,9 +272,9 @@
         <!-- Import progress bar -->
         <div v-if="importing" class="import-progress">
           <div class="import-progress-bar">
-            <div class="import-progress-fill"></div>
+            <div class="import-progress-fill" :style="{ width: importProgressPercent + '%' }"></div>
           </div>
-          <span class="import-progress-text">Importing {{ selectedIds.size }} item{{ selectedIds.size > 1 ? 's' : '' }}...</span>
+          <span class="import-progress-text">{{ importProgress.status || `Importing ${importProgress.processedItems}/${importProgress.totalItems}...` }}</span>
         </div>
       </div>
 
@@ -458,6 +458,19 @@ const aiProgressPercent = computed(() => {
   return Math.round((aiProgress.value.currentBatch / aiProgress.value.totalBatches) * 100);
 });
 const importingPaths = ref<Set<string>>(new Set());
+const importProgress = ref({
+  active: false,
+  totalItems: 0,
+  processedItems: 0,
+  currentItem: '',
+  status: '',
+  results: [] as Array<{ filepath: string; success: boolean; error?: string; model?: any }>,
+  summary: { total: 0, succeeded: 0, failed: 0 }
+});
+const importProgressPercent = computed(() =>
+  importProgress.value.totalItems === 0 ? 0
+  : Math.round((importProgress.value.processedItems / importProgress.value.totalItems) * 100)
+);
 const lastResults = ref<ImportResults | null>(null);
 const activeDebugPath = ref<string | null>(null);
 
@@ -802,8 +815,18 @@ async function importSelected() {
   const filenameLookup = new Map<string, { filename: string; category: string }>();
   selectedItems.forEach(i => filenameLookup.set(i.filepath, { filename: i.filename, category: i.selectedCategory }));
 
-  // Mark as importing
+  // Mark all selected items as importing
   selectedItems.forEach(i => importingPaths.value.add(i.filepath));
+
+  importProgress.value = {
+    active: true,
+    totalItems: selectedItems.length,
+    processedItems: 0,
+    currentItem: '',
+    status: `Starting import of ${selectedItems.length} item${selectedItems.length !== 1 ? 's' : ''}...`,
+    results: [],
+    summary: { total: selectedItems.length, succeeded: 0, failed: 0 }
+  };
 
   try {
     const payload = selectedItems.map(i => ({
@@ -815,8 +838,24 @@ async function importSelected() {
       designer: i.designer
     }));
 
-    const response = await ingestionApi.importItems(payload);
-    const details: ImportDetail[] = (response.data.results || []).map((r: any) => {
+    // Kick off the import (returns 202 immediately)
+    await ingestionApi.importItems(payload);
+
+    // Poll until the background job completes
+    await new Promise<void>((resolve) => {
+      const poll = setInterval(async () => {
+        try {
+          const status = await ingestionApi.getImportStatus();
+          importProgress.value = status.data;
+          if (!status.data.active) {
+            clearInterval(poll);
+            resolve();
+          }
+        } catch { /* ignore transient poll errors */ }
+      }, 1000);
+    });
+
+    const details: ImportDetail[] = importProgress.value.results.map((r: any) => {
       const info = filenameLookup.get(r.filepath);
       return {
         filename: info?.filename || path_basename(r.filepath),
@@ -825,7 +864,7 @@ async function importSelected() {
         category: info?.category
       };
     });
-    lastResults.value = { ...response.data.summary, details };
+    lastResults.value = { ...importProgress.value.summary, details };
 
     // Re-scan to update list
     await scanFolder();
@@ -1522,13 +1561,7 @@ h2 {
   height: 100%;
   background: var(--accent-primary);
   border-radius: 2px;
-  animation: progressIndeterminate 1.5s ease-in-out infinite;
-}
-
-@keyframes progressIndeterminate {
-  0% { width: 0%; margin-left: 0%; }
-  50% { width: 40%; margin-left: 30%; }
-  100% { width: 0%; margin-left: 100%; }
+  transition: width 0.4s ease;
 }
 
 .import-progress-text {

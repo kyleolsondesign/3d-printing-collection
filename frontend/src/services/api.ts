@@ -215,11 +215,12 @@ export const systemApi = {
 export const ingestionApi = {
     getConfig: () => api.get('/ingestion/config'),
     setConfig: (data: { directory?: string; apiKey?: string; prompt?: string }) => api.post('/ingestion/config', data),
-    scan: () => api.get('/ingestion/scan'),
+    scan: () => api.get('/ingestion/scan', { timeout: 300000 }),
     categorize: () => api.post('/ingestion/categorize'),
     categorizeStatus: () => api.get('/ingestion/categorize/status'),
     importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean; suggestedCategory?: string; confidence?: string; designer?: string | null }>) =>
         api.post('/ingestion/import', { items }),
+    getImportStatus: () => api.get('/ingestion/import/status'),
     getPreviewImageUrl: (filePath: string) =>
         `/api/ingestion/preview-image?path=${encodeURIComponent(filePath)}`,
     getImportStats: () => api.get('/ingestion/stats')
