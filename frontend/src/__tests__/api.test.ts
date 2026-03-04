@@ -48,10 +48,10 @@ describe('API Client', () => {
         });
 
         it('getAll passes filter params', async () => {
-            await modelsApi.getAll({ hidePrinted: true, hideQueued: false, category: 'Toys' });
+            await modelsApi.getAll({ filterPrinted: 'hide', filterQueued: 'only', filterFavorites: 'hide', category: 'Toys' });
             const mockApi = axios.create() as any;
             expect(mockApi.get).toHaveBeenCalledWith('/models', {
-                params: { hidePrinted: true, hideQueued: false, category: 'Toys' }
+                params: { filterPrinted: 'hide', filterQueued: 'only', filterFavorites: 'hide', category: 'Toys' }
             });
         });
 

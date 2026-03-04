@@ -268,6 +268,10 @@ Both backend and frontend use strict TypeScript:
    - Frontend changes: Hot module replacement via Vite
    - Both have TypeScript type checking
 
+5. **After Every Change**:
+   - Run `npm run test` in `frontend/` and `backend/` — fix any failures before committing
+   - Commit the changes with a descriptive message
+
 ## API Proxy Configuration
 
 Frontend Vite config (frontend/vite.config.ts) proxies `/api` requests to backend:

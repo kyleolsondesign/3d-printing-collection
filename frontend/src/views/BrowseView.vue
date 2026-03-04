@@ -280,7 +280,7 @@
           </div>
           <div class="printing-card-actions" @click.stop>
             <button
-              @click="store.cyclePrinted(model.id)"
+              @click="store.cyclePrinted(model.id).then(loadPrintingItems)"
               class="printing-card-btn printing-card-btn--done"
               title="Mark as printed (good)"
             >
@@ -290,7 +290,7 @@
               Done
             </button>
             <button
-              @click="store.togglePrinting(model.id)"
+              @click="store.togglePrinting(model.id).then(loadPrintingItems)"
               class="printing-card-btn printing-card-btn--stop"
               title="Stop printing"
             >
@@ -602,7 +602,21 @@ const bulkTagInput = ref('');
 const showBulkCategoryPicker = ref(false);
 const bulkCategoryTarget = ref('');
 
-const printingModels = computed(() => store.models.filter(m => m.isPrinting && !m.isPrinted));
+// Currently printing items loaded globally from queue API (not paginated)
+const allPrintingItems = ref<any[]>([]);
+
+async function loadPrintingItems() {
+  try {
+    const response = await queueApi.getAll();
+    allPrintingItems.value = response.data
+      .filter((item: any) => item.is_printing)
+      .map((item: any) => ({ ...item, id: item.model_id }));
+  } catch (error) {
+    console.error('Failed to load printing items:', error);
+  }
+}
+
+const printingModels = computed(() => allPrintingItems.value);
 const hasMoreModels = computed(() => !isSearchActive.value && store.models.length < totalModels.value);
 const selectedCount = computed(() => selectedModels.value.size);
 const allSelected = computed(() => store.models.length > 0 && selectedModels.value.size === store.models.length);
@@ -686,7 +700,7 @@ function updateQueryParams() {
 
 onMounted(async () => {
   initFromQueryParams();
-  await loadInitialModels();
+  await Promise.all([loadInitialModels(), loadPrintingItems()]);
   setupIntersectionObserver();
   isInitialized.value = true;
 });
@@ -801,8 +815,9 @@ async function loadMoreModels() {
       limit: 50,
       sort: sortField.value,
       order: sortOrder.value,
-      hidePrinted: hidePrinted.value,
-      hideQueued: hideQueued.value
+      filterPrinted: filterPrinted.value || undefined,
+      filterQueued: filterQueued.value || undefined,
+      filterFavorites: filterFavorites.value || undefined
     });
 
     store.models = [...store.models, ...response.data.models];
@@ -832,8 +847,9 @@ async function filterByCategory(category: string) {
       limit: 50,
       sort: sortField.value,
       order: sortOrder.value,
-      hidePrinted: hidePrinted.value,
-      hideQueued: hideQueued.value
+      filterPrinted: filterPrinted.value || undefined,
+      filterQueued: filterQueued.value || undefined,
+      filterFavorites: filterFavorites.value || undefined
     });
     store.models = response.data.models;
     store.currentPage = 1;
@@ -925,6 +941,8 @@ function handleModelUpdated(updatedModel: any) {
   if (index !== -1) {
     store.models[index] = { ...store.models[index], ...updatedModel };
   }
+  // Refresh globally-loaded printing items in case printing state changed
+  loadPrintingItems();
 }
 
 async function openInFinder(model: Model) {
