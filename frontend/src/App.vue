@@ -172,6 +172,8 @@
         <router-view />
       </main>
     </div>
+
+    <BackToTopButton />
   </div>
 </template>
 
@@ -180,6 +182,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAppStore } from './store';
 import { systemApi } from './services/api';
+import BackToTopButton from './components/BackToTopButton.vue';
 
 const store = useAppStore();
 const router = useRouter();
