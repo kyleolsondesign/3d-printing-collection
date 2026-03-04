@@ -83,8 +83,8 @@ export const modelsApi = {
     getById: (id: number) =>
         api.get(`/models/${id}`),
 
-    search: (query: string) =>
-        api.get('/models/search/query', { params: { q: query } }),
+    search: (query: string, sort?: string, order?: string) =>
+        api.get('/models/search/query', { params: { q: query, sort, order } }),
 
     getFileUrl: (filepath: string) =>
         `/api/models/file/serve?path=${encodeURIComponent(filepath)}`,

@@ -324,6 +324,8 @@ router.get('/:id', (req, res) => {
 router.get('/search/query', (req, res) => {
     try {
         const query = req.query.q as string;
+        const sort = req.query.sort as string || 'date_added';
+        const order = req.query.order as string || 'desc';
 
         if (!query) {
             return res.status(400).json({ error: 'Search query required' });
@@ -371,6 +373,23 @@ router.get('/search/query', (req, res) => {
                 seenIds.add(m.id);
             }
         }
+
+        // Apply sort/order to merged results
+        const sortColumns: Record<string, string> = {
+            'date_added': 'date_added',
+            'date_created': 'date_created',
+            'name': 'filename',
+            'category': 'category'
+        };
+        const sortCol = sortColumns[sort] || 'date_added';
+        const sortDir = order.toLowerCase() === 'asc' ? 1 : -1;
+        models.sort((a: any, b: any) => {
+            const av = a[sortCol] ?? '';
+            const bv = b[sortCol] ?? '';
+            if (av < bv) return -1 * sortDir;
+            if (av > bv) return 1 * sortDir;
+            return a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0;
+        });
 
         // Get primary image and status for each search result
         const modelsWithDetails = models.map(model => {

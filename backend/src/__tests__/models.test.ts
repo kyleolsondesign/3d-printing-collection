@@ -222,6 +222,22 @@ describe('Models Routes', () => {
             expect(res.status).toBe(200);
             expect(res.body.models.find((m: any) => m.id === 10)).toBeDefined();
         });
+
+        it('sorts search results by name asc', async () => {
+            const res = await request(app).get('/api/models/search/query?q=Model&sort=name&order=asc');
+            expect(res.status).toBe(200);
+            const names = res.body.models.map((m: any) => m.filename);
+            const sorted = [...names].sort((a: string, b: string) => a.localeCompare(b));
+            expect(names).toEqual(sorted);
+        });
+
+        it('sorts search results by name desc', async () => {
+            const res = await request(app).get('/api/models/search/query?q=Model&sort=name&order=desc');
+            expect(res.status).toBe(200);
+            const names = res.body.models.map((m: any) => m.filename);
+            const sorted = [...names].sort((a: string, b: string) => b.localeCompare(a));
+            expect(names).toEqual(sorted);
+        });
     });
 
     describe('Primary image selection (GIF preference)', () => {

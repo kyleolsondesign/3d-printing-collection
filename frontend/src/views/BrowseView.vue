@@ -710,7 +710,9 @@ onUnmounted(() => {
 
 // Watch for changes that require reloading
 watch([sortField, sortOrder, filterPrinted, filterQueued, filterFavorites], () => {
-  if (!isSearchActive.value) {
+  if (isSearchActive.value) {
+    handleSearch(store.globalSearchQuery);
+  } else {
     resetAndLoad();
   }
   updateQueryParams();
@@ -849,7 +851,7 @@ async function handleSearch(query: string) {
     store.loading = true;
     isSearchActive.value = true;
     try {
-      const response = await modelsApi.search(query);
+      const response = await modelsApi.search(query, sortField.value, sortOrder.value);
       store.models = response.data.models;
       totalModels.value = response.data.count;
       store.currentPage = 1;
