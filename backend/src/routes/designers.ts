@@ -50,13 +50,30 @@ router.get('/', (req, res) => {
 
         const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-        const designers = db.prepare(`
+        const rows = db.prepare(`
             SELECT
                 d.id, d.name, d.profile_url, d.notes, d.created_at, d.updated_at,
                 COUNT(m.id) as model_count,
                 MAX(m.date_added) as latest_model_date,
                 SUM(CASE WHEN m.is_paid = 1 THEN 1 ELSE 0 END) as paid_model_count,
-                CASE WHEN df.designer_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite
+                CASE WHEN df.designer_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+                (
+                    SELECT GROUP_CONCAT(sub.filepath, '|||')
+                    FROM (
+                        SELECT ma.filepath
+                        FROM model_assets ma
+                        INNER JOIN models inner_m ON inner_m.id = ma.model_id
+                        LEFT JOIN favorites fav ON fav.model_id = inner_m.id
+                        WHERE inner_m.designer_id = d.id
+                          AND inner_m.deleted_at IS NULL
+                          AND ma.asset_type = 'image'
+                          AND (ma.is_hidden = 0 OR ma.is_hidden IS NULL)
+                          AND ma.is_primary = 1
+                        ORDER BY (CASE WHEN fav.model_id IS NOT NULL THEN 0 ELSE 1 END) ASC,
+                                 inner_m.date_added DESC NULLS LAST
+                        LIMIT 4
+                    ) sub
+                ) as preview_images_raw
             FROM designers d
             LEFT JOIN models m ON m.designer_id = d.id AND m.deleted_at IS NULL
             LEFT JOIN designer_favorites df ON df.designer_id = d.id
@@ -64,7 +81,12 @@ router.get('/', (req, res) => {
             GROUP BY d.id
             ${havingClause}
             ORDER BY d.name ASC
-        `).all();
+        `).all() as any[];
+        const designers = rows.map((d: any) => ({
+            ...d,
+            preview_images: d.preview_images_raw ? d.preview_images_raw.split('|||') : [],
+            preview_images_raw: undefined
+        }));
         res.json(designers);
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

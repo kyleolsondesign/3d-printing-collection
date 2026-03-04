@@ -24,6 +24,7 @@ export interface Model {
     isPrinted?: boolean;
     printRating?: 'good' | 'bad' | null;
     isPrinting?: boolean;
+    designer_id?: number | null;
     designer?: string | null;
     source_platform?: string | null;
     source_url?: string | null;
@@ -238,6 +239,7 @@ export interface Designer {
     is_favorite?: number;
     created_at?: string;
     updated_at?: string;
+    preview_images?: string[];
 }
 
 export interface SyncProgress {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 import * as api from '../services/api';
 
@@ -45,11 +46,18 @@ function setupMocks(overrides: Partial<typeof mockModelDetails> = {}) {
     vi.mocked(api.tagsApi.getAll).mockResolvedValue({ data: [] } as any);
 }
 
+function makeRouter() {
+    return createRouter({ history: createMemoryHistory(), routes: [
+        { path: '/', component: { template: '<div/>' } },
+        { path: '/designers/:id', component: { template: '<div/>' } }
+    ]});
+}
+
 function mountModal(props = { modelId: 1 }) {
     return mount(ModelDetailsModal, {
         props,
         global: {
-            plugins: [createPinia()],
+            plugins: [createPinia(), makeRouter()],
             stubs: {
                 Teleport: true
             }
@@ -221,7 +229,7 @@ describe('ModelDetailsModal', () => {
         const wrapper = mount(ModelDetailsModal, {
             props: { modelId: 2, modelIds: [1, 2, 3] },
             global: {
-                plugins: [createPinia()],
+                plugins: [createPinia(), makeRouter()],
                 stubs: { Teleport: true }
             }
         });
@@ -238,7 +246,7 @@ describe('ModelDetailsModal', () => {
         const wrapper = mount(ModelDetailsModal, {
             props: { modelId: 2, modelIds: [1, 2, 3] },
             global: {
-                plugins: [createPinia()],
+                plugins: [createPinia(), makeRouter()],
                 stubs: { Teleport: true }
             }
         });
@@ -255,7 +263,7 @@ describe('ModelDetailsModal', () => {
         const wrapper = mount(ModelDetailsModal, {
             props: { modelId: 1, modelIds: [1, 2, 3] },
             global: {
-                plugins: [createPinia()],
+                plugins: [createPinia(), makeRouter()],
                 stubs: { Teleport: true }
             }
         });
@@ -271,7 +279,7 @@ describe('ModelDetailsModal', () => {
         const wrapper = mount(ModelDetailsModal, {
             props: { modelId: 2, modelIds: [1, 2, 3] },
             global: {
-                plugins: [createPinia()],
+                plugins: [createPinia(), makeRouter()],
                 stubs: { Teleport: true }
             }
         });

@@ -293,6 +293,7 @@ function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_currently_printing ON currently_printing(model_id);
         CREATE INDEX IF NOT EXISTS idx_metadata_platform ON model_metadata(source_platform);
         CREATE INDEX IF NOT EXISTS idx_metadata_designer ON model_metadata(designer);
+        CREATE INDEX IF NOT EXISTS idx_model_assets_lookup ON model_assets(model_id, asset_type, is_primary, is_hidden);
     `);
 
     // Create full-text search virtual table

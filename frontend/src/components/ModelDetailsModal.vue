@@ -165,7 +165,8 @@
               <div class="metadata-section" v-if="modelDetails.metadata && hasMetadata">
                 <div class="metadata-row" v-if="modelDetails.metadata.designer">
                   <span class="metadata-label">Designer</span>
-                  <a v-if="modelDetails.metadata.designer_url" :href="modelDetails.metadata.designer_url" target="_blank" rel="noopener" class="metadata-link">{{ modelDetails.metadata.designer }}</a>
+                  <a v-if="modelDetails.designer_id" @click.prevent="goToDesigner" href="#" class="metadata-link">{{ modelDetails.metadata.designer }}</a>
+                  <a v-else-if="modelDetails.metadata.designer_url" :href="modelDetails.metadata.designer_url" target="_blank" rel="noopener" class="metadata-link">{{ modelDetails.metadata.designer }}</a>
                   <span v-else class="metadata-value">{{ modelDetails.metadata.designer }}</span>
                 </div>
                 <div class="metadata-row" v-if="modelDetails.metadata.source_platform">
@@ -414,6 +415,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { useRouter } from 'vue-router';
 import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, tagsApi, type Model, type ModelAsset, type ModelMetadata, type MakeImage, type Tag } from '../services/api';
 import { useAppStore } from '../store';
 
@@ -491,6 +493,14 @@ function navigateNext() {
 }
 
 const store = useAppStore();
+const router = useRouter();
+
+function goToDesigner() {
+  const designerId = modelDetails.value?.designer_id;
+  if (designerId) {
+    router.push(`/designers/${designerId}`);
+  }
+}
 
 const loading = ref(true);
 const rescanning = ref(false);
