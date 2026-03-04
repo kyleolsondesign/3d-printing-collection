@@ -480,6 +480,11 @@ class Scanner {
             `).run(cleanedName, category, isPaid ? 1 : 0, isOriginal ? 1 : 0,
                 modelFiles.length, dateAdded, dateCreated, modelId);
 
+            // Save manually-selected primary image before clearing assets
+            const existingPrimary = db.prepare(
+                `SELECT filepath FROM model_assets WHERE model_id = ? AND is_primary = 1 AND asset_type = 'image'`
+            ).get(modelId) as { filepath: string } | undefined;
+
             // Clear and re-insert child records
             db.prepare('DELETE FROM model_files WHERE model_id = ?').run(modelId);
             db.prepare('DELETE FROM model_assets WHERE model_id = ?').run(modelId);
@@ -498,7 +503,7 @@ class Scanner {
 
             // Index assets
             this.indexAssets(modelId, folderPath);
-            this.selectPrimaryImage(modelId);
+            this.selectPrimaryImage(modelId, existingPrimary?.filepath);
 
             // Extract images from archives if no primary image
             if (!this.hasPrimaryImage(modelId)) {
@@ -897,6 +902,7 @@ class Scanner {
                 }
 
                 let modelId: number;
+                let previousPrimaryFilepath: string | undefined;
 
                 // Check if model already exists (for non-full modes)
                 const existingModel = db.prepare('SELECT id FROM models WHERE filepath = ?').get(folderPath) as { id: number } | undefined;
@@ -927,6 +933,12 @@ class Scanner {
                         dateCreated,
                         modelId
                     );
+
+                    // Save manually-selected primary image before clearing assets
+                    const existingPrimary = db.prepare(
+                        `SELECT filepath FROM model_assets WHERE model_id = ? AND is_primary = 1 AND asset_type = 'image'`
+                    ).get(modelId) as { filepath: string } | undefined;
+                    previousPrimaryFilepath = existingPrimary?.filepath;
 
                     // Clear and rebuild model_files and model_assets
                     db.prepare('DELETE FROM model_files WHERE model_id = ?').run(modelId);
@@ -973,7 +985,7 @@ class Scanner {
 
                 // Find and index associated assets (images, PDFs)
                 this.indexAssets(modelId, folderPath);
-                this.selectPrimaryImage(modelId);
+                this.selectPrimaryImage(modelId, previousPrimaryFilepath);
 
                 // Check if model needs image extraction from archives
                 if (!this.hasPrimaryImage(modelId)) {
@@ -1436,7 +1448,7 @@ class Scanner {
      * Select the best primary image for a model from its indexed assets.
      * Prefers .gif images, then falls back to the first image found.
      */
-    private selectPrimaryImage(modelId: number): void {
+    private selectPrimaryImage(modelId: number, preferredFilepath?: string): void {
         const images = db.prepare(`
             SELECT id, filepath FROM model_assets
             WHERE model_id = ? AND asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
@@ -1444,6 +1456,15 @@ class Scanner {
         `).all(modelId) as Array<{ id: number; filepath: string }>;
 
         if (images.length === 0) return;
+
+        // Honor a previously manually-selected primary if that file still exists
+        if (preferredFilepath) {
+            const preferred = images.find(img => img.filepath === preferredFilepath);
+            if (preferred) {
+                db.prepare('UPDATE model_assets SET is_primary = 1 WHERE id = ?').run(preferred.id);
+                return;
+            }
+        }
 
         // Prefer .gif images as primary
         const gifImage = images.find(img => path.extname(img.filepath).toLowerCase() === '.gif');

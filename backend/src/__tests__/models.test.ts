@@ -240,6 +240,44 @@ describe('Models Routes', () => {
         });
     });
 
+    describe('PUT /api/models/:id/primary-image', () => {
+        it('sets the specified asset as primary and clears others', async () => {
+            // Model 1 has image1.jpg (is_primary=1, id=1) and image2.jpg (is_primary=0, id=2)
+            const res = await request(app)
+                .put('/api/models/1/primary-image')
+                .send({ assetId: 2 });
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(true);
+
+            const img1 = testDb.prepare('SELECT is_primary FROM model_assets WHERE id = 1').get() as any;
+            const img2 = testDb.prepare('SELECT is_primary FROM model_assets WHERE id = 2').get() as any;
+            expect(img1.is_primary).toBe(0);
+            expect(img2.is_primary).toBe(1);
+        });
+
+        it('returns 400 when assetId is missing', async () => {
+            const res = await request(app)
+                .put('/api/models/1/primary-image')
+                .send({});
+            expect(res.status).toBe(400);
+        });
+
+        it('returns 404 when asset does not belong to model', async () => {
+            // asset id=3 belongs to model 2, not model 1
+            const res = await request(app)
+                .put('/api/models/1/primary-image')
+                .send({ assetId: 3 });
+            expect(res.status).toBe(404);
+        });
+
+        it('returns 404 for non-existent asset', async () => {
+            const res = await request(app)
+                .put('/api/models/1/primary-image')
+                .send({ assetId: 999 });
+            expect(res.status).toBe(404);
+        });
+    });
+
     describe('Primary image selection (GIF preference)', () => {
         it('returns gif as primaryImage when gif and other images exist', async () => {
             // Add a gif image (not primary) and verify the browse endpoint
