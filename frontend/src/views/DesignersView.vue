@@ -194,61 +194,63 @@
           </div>
 
           <!-- Hover overlay with actions -->
-          <button
-            :class="['overlay-btn', { active: designer.is_favorite }]"
-            @click.stop="dStore.toggleFavorite(designer)"
-            :title="
-              designer.is_favorite
-                ? 'Remove from favorites'
-                : 'Add to favorites'
-            "
-          >
-            <svg
-              viewBox="0 0 24 24"
-              :fill="designer.is_favorite ? 'currentColor' : 'none'"
-              stroke="currentColor"
-              stroke-width="2"
+          <div class="preview-overlay">
+            <button
+              :class="['overlay-btn', { active: designer.is_favorite }]"
+              @click.stop="dStore.toggleFavorite(designer)"
+              :title="
+                designer.is_favorite
+                  ? 'Remove from favorites'
+                  : 'Add to favorites'
+              "
             >
-              <path
-                d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
-              />
-            </svg>
-          </button>
-          <a
-            v-if="designer.profile_url"
-            :href="designer.profile_url"
-            target="_blank"
-            rel="noopener"
-            class="overlay-btn"
-            @click.stop
-            title="View profile"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
+              <svg
+                viewBox="0 0 24 24"
+                :fill="designer.is_favorite ? 'currentColor' : 'none'"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
+                />
+              </svg>
+            </button>
+            <a
+              v-if="designer.profile_url"
+              :href="designer.profile_url"
+              target="_blank"
+              rel="noopener"
+              class="overlay-btn"
+              @click.stop
+              title="View profile"
             >
-              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-              <path d="M15 3h6v6" />
-              <path d="M10 14L21 3" />
-            </svg>
-          </a>
-          <button
-            class="overlay-btn"
-            @click.stop="startEditDesigner(designer)"
-            title="Edit designer"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                <path d="M15 3h6v6" />
+                <path d="M10 14L21 3" />
+              </svg>
+            </a>
+            <button
+              class="overlay-btn"
+              @click.stop="startEditDesigner(designer)"
+              title="Edit designer"
             >
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <!-- Card info -->

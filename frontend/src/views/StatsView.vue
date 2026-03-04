@@ -15,334 +15,211 @@
       <div class="summary-cards">
         <div class="stat-card">
           <div class="stat-icon models-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+              />
             </svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ basicStats.totalModels.toLocaleString() }}</div>
+            <div class="stat-value">
+              {{ basicStats.totalModels.toLocaleString() }}
+            </div>
             <div class="stat-label">Total Models</div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon printed-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M9 12l2 2 4-4" />
+              <circle cx="12" cy="12" r="10" />
             </svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ basicStats.totalPrinted.toLocaleString() }}</div>
+            <div class="stat-value">
+              {{ basicStats.totalPrinted.toLocaleString() }}
+            </div>
             <div class="stat-label">Printed</div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon fav-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+              />
             </svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ basicStats.totalFavorites.toLocaleString() }}</div>
+            <div class="stat-value">
+              {{ basicStats.totalFavorites.toLocaleString() }}
+            </div>
             <div class="stat-label">Favorites</div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon queue-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
             </svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ basicStats.totalQueued.toLocaleString() }}</div>
+            <div class="stat-value">
+              {{ basicStats.totalQueued.toLocaleString() }}
+            </div>
             <div class="stat-label">Queued</div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon storage-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <ellipse cx="12" cy="5" rx="9" ry="3" />
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
             </svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ formatFileSize(detailedStats?.totalFileSize || 0) }}</div>
+            <div class="stat-value">
+              {{ formatFileSize(detailedStats?.totalFileSize || 0) }}
+            </div>
             <div class="stat-label">Total Size</div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon files-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+              <path d="M14 2v6h6" />
             </svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ detailedStats?.avgFilesPerModel || 0 }}</div>
+            <div class="stat-value">
+              {{ detailedStats?.avgFilesPerModel || 0 }}
+            </div>
             <div class="stat-label">Avg Files/Model</div>
           </div>
         </div>
       </div>
 
       <!-- Print time + filament totals (if any data) -->
-      <div v-if="(detailedStats?.totalPrintTimeHours || 0) > 0 || (detailedStats?.totalFilamentGrams || 0) > 0" class="summary-cards">
+      <div
+        v-if="
+          (detailedStats?.totalPrintTimeHours || 0) > 0 ||
+          (detailedStats?.totalFilamentGrams || 0) > 0
+        "
+        class="summary-cards"
+      >
         <div class="stat-card wide">
           <div class="stat-icon time-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
             </svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ formatHours(detailedStats?.totalPrintTimeHours || 0) }}</div>
+            <div class="stat-value">
+              {{ formatHours(detailedStats?.totalPrintTimeHours || 0) }}
+            </div>
             <div class="stat-label">Total Print Time</div>
           </div>
         </div>
         <div class="stat-card wide">
           <div class="stat-icon filament-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
-              <path d="M12 8v4l3 3"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
+              />
+              <path d="M12 8v4l3 3" />
             </svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ formatGrams(detailedStats?.totalFilamentGrams || 0) }}</div>
+            <div class="stat-value">
+              {{ formatGrams(detailedStats?.totalFilamentGrams || 0) }}
+            </div>
             <div class="stat-label">Total Filament Used</div>
           </div>
         </div>
       </div>
-
-      <div class="charts-grid">
-        <!-- Models per Category Bar Chart -->
-        <div class="chart-card wide">
-          <h3 class="chart-title">Models by Category</h3>
-          <div v-if="!detailedStats?.modelsByCategory?.length" class="chart-empty">No data</div>
-          <div v-else class="bar-chart">
-            <div
-              v-for="item in detailedStats.modelsByCategory"
-              :key="item.category"
-              class="bar-row"
-            >
-              <div class="bar-label" :title="item.category">{{ item.category || 'Uncategorized' }}</div>
-              <div class="bar-track">
-                <div
-                  class="bar-fill"
-                  :style="{ width: barWidth(item.count, maxCategoryCount) }"
-                ></div>
-              </div>
-              <div class="bar-value">{{ item.count.toLocaleString() }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Print Rating Donut -->
-        <div class="chart-card">
-          <h3 class="chart-title">Print Ratings</h3>
-          <div v-if="totalPrints === 0" class="chart-empty">No prints yet</div>
-          <div v-else class="donut-wrapper">
-            <svg class="donut-svg" viewBox="0 0 100 100">
-              <!-- Background circle -->
-              <circle cx="50" cy="50" r="38" fill="none" stroke="var(--bg-surface)" stroke-width="14"/>
-              <!-- Good arc -->
-              <circle
-                cx="50" cy="50" r="38"
-                fill="none"
-                stroke="var(--success)"
-                stroke-width="14"
-                stroke-dasharray="238.761"
-                :stroke-dashoffset="donutOffset(goodPrints, totalPrints)"
-                stroke-linecap="round"
-                transform="rotate(-90 50 50)"
-              />
-              <!-- Bad arc (offset by good) -->
-              <circle
-                v-if="badPrints > 0"
-                cx="50" cy="50" r="38"
-                fill="none"
-                stroke="var(--danger)"
-                stroke-width="14"
-                stroke-dasharray="238.761"
-                :stroke-dashoffset="donutOffset(badPrints, totalPrints)"
-                stroke-linecap="round"
-                :transform="`rotate(${-90 + goodDeg} 50 50)`"
-              />
-              <text x="50" y="46" text-anchor="middle" class="donut-center-label">{{ totalPrints }}</text>
-              <text x="50" y="58" text-anchor="middle" class="donut-center-sub">prints</text>
-            </svg>
-            <div class="donut-legend">
-              <div class="legend-item">
-                <span class="legend-dot good"></span>
-                <span>Good</span>
-                <strong>{{ goodPrints }}</strong>
-                <span class="legend-pct">{{ pct(goodPrints, totalPrints) }}</span>
-              </div>
-              <div class="legend-item">
-                <span class="legend-dot bad"></span>
-                <span>Bad</span>
-                <strong>{{ badPrints }}</strong>
-                <span class="legend-pct">{{ pct(badPrints, totalPrints) }}</span>
-              </div>
-              <div v-if="unratedPrints > 0" class="legend-item">
-                <span class="legend-dot unrated"></span>
-                <span>Unrated</span>
-                <strong>{{ unratedPrints }}</strong>
-                <span class="legend-pct">{{ pct(unratedPrints, totalPrints) }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Prints Over Time Line Chart -->
-        <div class="chart-card wide">
-          <h3 class="chart-title">Prints Over Time</h3>
-          <div v-if="!detailedStats?.printsByMonth?.length" class="chart-empty">No print history yet</div>
-          <div v-else class="line-chart-wrapper">
-            <svg class="line-chart-svg" :viewBox="`0 0 ${svgW} ${svgH}`" preserveAspectRatio="none">
-              <!-- Grid lines -->
-              <line v-for="tick in yTicks" :key="tick"
-                :x1="padL" :y1="yPos(tick)" :x2="svgW - padR" :y2="yPos(tick)"
-                stroke="var(--border-subtle)" stroke-width="1"
-              />
-              <!-- Area fill (good prints) -->
-              <path :d="areaPath" fill="rgba(34,197,94,0.12)" />
-              <!-- Line (total prints) -->
-              <polyline :points="lineTotalPoints" fill="none" stroke="var(--accent-primary)" stroke-width="2" stroke-linejoin="round"/>
-              <!-- Line (good prints) -->
-              <polyline :points="lineGoodPoints" fill="none" stroke="var(--success)" stroke-width="1.5" stroke-dasharray="4 2" stroke-linejoin="round"/>
-              <!-- X axis labels -->
-              <text
-                v-for="(item, i) in printMonthLabels"
-                :key="i"
-                :x="xPos(i)"
-                :y="svgH - 4"
-                text-anchor="middle"
-                class="axis-label"
-              >{{ item }}</text>
-              <!-- Y axis labels -->
-              <text v-for="tick in yTicks" :key="'y' + tick"
-                :x="padL - 4" :y="yPos(tick) + 4"
-                text-anchor="end"
-                class="axis-label"
-              >{{ tick }}</text>
-            </svg>
-            <div class="line-legend">
-              <span class="line-legend-item">
-                <span class="line-swatch" style="background: var(--accent-primary)"></span> Total
-              </span>
-              <span class="line-legend-item">
-                <span class="line-swatch dashed" style="background: var(--success)"></span> Good
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Models Added Over Time Line Chart -->
-        <div class="chart-card wide" v-if="detailedStats?.modelsAddedByMonth?.length">
-          <h3 class="chart-title">Models Added Over Time</h3>
-          <div class="line-chart-wrapper">
-            <svg class="line-chart-svg" :viewBox="`0 0 ${svgW} ${svgH}`" preserveAspectRatio="none">
-              <line v-for="tick in addedYTicks" :key="tick"
-                :x1="padL" :y1="addedYPos(tick)" :x2="svgW - padR" :y2="addedYPos(tick)"
-                stroke="var(--border-subtle)" stroke-width="1"
-              />
-              <path :d="addedAreaPath" fill="rgba(34,211,238,0.1)" />
-              <polyline :points="addedLinePoints" fill="none" stroke="var(--accent-primary)" stroke-width="2" stroke-linejoin="round"/>
-              <text
-                v-for="(item, i) in addedMonthLabels"
-                :key="i"
-                :x="addedXPos(i)"
-                :y="svgH - 4"
-                text-anchor="middle"
-                class="axis-label"
-              >{{ item }}</text>
-              <text v-for="tick in addedYTicks" :key="'ay' + tick"
-                :x="padL - 4" :y="addedYPos(tick) + 4"
-                text-anchor="end"
-                class="axis-label"
-              >{{ tick }}</text>
-            </svg>
-          </div>
-        </div>
-
-        <!-- Top Printed Categories -->
-        <div class="chart-card" v-if="detailedStats?.topPrintedCategories?.length">
-          <h3 class="chart-title">Most Printed Categories</h3>
-          <div class="bar-chart compact">
-            <div
-              v-for="item in detailedStats.topPrintedCategories"
-              :key="item.category"
-              class="bar-row"
-            >
-              <div class="bar-label" :title="item.category">{{ item.category }}</div>
-              <div class="bar-track">
-                <div
-                  class="bar-fill accent"
-                  :style="{ width: barWidth(item.print_count, maxPrintedCount) }"
-                ></div>
-              </div>
-              <div class="bar-value">{{ item.print_count }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- File Type Breakdown -->
-        <div class="chart-card" v-if="detailedStats?.fileTypes?.length">
-          <h3 class="chart-title">File Types</h3>
-          <div class="bar-chart compact">
-            <div
-              v-for="item in detailedStats.fileTypes"
-              :key="item.file_type"
-              class="bar-row"
-            >
-              <div class="bar-label">{{ (item.file_type || 'unknown').toUpperCase() }}</div>
-              <div class="bar-track">
-                <div
-                  class="bar-fill purple"
-                  :style="{ width: barWidth(item.count, maxFileTypeCount) }"
-                ></div>
-              </div>
-              <div class="bar-value">{{ item.count.toLocaleString() }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tag Stats -->
-        <div class="chart-card" v-if="detailedStats?.tagStats?.length">
-          <h3 class="chart-title">Top Tags</h3>
-          <div class="tag-stats">
-            <div v-for="tag in detailedStats.tagStats" :key="tag.name" class="tag-stat-row">
-              <span class="tag-chip">{{ tag.name }}</span>
-              <div class="bar-track small">
-                <div class="bar-fill accent" :style="{ width: barWidth(tag.model_count, maxTagCount) }"></div>
-              </div>
-              <span class="tag-count">{{ tag.model_count }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Import Quality Section -->
       <template v-if="importStats && importStats.totalImports > 0">
         <div class="section-header">
           <h3>Import Quality</h3>
-          <span class="section-sub">How well the categorizer is performing over time</span>
+          <span class="section-sub">
+            How well the categorizer is performing over time
+          </span>
         </div>
 
         <!-- Import summary cards -->
         <div class="summary-cards">
           <div class="stat-card">
             <div class="stat-icon import-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <path d="M7 10l5 5 5-5M12 15V3"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <path d="M7 10l5 5 5-5M12 15V3" />
               </svg>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ importStats.totalImports.toLocaleString() }}</div>
+              <div class="stat-value">
+                {{ importStats.totalImports.toLocaleString() }}
+              </div>
               <div class="stat-label">Total Imported</div>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon accept-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M9 12l2 2 4-4" />
+                <circle cx="12" cy="12" r="10" />
               </svg>
             </div>
             <div class="stat-info">
@@ -351,12 +228,20 @@
             </div>
           </div>
           <!-- Confidence breakdown mini stats -->
-          <div v-for="conf in sortedConfidence" :key="conf.confidence" class="stat-card">
+          <div
+            v-for="conf in sortedConfidence"
+            :key="conf.confidence"
+            class="stat-card"
+          >
             <div class="stat-icon" :class="conf.confidence + '-conf-icon'">
-              <span class="confidence-badge" :class="conf.confidence">{{ conf.confidence }}</span>
+              <span class="confidence-badge" :class="conf.confidence">
+                {{ conf.confidence }}
+              </span>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ Math.round((conf.accepted / conf.total) * 100) }}%</div>
+              <div class="stat-value">
+                {{ Math.round((conf.accepted / conf.total) * 100) }}%
+              </div>
               <div class="stat-label">{{ conf.confidence }} confidence</div>
             </div>
           </div>
@@ -367,27 +252,64 @@
           <div class="chart-card wide" v-if="importStats.byWeek.length > 1">
             <h3 class="chart-title">Acceptance Rate Over Time</h3>
             <div class="line-chart-wrapper">
-              <svg class="line-chart-svg" :viewBox="`0 0 ${svgW} ${svgH}`" preserveAspectRatio="none">
+              <svg
+                class="line-chart-svg"
+                :viewBox="`0 0 ${svgW} ${svgH}`"
+                preserveAspectRatio="none"
+              >
                 <!-- 100% guideline -->
-                <line :x1="padL" :y1="importYPos(100)" :x2="svgW - padR" :y2="importYPos(100)"
-                  stroke="var(--border-subtle)" stroke-width="1" stroke-dasharray="4 3"/>
+                <line
+                  :x1="padL"
+                  :y1="importYPos(100)"
+                  :x2="svgW - padR"
+                  :y2="importYPos(100)"
+                  stroke="var(--border-subtle)"
+                  stroke-width="1"
+                  stroke-dasharray="4 3"
+                />
                 <!-- Grid lines -->
-                <line v-for="tick in importYTicks" :key="'ig' + tick"
-                  :x1="padL" :y1="importYPos(tick)" :x2="svgW - padR" :y2="importYPos(tick)"
-                  stroke="var(--border-subtle)" stroke-width="1"
+                <line
+                  v-for="tick in importYTicks"
+                  :key="'ig' + tick"
+                  :x1="padL"
+                  :y1="importYPos(tick)"
+                  :x2="svgW - padR"
+                  :y2="importYPos(tick)"
+                  stroke="var(--border-subtle)"
+                  stroke-width="1"
                 />
                 <!-- Area fill -->
                 <path :d="importAreaPath" fill="rgba(34,197,94,0.1)" />
                 <!-- Acceptance rate line -->
-                <polyline :points="importLinePoints" fill="none" stroke="var(--success)" stroke-width="2" stroke-linejoin="round"/>
+                <polyline
+                  :points="importLinePoints"
+                  fill="none"
+                  stroke="var(--success)"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                />
                 <!-- X labels -->
-                <text v-for="(label, i) in importWeekLabels" :key="'ix' + i"
-                  :x="importXPos(i)" :y="svgH - 4"
-                  text-anchor="middle" class="axis-label">{{ label }}</text>
+                <text
+                  v-for="(label, i) in importWeekLabels"
+                  :key="'ix' + i"
+                  :x="importXPos(i)"
+                  :y="svgH - 4"
+                  text-anchor="middle"
+                  class="axis-label"
+                >
+                  {{ label }}
+                </text>
                 <!-- Y labels -->
-                <text v-for="tick in importYTicks" :key="'iy' + tick"
-                  :x="padL - 4" :y="importYPos(tick) + 4"
-                  text-anchor="end" class="axis-label">{{ tick }}%</text>
+                <text
+                  v-for="tick in importYTicks"
+                  :key="'iy' + tick"
+                  :x="padL - 4"
+                  :y="importYPos(tick) + 4"
+                  text-anchor="end"
+                  class="axis-label"
+                >
+                  {{ tick }}%
+                </text>
               </svg>
             </div>
           </div>
@@ -397,10 +319,19 @@
             <h3 class="chart-title">Most Corrected Suggestions</h3>
             <p class="chart-sub">Categories the AI suggested but you changed</p>
             <div class="bar-chart compact">
-              <div v-for="item in importStats.topCorrected" :key="item.category" class="bar-row">
-                <div class="bar-label" :title="item.category">{{ item.category }}</div>
+              <div
+                v-for="item in importStats.topCorrected"
+                :key="item.category"
+                class="bar-row"
+              >
+                <div class="bar-label" :title="item.category">
+                  {{ item.category }}
+                </div>
                 <div class="bar-track">
-                  <div class="bar-fill danger" :style="{ width: barWidth(item.count, maxCorrectedCount) }"></div>
+                  <div
+                    class="bar-fill danger"
+                    :style="{ width: barWidth(item.count, maxCorrectedCount) }"
+                  ></div>
                 </div>
                 <div class="bar-value">{{ item.count }}</div>
               </div>
@@ -412,10 +343,19 @@
             <h3 class="chart-title">Most Imported Into</h3>
             <p class="chart-sub">Categories you most often chose</p>
             <div class="bar-chart compact">
-              <div v-for="item in importStats.topChosen" :key="item.category" class="bar-row">
-                <div class="bar-label" :title="item.category">{{ item.category }}</div>
+              <div
+                v-for="item in importStats.topChosen"
+                :key="item.category"
+                class="bar-row"
+              >
+                <div class="bar-label" :title="item.category">
+                  {{ item.category }}
+                </div>
                 <div class="bar-track">
-                  <div class="bar-fill accent" :style="{ width: barWidth(item.count, maxChosenCount) }"></div>
+                  <div
+                    class="bar-fill accent"
+                    :style="{ width: barWidth(item.count, maxChosenCount) }"
+                  ></div>
                 </div>
                 <div class="bar-value">{{ item.count }}</div>
               </div>
@@ -423,6 +363,346 @@
           </div>
         </div>
       </template>
+
+      <div class="section-header">
+        <h3>Print Statistics</h3>
+        <span class="section-sub">
+          What is actually getting printed and how did it go?
+        </span>
+      </div>
+
+      <div class="charts-grid">
+        <!-- Print Rating Donut -->
+        <div class="chart-card">
+          <h3 class="chart-title">Print Ratings</h3>
+          <div v-if="totalPrints === 0" class="chart-empty">No prints yet</div>
+          <div v-else class="donut-wrapper">
+            <svg class="donut-svg" viewBox="0 0 100 100">
+              <!-- Background circle -->
+              <circle
+                cx="50"
+                cy="50"
+                r="38"
+                fill="none"
+                stroke="var(--bg-surface)"
+                stroke-width="14"
+              />
+              <!-- Good arc -->
+              <circle
+                cx="50"
+                cy="50"
+                r="38"
+                fill="none"
+                stroke="var(--success)"
+                stroke-width="14"
+                stroke-dasharray="238.761"
+                :stroke-dashoffset="donutOffset(goodPrints, totalPrints)"
+                stroke-linecap="round"
+                transform="rotate(-90 50 50)"
+              />
+              <!-- Bad arc (offset by good) -->
+              <circle
+                v-if="badPrints > 0"
+                cx="50"
+                cy="50"
+                r="38"
+                fill="none"
+                stroke="var(--danger)"
+                stroke-width="14"
+                stroke-dasharray="238.761"
+                :stroke-dashoffset="donutOffset(badPrints, totalPrints)"
+                stroke-linecap="round"
+                :transform="`rotate(${-90 + goodDeg} 50 50)`"
+              />
+              <text
+                x="50"
+                y="46"
+                text-anchor="middle"
+                class="donut-center-label"
+              >
+                {{ totalPrints }}
+              </text>
+              <text x="50" y="58" text-anchor="middle" class="donut-center-sub">
+                prints
+              </text>
+            </svg>
+            <div class="donut-legend">
+              <div class="legend-item">
+                <span class="legend-dot good"></span>
+                <span>Good</span>
+                <strong>{{ goodPrints }}</strong>
+                <span class="legend-pct">
+                  {{ pct(goodPrints, totalPrints) }}
+                </span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot bad"></span>
+                <span>Bad</span>
+                <strong>{{ badPrints }}</strong>
+                <span class="legend-pct">
+                  {{ pct(badPrints, totalPrints) }}
+                </span>
+              </div>
+              <div v-if="unratedPrints > 0" class="legend-item">
+                <span class="legend-dot unrated"></span>
+                <span>Unrated</span>
+                <strong>{{ unratedPrints }}</strong>
+                <span class="legend-pct">
+                  {{ pct(unratedPrints, totalPrints) }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Printed Categories -->
+        <div
+          class="chart-card"
+          v-if="detailedStats?.topPrintedCategories?.length"
+        >
+          <h3 class="chart-title">Most Printed Categories</h3>
+          <div class="bar-chart compact">
+            <div
+              v-for="item in detailedStats.topPrintedCategories"
+              :key="item.category"
+              class="bar-row"
+            >
+              <div class="bar-label" :title="item.category">
+                {{ item.category }}
+              </div>
+              <div class="bar-track">
+                <div
+                  class="bar-fill accent"
+                  :style="{
+                    width: barWidth(item.print_count, maxPrintedCount),
+                  }"
+                ></div>
+              </div>
+              <div class="bar-value">{{ item.print_count }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prints Over Time Line Chart -->
+        <div class="chart-card wide">
+          <h3 class="chart-title">Prints Over Time</h3>
+          <div v-if="!detailedStats?.printsByMonth?.length" class="chart-empty">
+            No print history yet
+          </div>
+          <div v-else class="line-chart-wrapper">
+            <svg
+              class="line-chart-svg"
+              :viewBox="`0 0 ${svgW} ${svgH}`"
+              preserveAspectRatio="none"
+            >
+              <!-- Grid lines -->
+              <line
+                v-for="tick in yTicks"
+                :key="tick"
+                :x1="padL"
+                :y1="yPos(tick)"
+                :x2="svgW - padR"
+                :y2="yPos(tick)"
+                stroke="var(--border-subtle)"
+                stroke-width="1"
+              />
+              <!-- Area fill (good prints) -->
+              <path :d="areaPath" fill="rgba(34,197,94,0.12)" />
+              <!-- Line (total prints) -->
+              <polyline
+                :points="lineTotalPoints"
+                fill="none"
+                stroke="var(--accent-primary)"
+                stroke-width="2"
+                stroke-linejoin="round"
+              />
+              <!-- Line (good prints) -->
+              <polyline
+                :points="lineGoodPoints"
+                fill="none"
+                stroke="var(--success)"
+                stroke-width="1.5"
+                stroke-dasharray="4 2"
+                stroke-linejoin="round"
+              />
+              <!-- X axis labels -->
+              <text
+                v-for="(item, i) in printMonthLabels"
+                :key="i"
+                :x="xPos(i)"
+                :y="svgH - 4"
+                text-anchor="middle"
+                class="axis-label"
+              >
+                {{ item }}
+              </text>
+              <!-- Y axis labels -->
+              <text
+                v-for="tick in yTicks"
+                :key="'y' + tick"
+                :x="padL - 4"
+                :y="yPos(tick) + 4"
+                text-anchor="end"
+                class="axis-label"
+              >
+                {{ tick }}
+              </text>
+            </svg>
+            <div class="line-legend">
+              <span class="line-legend-item">
+                <span
+                  class="line-swatch"
+                  style="background: var(--accent-primary)"
+                ></span>
+                Total
+              </span>
+              <span class="line-legend-item">
+                <span
+                  class="line-swatch dashed"
+                  style="background: var(--success)"
+                ></span>
+                Good
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <h3>Model Statistics</h3>
+        <span class="section-sub">
+          What does our overall catalog look like?
+        </span>
+      </div>
+
+      <div class="charts-grid">
+        <!-- Models per Category Bar Chart -->
+        <div class="chart-card wide">
+          <h3 class="chart-title">Models by Category</h3>
+          <div
+            v-if="!detailedStats?.modelsByCategory?.length"
+            class="chart-empty"
+          >
+            No data
+          </div>
+          <div v-else class="bar-chart">
+            <div
+              v-for="item in detailedStats.modelsByCategory"
+              :key="item.category"
+              class="bar-row"
+            >
+              <div class="bar-label" :title="item.category">
+                {{ item.category || 'Uncategorized' }}
+              </div>
+              <div class="bar-track">
+                <div
+                  class="bar-fill"
+                  :style="{ width: barWidth(item.count, maxCategoryCount) }"
+                ></div>
+              </div>
+              <div class="bar-value">{{ item.count.toLocaleString() }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Models Added Over Time Line Chart -->
+        <div
+          class="chart-card wide"
+          v-if="detailedStats?.modelsAddedByMonth?.length"
+        >
+          <h3 class="chart-title">Models Added Over Time</h3>
+          <div class="line-chart-wrapper">
+            <svg
+              class="line-chart-svg"
+              :viewBox="`0 0 ${svgW} ${svgH}`"
+              preserveAspectRatio="none"
+            >
+              <line
+                v-for="tick in addedYTicks"
+                :key="tick"
+                :x1="padL"
+                :y1="addedYPos(tick)"
+                :x2="svgW - padR"
+                :y2="addedYPos(tick)"
+                stroke="var(--border-subtle)"
+                stroke-width="1"
+              />
+              <path :d="addedAreaPath" fill="rgba(34,211,238,0.1)" />
+              <polyline
+                :points="addedLinePoints"
+                fill="none"
+                stroke="var(--accent-primary)"
+                stroke-width="2"
+                stroke-linejoin="round"
+              />
+              <text
+                v-for="(item, i) in addedMonthLabels"
+                :key="i"
+                :x="addedXPos(i)"
+                :y="svgH - 4"
+                text-anchor="middle"
+                class="axis-label"
+              >
+                {{ item }}
+              </text>
+              <text
+                v-for="tick in addedYTicks"
+                :key="'ay' + tick"
+                :x="padL - 4"
+                :y="addedYPos(tick) + 4"
+                text-anchor="end"
+                class="axis-label"
+              >
+                {{ tick }}
+              </text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- File Type Breakdown -->
+        <!-- <div class="chart-card" v-if="detailedStats?.fileTypes?.length">
+          <h3 class="chart-title">File Types</h3>
+          <div class="bar-chart compact">
+            <div
+              v-for="item in detailedStats.fileTypes"
+              :key="item.file_type"
+              class="bar-row"
+            >
+              <div class="bar-label">
+                {{ (item.file_type || 'unknown').toUpperCase() }}
+              </div>
+              <div class="bar-track">
+                <div
+                  class="bar-fill purple"
+                  :style="{ width: barWidth(item.count, maxFileTypeCount) }"
+                ></div>
+              </div>
+              <div class="bar-value">{{ item.count.toLocaleString() }}</div>
+            </div>
+          </div>
+        </div> -->
+
+        <!-- Tag Stats -->
+        <div class="chart-card" v-if="detailedStats?.tagStats?.length">
+          <h3 class="chart-title">Top Tags</h3>
+          <div class="tag-stats">
+            <div
+              v-for="tag in detailedStats.tagStats"
+              :key="tag.name"
+              class="tag-stat-row"
+            >
+              <span class="tag-chip">{{ tag.name }}</span>
+              <div class="bar-track small">
+                <div
+                  class="bar-fill accent"
+                  :style="{ width: barWidth(tag.model_count, maxTagCount) }"
+                ></div>
+              </div>
+              <span class="tag-count">{{ tag.model_count }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -433,7 +713,12 @@ import { systemApi, ingestionApi } from '../services/api';
 
 interface DetailedStats {
   modelsByCategory: Array<{ category: string; count: number }>;
-  printsByMonth: Array<{ month: string; total: number; good_count: number; bad_count: number }>;
+  printsByMonth: Array<{
+    month: string;
+    total: number;
+    good_count: number;
+    bad_count: number;
+  }>;
   printRatings: { good: number; bad: number; unrated: number };
   topPrintedCategories: Array<{ category: string; print_count: number }>;
   avgFilesPerModel: number;
@@ -455,7 +740,13 @@ interface ImportStats {
 }
 
 const loading = ref(true);
-const basicStats = ref({ totalModels: 0, totalFavorites: 0, totalPrinted: 0, totalQueued: 0, totalLooseFiles: 0 });
+const basicStats = ref({
+  totalModels: 0,
+  totalFavorites: 0,
+  totalPrinted: 0,
+  totalQueued: 0,
+  totalLooseFiles: 0,
+});
 const detailedStats = ref<DetailedStats | null>(null);
 const importStats = ref<ImportStats | null>(null);
 
@@ -472,7 +763,7 @@ onMounted(async () => {
     const [basicRes, detailRes, importRes] = await Promise.all([
       systemApi.getStats(),
       systemApi.getDetailedStats(),
-      ingestionApi.getImportStats()
+      ingestionApi.getImportStats(),
     ]);
     basicStats.value = basicRes.data;
     detailedStats.value = detailRes.data;
@@ -516,14 +807,20 @@ function pct(part: number, total: number): string {
 
 // --- Category bar chart ---
 const maxCategoryCount = computed(() =>
-  Math.max(...(detailedStats.value?.modelsByCategory.map(x => x.count) || [1]))
+  Math.max(
+    ...(detailedStats.value?.modelsByCategory.map((x) => x.count) || [1])
+  )
 );
 
 // --- Print rating donut ---
 const goodPrints = computed(() => detailedStats.value?.printRatings?.good || 0);
 const badPrints = computed(() => detailedStats.value?.printRatings?.bad || 0);
-const unratedPrints = computed(() => detailedStats.value?.printRatings?.unrated || 0);
-const totalPrints = computed(() => goodPrints.value + badPrints.value + unratedPrints.value);
+const unratedPrints = computed(
+  () => detailedStats.value?.printRatings?.unrated || 0
+);
+const totalPrints = computed(
+  () => goodPrints.value + badPrints.value + unratedPrints.value
+);
 
 // r=38, circumference = 2*pi*38 ≈ 238.76
 const CIRC = 238.761;
@@ -534,12 +831,16 @@ function donutOffset(count: number, total: number): number {
   return CIRC - filled;
 }
 
-const goodDeg = computed(() => (goodPrints.value / (totalPrints.value || 1)) * 360);
+const goodDeg = computed(
+  () => (goodPrints.value / (totalPrints.value || 1)) * 360
+);
 
 // --- Prints over time line chart ---
 const printData = computed(() => detailedStats.value?.printsByMonth || []);
 
-const maxPrintVal = computed(() => Math.max(...printData.value.map(d => d.total), 1));
+const maxPrintVal = computed(() =>
+  Math.max(...printData.value.map((d) => d.total), 1)
+);
 
 function niceMax(val: number): number {
   if (val <= 5) return 5;
@@ -551,7 +852,7 @@ const yMax = computed(() => niceMax(maxPrintVal.value));
 const yTicks = computed(() => {
   const m = yMax.value;
   const step = m / 4;
-  return [0, step, step * 2, step * 3, m].map(v => Math.round(v));
+  return [0, step, step * 2, step * 3, m].map((v) => Math.round(v));
 });
 
 function yPos(val: number): number {
@@ -576,22 +877,26 @@ const areaPath = computed(() => {
   if (!printData.value.length) return '';
   const n = printData.value.length;
   const base = yPos(0);
-  const pts = printData.value.map((d, i) => `${xPos(i)},${yPos(d.good_count)}`).join(' L ');
+  const pts = printData.value
+    .map((d, i) => `${xPos(i)},${yPos(d.good_count)}`)
+    .join(' L ');
   return `M ${xPos(0)},${base} L ${pts} L ${xPos(n - 1)},${base} Z`;
 });
 
-const printMonthLabels = computed(() =>
-  printData.value.map(d => d.month.slice(5)) // "MM" from "YYYY-MM"
+const printMonthLabels = computed(
+  () => printData.value.map((d) => d.month.slice(5)) // "MM" from "YYYY-MM"
 );
 
 // --- Models added over time ---
 const addedData = computed(() => detailedStats.value?.modelsAddedByMonth || []);
-const maxAddedVal = computed(() => Math.max(...addedData.value.map(d => d.count), 1));
+const maxAddedVal = computed(() =>
+  Math.max(...addedData.value.map((d) => d.count), 1)
+);
 const addedYMax = computed(() => niceMax(maxAddedVal.value));
 const addedYTicks = computed(() => {
   const m = addedYMax.value;
   const step = m / 4;
-  return [0, step, step * 2, step * 3, m].map(v => Math.round(v));
+  return [0, step, step * 2, step * 3, m].map((v) => Math.round(v));
 });
 
 function addedYPos(val: number): number {
@@ -605,32 +910,42 @@ function addedXPos(i: number): number {
 }
 
 const addedLinePoints = computed(() =>
-  addedData.value.map((d, i) => `${addedXPos(i)},${addedYPos(d.count)}`).join(' ')
+  addedData.value
+    .map((d, i) => `${addedXPos(i)},${addedYPos(d.count)}`)
+    .join(' ')
 );
 
 const addedAreaPath = computed(() => {
   if (!addedData.value.length) return '';
   const n = addedData.value.length;
   const base = addedYPos(0);
-  const pts = addedData.value.map((d, i) => `${addedXPos(i)},${addedYPos(d.count)}`).join(' L ');
+  const pts = addedData.value
+    .map((d, i) => `${addedXPos(i)},${addedYPos(d.count)}`)
+    .join(' L ');
   return `M ${addedXPos(0)},${base} L ${pts} L ${addedXPos(n - 1)},${base} Z`;
 });
 
-const addedMonthLabels = computed(() => addedData.value.map(d => d.month.slice(5)));
+const addedMonthLabels = computed(() =>
+  addedData.value.map((d) => d.month.slice(5))
+);
 
 // --- Top printed categories ---
 const maxPrintedCount = computed(() =>
-  Math.max(...(detailedStats.value?.topPrintedCategories.map(x => x.print_count) || [1]))
+  Math.max(
+    ...(detailedStats.value?.topPrintedCategories.map((x) => x.print_count) || [
+      1,
+    ])
+  )
 );
 
 // --- File types ---
 const maxFileTypeCount = computed(() =>
-  Math.max(...(detailedStats.value?.fileTypes.map(x => x.count) || [1]))
+  Math.max(...(detailedStats.value?.fileTypes.map((x) => x.count) || [1]))
 );
 
 // --- Tag stats ---
 const maxTagCount = computed(() =>
-  Math.max(...(detailedStats.value?.tagStats.map(x => x.model_count) || [1]))
+  Math.max(...(detailedStats.value?.tagStats.map((x) => x.model_count) || [1]))
 );
 
 // --- Import quality ---
@@ -642,11 +957,11 @@ const sortedConfidence = computed(() => {
 });
 
 const maxCorrectedCount = computed(() =>
-  Math.max(...(importStats.value?.topCorrected.map(x => x.count) || [1]))
+  Math.max(...(importStats.value?.topCorrected.map((x) => x.count) || [1]))
 );
 
 const maxChosenCount = computed(() =>
-  Math.max(...(importStats.value?.topChosen.map(x => x.count) || [1]))
+  Math.max(...(importStats.value?.topChosen.map((x) => x.count) || [1]))
 );
 
 // Import rate line chart — weekly, Y axis is 0–100 (%)
@@ -665,25 +980,29 @@ function importYPos(val: number): number {
 const importYTicks = [0, 25, 50, 75, 100];
 
 const importLinePoints = computed(() =>
-  importWeekData.value.map((d, i) => {
-    const rate = d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0;
-    return `${importXPos(i)},${importYPos(rate)}`;
-  }).join(' ')
+  importWeekData.value
+    .map((d, i) => {
+      const rate = d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0;
+      return `${importXPos(i)},${importYPos(rate)}`;
+    })
+    .join(' ')
 );
 
 const importAreaPath = computed(() => {
   if (!importWeekData.value.length) return '';
   const n = importWeekData.value.length;
   const base = importYPos(0);
-  const pts = importWeekData.value.map((d, i) => {
-    const rate = d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0;
-    return `${importXPos(i)},${importYPos(rate)}`;
-  }).join(' L ');
+  const pts = importWeekData.value
+    .map((d, i) => {
+      const rate = d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0;
+      return `${importXPos(i)},${importYPos(rate)}`;
+    })
+    .join(' L ');
   return `M ${importXPos(0)},${base} L ${pts} L ${importXPos(n - 1)},${base} Z`;
 });
 
-const importWeekLabels = computed(() =>
-  importWeekData.value.map(d => d.week.slice(6)) // "WNN" from "YYYY-WNN"
+const importWeekLabels = computed(
+  () => importWeekData.value.map((d) => d.week.slice(6)) // "WNN" from "YYYY-WNN"
 );
 </script>
 
@@ -696,8 +1015,14 @@ const importWeekLabels = computed(() =>
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .header {
@@ -758,14 +1083,38 @@ const importWeekLabels = computed(() =>
   height: 22px;
 }
 
-.models-icon { background: rgba(34,211,238,0.12); color: var(--accent-primary); }
-.printed-icon { background: rgba(34,197,94,0.12); color: var(--success); }
-.fav-icon { background: rgba(251,191,36,0.12); color: var(--warning); }
-.queue-icon { background: rgba(139,92,246,0.12); color: #a78bfa; }
-.storage-icon { background: rgba(249,115,22,0.12); color: #fb923c; }
-.files-icon { background: rgba(236,72,153,0.12); color: #f472b6; }
-.time-icon { background: rgba(34,211,238,0.12); color: var(--accent-primary); }
-.filament-icon { background: rgba(34,197,94,0.12); color: var(--success); }
+.models-icon {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent-primary);
+}
+.printed-icon {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success);
+}
+.fav-icon {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--warning);
+}
+.queue-icon {
+  background: rgba(139, 92, 246, 0.12);
+  color: #a78bfa;
+}
+.storage-icon {
+  background: rgba(249, 115, 22, 0.12);
+  color: #fb923c;
+}
+.files-icon {
+  background: rgba(236, 72, 153, 0.12);
+  color: #f472b6;
+}
+.time-icon {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent-primary);
+}
+.filament-icon {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success);
+}
 
 .stat-info {
   display: flex;
@@ -868,17 +1217,21 @@ const importWeekLabels = computed(() =>
 
 .bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, rgba(34,211,238,0.6), var(--accent-primary));
+  background: linear-gradient(
+    90deg,
+    rgba(34, 211, 238, 0.6),
+    var(--accent-primary)
+  );
   border-radius: 5px;
   transition: width 0.6s ease;
 }
 
 .bar-fill.accent {
-  background: linear-gradient(90deg, rgba(34,197,94,0.5), var(--success));
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.5), var(--success));
 }
 
 .bar-fill.purple {
-  background: linear-gradient(90deg, rgba(139,92,246,0.5), #a78bfa);
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.5), #a78bfa);
 }
 
 .bar-value {
@@ -945,9 +1298,15 @@ const importWeekLabels = computed(() =>
   flex-shrink: 0;
 }
 
-.legend-dot.good { background: var(--success); }
-.legend-dot.bad { background: var(--danger); }
-.legend-dot.unrated { background: var(--text-muted, #666); }
+.legend-dot.good {
+  background: var(--success);
+}
+.legend-dot.bad {
+  background: var(--danger);
+}
+.legend-dot.unrated {
+  background: var(--text-muted, #666);
+}
 
 /* Line Chart */
 .line-chart-wrapper {
@@ -992,8 +1351,10 @@ const importWeekLabels = computed(() =>
 .line-swatch.dashed {
   background: repeating-linear-gradient(
     90deg,
-    var(--success) 0, var(--success) 4px,
-    transparent 4px, transparent 6px
+    var(--success) 0,
+    var(--success) 4px,
+    transparent 4px,
+    transparent 6px
   );
 }
 
@@ -1059,11 +1420,26 @@ const importWeekLabels = computed(() =>
   margin-top: -0.5rem;
 }
 
-.import-icon { background: rgba(34,211,238,0.12); color: var(--accent-primary); }
-.accept-icon { background: rgba(34,197,94,0.12); color: var(--success); }
-.high-conf-icon { background: rgba(34,197,94,0.12); color: var(--success); }
-.medium-conf-icon { background: rgba(251,191,36,0.12); color: var(--warning); }
-.low-conf-icon { background: rgba(148,163,184,0.12); color: var(--text-tertiary); }
+.import-icon {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent-primary);
+}
+.accept-icon {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success);
+}
+.high-conf-icon {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success);
+}
+.medium-conf-icon {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--warning);
+}
+.low-conf-icon {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-tertiary);
+}
 
 .confidence-badge {
   display: inline-block;
@@ -1075,12 +1451,21 @@ const importWeekLabels = computed(() =>
   border-radius: var(--radius-sm);
 }
 
-.confidence-badge.high { background: rgba(34,197,94,0.15); color: var(--success); }
-.confidence-badge.medium { background: rgba(251,191,36,0.15); color: var(--warning); }
-.confidence-badge.low { background: var(--bg-elevated); color: var(--text-tertiary); }
+.confidence-badge.high {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+.confidence-badge.medium {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warning);
+}
+.confidence-badge.low {
+  background: var(--bg-elevated);
+  color: var(--text-tertiary);
+}
 
 .bar-fill.danger {
-  background: linear-gradient(90deg, rgba(239,68,68,0.5), #ef4444);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.5), #ef4444);
 }
 
 /* Loading */
@@ -1103,7 +1488,9 @@ const importWeekLabels = computed(() =>
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive */

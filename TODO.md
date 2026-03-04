@@ -78,8 +78,10 @@
 - [x] Paginate the print history view using infinite scrolling
 - [x] Support favoriting designers, and filtering by favorites in the main designer page
 - [x] Sort does not work on the search results view
-- [ ] Add the "currently printing" row at the top of the browse page as well
 - [x] If I have manually selected a new primary image for a model, do not overwrite it on sync
+- [ ] Add the "currently printing" row at the top of the browse page as well
+- [ ] Ignore all states for "Prints Over Time" before March 2026
+- [ ] Add desginer statistics to the stats page
 - [ ] Add sorting to the queue page, with the default being sort by when the item was added to the queue. Also support a random sort
 - [ ] Any time a change is made to a model, whether it's via a button on the card/table row or within a modal, all instances of that model should update on the current page. For example, on the designer page card view if you click "printed", it is not reflected in the UI
 - [ ] Be consistent with icons across all buttons. For instance the queue icon has the hamburger lines in some places, and the + and a check mark on the browse page. In general all the icons for queue are bad. Let's figure something better out
