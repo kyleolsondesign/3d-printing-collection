@@ -214,7 +214,7 @@ router.get('/stats/detail', (req, res) => {
                 SUM(CASE WHEN rating = 'good' THEN 1 ELSE 0 END) as good_count,
                 SUM(CASE WHEN rating = 'bad' THEN 1 ELSE 0 END) as bad_count
             FROM printed_models
-            WHERE printed_at >= date('now', '-18 months')
+            WHERE printed_at >= '2026-03-01' AND printed_at >= date('now', '-18 months')
             GROUP BY month
             ORDER BY month ASC
         `).all() as Array<{ month: string; total: number; good_count: number; bad_count: number }>;
@@ -305,6 +305,61 @@ router.get('/stats/detail', (req, res) => {
             modelsAddedByMonth,
             tagStats,
             fileTypes
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Get designer statistics for the dashboard
+router.get('/stats/designers', (req, res) => {
+    try {
+        const totalDesigners = (db.prepare('SELECT COUNT(*) as count FROM designers').get() as { count: number }).count;
+        const modelsWithDesigner = (db.prepare('SELECT COUNT(*) as count FROM models WHERE designer_id IS NOT NULL AND deleted_at IS NULL').get() as { count: number }).count;
+
+        // Top designers by model count (top 15)
+        const topByModelCount = db.prepare(`
+            SELECT d.name, COUNT(m.id) as model_count
+            FROM designers d
+            LEFT JOIN models m ON m.designer_id = d.id AND m.deleted_at IS NULL
+            GROUP BY d.id
+            ORDER BY model_count DESC
+            LIMIT 15
+        `).all() as Array<{ name: string; model_count: number }>;
+
+        // Top designers by how many of their models have been printed (top 10)
+        const topByPrintCount = db.prepare(`
+            SELECT d.name, COUNT(pm.id) as print_count
+            FROM designers d
+            JOIN models m ON m.designer_id = d.id AND m.deleted_at IS NULL
+            JOIN printed_models pm ON pm.model_id = m.id
+            GROUP BY d.id
+            ORDER BY print_count DESC
+            LIMIT 10
+        `).all() as Array<{ name: string; print_count: number }>;
+
+        // Print quality by designer (designers with at least 1 print, top 10 by total)
+        const printQuality = db.prepare(`
+            SELECT d.name,
+                SUM(CASE WHEN pm.rating = 'good' THEN 1 ELSE 0 END) as good_count,
+                SUM(CASE WHEN pm.rating = 'bad' THEN 1 ELSE 0 END) as bad_count,
+                COUNT(pm.id) as total_prints
+            FROM designers d
+            JOIN models m ON m.designer_id = d.id AND m.deleted_at IS NULL
+            JOIN printed_models pm ON pm.model_id = m.id
+            GROUP BY d.id
+            HAVING total_prints >= 1
+            ORDER BY total_prints DESC
+            LIMIT 10
+        `).all() as Array<{ name: string; good_count: number; bad_count: number; total_prints: number }>;
+
+        res.json({
+            totalDesigners,
+            modelsWithDesigner,
+            topByModelCount,
+            topByPrintCount,
+            printQuality,
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

@@ -703,6 +703,125 @@
           </div>
         </div>
       </div>
+
+      <!-- Designer Statistics -->
+      <template v-if="designerStats && designerStats.totalDesigners > 0">
+        <div class="section-header">
+          <h3>Designer Statistics</h3>
+          <span class="section-sub">Who's making what you print</span>
+        </div>
+
+        <div class="summary-cards">
+          <div class="stat-card">
+            <div class="stat-icon designer-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+              </svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ designerStats.totalDesigners.toLocaleString() }}</div>
+              <div class="stat-label">Designers</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon designer-linked-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+              </svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ designerStats.modelsWithDesigner.toLocaleString() }}</div>
+              <div class="stat-label">Models Linked</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon designer-avg-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">
+                {{ designerStats.totalDesigners > 0 ? Math.round(designerStats.modelsWithDesigner / designerStats.totalDesigners * 10) / 10 : 0 }}
+              </div>
+              <div class="stat-label">Avg Models/Designer</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="charts-grid">
+          <!-- Top designers by collection size -->
+          <div class="chart-card wide" v-if="designerStats.topByModelCount.length">
+            <h3 class="chart-title">Top Designers by Collection Size</h3>
+            <div class="bar-chart compact">
+              <div
+                v-for="item in designerStats.topByModelCount"
+                :key="item.name"
+                class="bar-row"
+              >
+                <div class="bar-label" :title="item.name">{{ item.name }}</div>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill purple"
+                    :style="{ width: barWidth(item.model_count, maxDesignerModelCount) }"
+                  ></div>
+                </div>
+                <div class="bar-value">{{ item.model_count.toLocaleString() }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Most printed designers -->
+          <div class="chart-card" v-if="designerStats.topByPrintCount.length">
+            <h3 class="chart-title">Most Printed Designers</h3>
+            <div class="bar-chart compact">
+              <div
+                v-for="item in designerStats.topByPrintCount"
+                :key="item.name"
+                class="bar-row"
+              >
+                <div class="bar-label" :title="item.name">{{ item.name }}</div>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill accent"
+                    :style="{ width: barWidth(item.print_count, maxDesignerPrintCount) }"
+                  ></div>
+                </div>
+                <div class="bar-value">{{ item.print_count }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Print quality by designer -->
+          <div class="chart-card" v-if="designerStats.printQuality.length">
+            <h3 class="chart-title">Print Quality by Designer</h3>
+            <p class="chart-sub">% good prints, for designers with at least one print</p>
+            <div class="bar-chart compact">
+              <div
+                v-for="item in designerStats.printQuality"
+                :key="item.name"
+                class="bar-row designer-quality-row"
+              >
+                <div class="bar-label" :title="item.name">{{ item.name }}</div>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill"
+                    :class="qualityBarClass(designerGoodPct(item))"
+                    :style="{ width: designerGoodPct(item) + '%' }"
+                  ></div>
+                </div>
+                <div class="bar-value">{{ designerGoodPct(item) }}%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
     </template>
   </div>
 </template>
@@ -730,6 +849,14 @@ interface DetailedStats {
   fileTypes: Array<{ file_type: string; count: number }>;
 }
 
+interface DesignerStats {
+  totalDesigners: number;
+  modelsWithDesigner: number;
+  topByModelCount: Array<{ name: string; model_count: number }>;
+  topByPrintCount: Array<{ name: string; print_count: number }>;
+  printQuality: Array<{ name: string; good_count: number; bad_count: number; total_prints: number }>;
+}
+
 interface ImportStats {
   totalImports: number;
   acceptanceRate: number;
@@ -749,6 +876,7 @@ const basicStats = ref({
 });
 const detailedStats = ref<DetailedStats | null>(null);
 const importStats = ref<ImportStats | null>(null);
+const designerStats = ref<DesignerStats | null>(null);
 
 // SVG chart dimensions
 const svgW = 560;
@@ -760,14 +888,16 @@ const padB = 20;
 
 onMounted(async () => {
   try {
-    const [basicRes, detailRes, importRes] = await Promise.all([
+    const [basicRes, detailRes, importRes, designerRes] = await Promise.all([
       systemApi.getStats(),
       systemApi.getDetailedStats(),
       ingestionApi.getImportStats(),
+      systemApi.getDesignerStats(),
     ]);
     basicStats.value = basicRes.data;
     detailedStats.value = detailRes.data;
     importStats.value = importRes.data;
+    designerStats.value = designerRes.data;
   } catch (error) {
     console.error('Failed to load stats:', error);
   } finally {
@@ -938,15 +1068,30 @@ const maxPrintedCount = computed(() =>
   )
 );
 
-// --- File types ---
-const maxFileTypeCount = computed(() =>
-  Math.max(...(detailedStats.value?.fileTypes.map((x) => x.count) || [1]))
-);
-
 // --- Tag stats ---
 const maxTagCount = computed(() =>
   Math.max(...(detailedStats.value?.tagStats.map((x) => x.model_count) || [1]))
 );
+
+// --- Designer stats ---
+const maxDesignerModelCount = computed(() =>
+  Math.max(...(designerStats.value?.topByModelCount.map((x) => x.model_count) || [1]))
+);
+
+const maxDesignerPrintCount = computed(() =>
+  Math.max(...(designerStats.value?.topByPrintCount.map((x) => x.print_count) || [1]))
+);
+
+function designerGoodPct(item: { good_count: number; total_prints: number }): number {
+  if (!item.total_prints) return 0;
+  return Math.round((item.good_count / item.total_prints) * 100);
+}
+
+function qualityBarClass(goodPct: number): string {
+  if (goodPct >= 75) return 'accent';
+  if (goodPct < 50) return 'danger';
+  return '';
+}
 
 // --- Import quality ---
 const sortedConfidence = computed(() => {
@@ -1045,7 +1190,7 @@ const importWeekLabels = computed(
 /* Summary Cards */
 .summary-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
 }
 
