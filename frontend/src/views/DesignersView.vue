@@ -22,6 +22,7 @@
             <option value="model_count">Model Count</option>
             <option value="name">Name</option>
             <option value="paid_model_count">Paid Count</option>
+            <option value="printed_model_count">Printed Count</option>
             <option value="latest_model_date">Latest Model</option>
           </select>
           <button
@@ -415,6 +416,10 @@ const filteredDesigners = computed(() => {
         aVal = a.paid_model_count || 0;
         bVal = b.paid_model_count || 0;
         break;
+      case 'printed_model_count':
+        aVal = a.printed_model_count || 0;
+        bVal = b.printed_model_count || 0;
+        break;
       case 'latest_model_date':
         aVal = a.latest_model_date || '';
         bVal = b.latest_model_date || '';
@@ -471,7 +476,7 @@ function initFromQueryParams() {
   if (
     sort &&
     typeof sort === 'string' &&
-    ['name', 'model_count', 'paid_model_count', 'latest_model_date'].includes(
+    ['name', 'model_count', 'paid_model_count', 'printed_model_count', 'latest_model_date'].includes(
       sort
     )
   ) {

@@ -56,6 +56,7 @@ router.get('/', (req, res) => {
                 COUNT(m.id) as model_count,
                 MAX(m.date_added) as latest_model_date,
                 SUM(CASE WHEN m.is_paid = 1 THEN 1 ELSE 0 END) as paid_model_count,
+                SUM(CASE WHEN EXISTS (SELECT 1 FROM printed_models pm WHERE pm.model_id = m.id) THEN 1 ELSE 0 END) as printed_model_count,
                 CASE WHEN df.designer_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
                 (
                     SELECT GROUP_CONCAT(sub.filepath, '|||')

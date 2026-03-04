@@ -235,6 +235,7 @@ export interface Designer {
     notes: string | null;
     model_count?: number;
     paid_model_count?: number;
+    printed_model_count?: number;
     latest_model_date?: string | null;
     is_favorite?: number;
     created_at?: string;
