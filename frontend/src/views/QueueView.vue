@@ -31,8 +31,9 @@
             <option value="date_created">Date Created</option>
             <option value="name">Name</option>
             <option value="category">Category</option>
+            <option value="random">Random</option>
           </select>
-          <button @click="toggleSortOrder" class="sort-order-btn" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
+          <button v-if="sortField !== 'random'" @click="toggleSortOrder" class="sort-order-btn" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
             <svg v-if="sortOrder === 'desc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M19 12l-7 7-7-7"/>
             </svg>
@@ -522,6 +523,13 @@ const sortedQueue = computed(() => {
     return queuedItems.value;
   }
   const items = [...queuedItems.value];
+  if (sortField.value === 'random') {
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [items[i], items[j]] = [items[j], items[i]];
+    }
+    return items;
+  }
   items.sort((a, b) => {
     let aVal: string, bVal: string;
     switch (sortField.value) {
@@ -543,7 +551,7 @@ function initFromQueryParams() {
   if (view && typeof view === 'string' && ['grid', 'table'].includes(view)) {
     viewMode.value = view as 'grid' | 'table';
   }
-  if (sort && typeof sort === 'string' && ['priority', 'added_at', 'date_added', 'date_created', 'name', 'category'].includes(sort)) {
+  if (sort && typeof sort === 'string' && ['priority', 'added_at', 'date_added', 'date_created', 'name', 'category', 'random'].includes(sort)) {
     sortField.value = sort;
   }
   if (order && typeof order === 'string' && ['asc', 'desc'].includes(order)) {

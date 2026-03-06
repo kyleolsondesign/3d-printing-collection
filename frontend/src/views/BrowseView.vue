@@ -85,8 +85,9 @@
               <option value="date_created">Date Created</option>
               <option value="name">Name</option>
               <option value="category">Category</option>
+              <option value="random">Random</option>
             </select>
-            <button @click="toggleSortOrder" class="sort-order-btn" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
+            <button v-if="sortField !== 'random'" @click="toggleSortOrder" class="sort-order-btn" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
               <svg v-if="sortOrder === 'desc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 5v14M19 12l-7 7-7-7"/>
               </svg>
@@ -658,7 +659,7 @@ function initFromQueryParams() {
   } else if (store.globalSearchQuery) {
     store.clearGlobalSearch();
   }
-  if (sort && typeof sort === 'string' && ['date_added', 'date_created', 'name', 'category'].includes(sort)) {
+  if (sort && typeof sort === 'string' && ['date_added', 'date_created', 'name', 'category', 'random'].includes(sort)) {
     sortField.value = sort;
   }
   if (order && typeof order === 'string' && ['asc', 'desc'].includes(order)) {

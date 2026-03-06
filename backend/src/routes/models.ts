@@ -80,10 +80,14 @@ router.get('/', (req, res) => {
             'name': 'filename',
             'category': 'category'
         };
-        const sortColumn = sortColumns[sort] || 'date_added';
         const sortOrder = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
-        query += ` ORDER BY ${sortColumn} ${sortOrder} NULLS LAST, filename ASC LIMIT ? OFFSET ?`;
+        if (sort === 'random') {
+            query += ` ORDER BY RANDOM() LIMIT ? OFFSET ?`;
+        } else {
+            const sortColumn = sortColumns[sort] || 'date_added';
+            query += ` ORDER BY ${sortColumn} ${sortOrder} NULLS LAST, filename ASC LIMIT ? OFFSET ?`;
+        }
         params.push(limit, offset);
 
         const models = db.prepare(query).all(...params) as any[];
@@ -383,21 +387,28 @@ router.get('/search/query', (req, res) => {
         }
 
         // Apply sort/order to merged results
-        const sortColumns: Record<string, string> = {
-            'date_added': 'date_added',
-            'date_created': 'date_created',
-            'name': 'filename',
-            'category': 'category'
-        };
-        const sortCol = sortColumns[sort] || 'date_added';
-        const sortDir = order.toLowerCase() === 'asc' ? 1 : -1;
-        models.sort((a: any, b: any) => {
-            const av = a[sortCol] ?? '';
-            const bv = b[sortCol] ?? '';
-            if (av < bv) return -1 * sortDir;
-            if (av > bv) return 1 * sortDir;
-            return a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0;
-        });
+        if (sort === 'random') {
+            for (let i = models.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [models[i], models[j]] = [models[j], models[i]];
+            }
+        } else {
+            const sortColumns: Record<string, string> = {
+                'date_added': 'date_added',
+                'date_created': 'date_created',
+                'name': 'filename',
+                'category': 'category'
+            };
+            const sortCol = sortColumns[sort] || 'date_added';
+            const sortDir = order.toLowerCase() === 'asc' ? 1 : -1;
+            models.sort((a: any, b: any) => {
+                const av = a[sortCol] ?? '';
+                const bv = b[sortCol] ?? '';
+                if (av < bv) return -1 * sortDir;
+                if (av > bv) return 1 * sortDir;
+                return a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0;
+            });
+        }
 
         // Get primary image and status for each search result
         const modelsWithDetails = models.map(model => {
