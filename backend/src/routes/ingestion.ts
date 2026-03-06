@@ -404,6 +404,14 @@ function suggestCategoryFuzzy(
     return { category: bestCategory, confidence, debugScores };
 }
 
+// Normalize a category suggestion to the exact casing of a known category.
+// Falls back to the raw value so Claude-invented new categories still work.
+function normalizeSuggestedCategory(raw: string, categories: string[]): string {
+    if (!raw) return 'Uncategorized';
+    const lower = raw.toLowerCase();
+    return categories.find(c => c.toLowerCase() === lower) ?? raw;
+}
+
 // --- Claude-powered categorization ---
 
 async function suggestCategoriesWithClaude(
@@ -474,8 +482,9 @@ async function suggestCategoriesWithClaude(
             const confidence = ['high', 'medium', 'low'].includes(suggestion.confidence)
                 ? suggestion.confidence as 'high' | 'medium' | 'low'
                 : 'low';
+            const rawCategory = suggestion.category || 'Uncategorized';
             results.set(items[i].filepath, {
-                category: suggestion.category || 'Uncategorized',
+                category: normalizeSuggestedCategory(rawCategory, categories),
                 confidence
             });
         }
@@ -1173,17 +1182,16 @@ router.get('/stats', (req, res) => {
             FROM ingestion_events
         `).get() as { total: number; accepted_count: number | null };
 
-        // Weekly breakdown — last 12 weeks
-        const byWeek = db.prepare(`
+        // Daily breakdown — all time
+        const byDay = db.prepare(`
             SELECT
-                strftime('%Y-W%W', imported_at) as week,
+                date(imported_at) as day,
                 COUNT(*) as total,
                 SUM(accepted) as accepted
             FROM ingestion_events
-            WHERE imported_at >= datetime('now', '-84 days')
-            GROUP BY week
-            ORDER BY week
-        `).all() as Array<{ week: string; total: number; accepted: number }>;
+            GROUP BY day
+            ORDER BY day
+        `).all() as Array<{ day: string; total: number; accepted: number }>;
 
         // Top corrected categories (suggested but user changed)
         const topCorrected = db.prepare(`
@@ -1221,7 +1229,7 @@ router.get('/stats', (req, res) => {
         res.json({
             totalImports: total,
             acceptanceRate: total > 0 ? Math.round((acceptedCount / total) * 100) : 0,
-            byWeek,
+            byDay,
             topCorrected,
             topChosen,
             byConfidence

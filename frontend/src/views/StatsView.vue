@@ -248,10 +248,18 @@
         </div>
 
         <div class="charts-grid">
-          <!-- Acceptance rate over time line chart -->
-          <div class="chart-card wide" v-if="importStats.byWeek.length > 1">
-            <h3 class="chart-title">Acceptance Rate Over Time</h3>
-            <div class="line-chart-wrapper">
+          <!-- Acceptance rate over time line chart (daily) -->
+          <div class="chart-card wide" v-if="importDayData.length > 0">
+            <div class="chart-header">
+              <h3 class="chart-title">Acceptance Rate Over Time</h3>
+              <div class="range-selector">
+                <button class="range-btn" :class="{ active: importRange === 30 }" @click="importRange = 30">30d</button>
+                <button class="range-btn" :class="{ active: importRange === 90 }" @click="importRange = 90">90d</button>
+                <button class="range-btn" :class="{ active: importRange === 0 }" @click="importRange = 0">All</button>
+              </div>
+            </div>
+            <div v-if="importDayData.length === 0" class="chart-empty">No imports in this period</div>
+            <div v-else class="line-chart-wrapper">
               <svg
                 class="line-chart-svg"
                 :viewBox="`0 0 ${svgW} ${svgH}`"
@@ -281,23 +289,31 @@
                 <path :d="importAreaPath" fill="rgba(34,197,94,0.1)" />
                 <!-- Acceptance rate line -->
                 <polyline
+                  v-if="importDayData.length > 1"
                   :points="importLinePoints"
                   fill="none"
                   stroke="var(--success)"
                   stroke-width="2"
                   stroke-linejoin="round"
                 />
+                <!-- Dots on each data point -->
+                <circle
+                  v-for="(d, i) in importDayData"
+                  :key="'id-dot-' + i"
+                  :cx="importXPos(i)"
+                  :cy="importYPos(d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0)"
+                  r="2.5"
+                  fill="var(--success)"
+                />
                 <!-- X labels -->
                 <text
-                  v-for="(label, i) in importWeekLabels"
-                  :key="'ix' + i"
-                  :x="importXPos(i)"
+                  v-for="item in importDayLabelItems"
+                  :key="'ix' + item.i"
+                  :x="importXPos(item.i)"
                   :y="svgH - 4"
                   text-anchor="middle"
                   class="axis-label"
-                >
-                  {{ label }}
-                </text>
+                >{{ item.label }}</text>
                 <!-- Y labels -->
                 <text
                   v-for="tick in importYTicks"
@@ -489,8 +505,15 @@
 
         <!-- Prints Over Time Line Chart -->
         <div class="chart-card wide">
-          <h3 class="chart-title">Prints Over Time</h3>
-          <div v-if="!detailedStats?.printsByMonth?.length" class="chart-empty">
+          <div class="chart-header">
+            <h3 class="chart-title">Prints Over Time</h3>
+            <div class="range-selector" v-if="(detailedStats?.printsByMonth?.length || 0) > 1">
+              <button class="range-btn" :class="{ active: printRange === 6 }" @click="printRange = 6">6mo</button>
+              <button class="range-btn" :class="{ active: printRange === 12 }" @click="printRange = 12">1yr</button>
+              <button class="range-btn" :class="{ active: printRange === 0 }" @click="printRange = 0">All</button>
+            </div>
+          </div>
+          <div v-if="!printData.length" class="chart-empty">
             No print history yet
           </div>
           <div v-else class="line-chart-wrapper">
@@ -635,7 +658,14 @@
           class="chart-card wide"
           v-if="detailedStats?.modelsAddedByMonth?.length"
         >
-          <h3 class="chart-title">Models Added Over Time</h3>
+          <div class="chart-header">
+            <h3 class="chart-title">Models Added Over Time</h3>
+            <div class="range-selector" v-if="(detailedStats?.modelsAddedByMonth?.length || 0) > 1">
+              <button class="range-btn" :class="{ active: addedRange === 6 }" @click="addedRange = 6">6mo</button>
+              <button class="range-btn" :class="{ active: addedRange === 12 }" @click="addedRange = 12">1yr</button>
+              <button class="range-btn" :class="{ active: addedRange === 0 }" @click="addedRange = 0">All</button>
+            </div>
+          </div>
           <div class="line-chart-wrapper">
             <svg
               class="line-chart-svg"
@@ -910,7 +940,7 @@ interface DesignerStats {
 interface ImportStats {
   totalImports: number;
   acceptanceRate: number;
-  byWeek: Array<{ week: string; total: number; accepted: number }>;
+  byDay: Array<{ day: string; total: number; accepted: number }>;
   topCorrected: Array<{ category: string; count: number }>;
   topChosen: Array<{ category: string; count: number }>;
   byConfidence: Array<{ confidence: string; total: number; accepted: number }>;
@@ -1016,7 +1046,12 @@ const goodDeg = computed(
 );
 
 // --- Prints over time line chart ---
-const printData = computed(() => detailedStats.value?.printsByMonth || []);
+const printRange = ref(12); // months; 0 = all
+const printData = computed(() => {
+  const all = detailedStats.value?.printsByMonth || [];
+  if (printRange.value === 0) return all;
+  return all.slice(-printRange.value);
+});
 
 const maxPrintVal = computed(() =>
   Math.max(...printData.value.map((d) => d.total), 1)
@@ -1068,7 +1103,12 @@ const printMonthLabels = computed(
 );
 
 // --- Models added over time ---
-const addedData = computed(() => detailedStats.value?.modelsAddedByMonth || []);
+const addedRange = ref(12); // months; 0 = all
+const addedData = computed(() => {
+  const all = detailedStats.value?.modelsAddedByMonth || [];
+  if (addedRange.value === 0) return all;
+  return all.slice(-addedRange.value);
+});
 const maxAddedVal = computed(() =>
   Math.max(...addedData.value.map((d) => d.count), 1)
 );
@@ -1159,11 +1199,20 @@ const maxChosenCount = computed(() =>
   Math.max(...(importStats.value?.topChosen.map((x) => x.count) || [1]))
 );
 
-// Import rate line chart — weekly, Y axis is 0–100 (%)
-const importWeekData = computed(() => importStats.value?.byWeek || []);
+// Import rate line chart — daily, Y axis is 0–100 (%)
+const importRange = ref(30); // days; 0 = all
+
+const importDayData = computed(() => {
+  const all = (importStats.value?.byDay || []).filter((d) => d.total > 0);
+  if (importRange.value === 0) return all;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - importRange.value);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  return all.filter((d) => d.day >= cutoffStr);
+});
 
 function importXPos(i: number): number {
-  const n = importWeekData.value.length;
+  const n = importDayData.value.length;
   if (n <= 1) return padL + (svgW - padL - padR) / 2;
   return padL + (i / (n - 1)) * (svgW - padL - padR);
 }
@@ -1175,7 +1224,7 @@ function importYPos(val: number): number {
 const importYTicks = [0, 25, 50, 75, 100];
 
 const importLinePoints = computed(() =>
-  importWeekData.value
+  importDayData.value
     .map((d, i) => {
       const rate = d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0;
       return `${importXPos(i)},${importYPos(rate)}`;
@@ -1184,10 +1233,10 @@ const importLinePoints = computed(() =>
 );
 
 const importAreaPath = computed(() => {
-  if (!importWeekData.value.length) return '';
-  const n = importWeekData.value.length;
+  if (!importDayData.value.length) return '';
+  const n = importDayData.value.length;
   const base = importYPos(0);
-  const pts = importWeekData.value
+  const pts = importDayData.value
     .map((d, i) => {
       const rate = d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0;
       return `${importXPos(i)},${importYPos(rate)}`;
@@ -1196,9 +1245,21 @@ const importAreaPath = computed(() => {
   return `M ${importXPos(0)},${base} L ${pts} L ${importXPos(n - 1)},${base} Z`;
 });
 
-const importWeekLabels = computed(
-  () => importWeekData.value.map((d) => d.week.slice(6)) // "WNN" from "YYYY-WNN"
-);
+const importDayLabelItems = computed(() => {
+  const data = importDayData.value;
+  const n = data.length;
+  if (n === 0) return [];
+  const step = Math.max(1, Math.round(n / 8));
+  const items: Array<{ i: number; label: string }> = [];
+  for (let i = 0; i < n; i++) {
+    if (i % step === 0 || i === n - 1) {
+      const date = new Date(data[i].day + 'T00:00:00');
+      const month = date.toLocaleString('default', { month: 'short' });
+      items.push({ i, label: `${month} ${date.getDate()}` });
+    }
+  }
+  return items;
+});
 </script>
 
 <style scoped>
@@ -1354,10 +1415,49 @@ const importWeekLabels = computed(
   grid-column: span 2;
 }
 
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .chart-title {
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.range-selector {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.range-btn {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0.15rem 0.5rem;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base);
+  line-height: 1.4;
+}
+
+.range-btn:hover {
+  color: var(--text-secondary);
+}
+
+.range-btn.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .chart-empty {

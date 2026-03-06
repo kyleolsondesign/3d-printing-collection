@@ -667,7 +667,7 @@ router.post('/bulk-reassign-category', async (req, res) => {
         }
 
         const category = new_category.trim();
-        const config = db.prepare('SELECT value FROM config WHERE key = ?').get('modelDirectory') as { value: string } | undefined;
+        const config = db.prepare('SELECT value FROM config WHERE key = ?').get('model_directory') as { value: string } | undefined;
         if (!config) {
             return res.status(400).json({ error: 'Model directory not configured' });
         }

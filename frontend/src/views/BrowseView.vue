@@ -608,7 +608,7 @@ const allPrintingItems = ref<any[]>([]);
 async function loadPrintingItems() {
   try {
     const response = await queueApi.getAll();
-    allPrintingItems.value = response.data
+    allPrintingItems.value = (response.data.queue || [])
       .filter((item: any) => item.is_printing)
       .map((item: any) => ({ ...item, id: item.model_id }));
   } catch (error) {
