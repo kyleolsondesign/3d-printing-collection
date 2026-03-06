@@ -1944,6 +1944,9 @@ async function bulkAddTag() {
   border: 1px solid var(--accent-primary);
   border-radius: var(--radius-lg);
   gap: 1rem;
+  position: sticky;
+  top: 52px;
+  z-index: 40;
 }
 
 .bulk-left {
