@@ -489,6 +489,14 @@ class Scanner {
             db.prepare('DELETE FROM model_files WHERE model_id = ?').run(modelId);
             db.prepare('DELETE FROM model_assets WHERE model_id = ?').run(modelId);
 
+            // Also remove any stale model_files rows from other models that claim the same filepaths.
+            // This can happen if a folder was indexed more than once (duplicate model rows), which
+            // would otherwise cause a UNIQUE constraint failure on model_files.filepath.
+            const deleteStalePaths = db.prepare('DELETE FROM model_files WHERE filepath = ?');
+            for (const filePath of modelFiles) {
+                deleteStalePaths.run(filePath);
+            }
+
             // Insert model files
             const insertFile = db.prepare(`
                 INSERT INTO model_files (model_id, filename, filepath, file_size, file_type)
