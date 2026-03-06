@@ -235,7 +235,7 @@
           >
             <div class="stat-icon" :class="conf.confidence + '-conf-icon'">
               <span class="confidence-badge" :class="conf.confidence">
-                {{ conf.confidence }}
+                {{ conf.confidence.charAt(0) }}
               </span>
             </div>
             <div class="stat-info">
@@ -253,17 +253,34 @@
             <div class="chart-header">
               <h3 class="chart-title">Acceptance Rate Over Time</h3>
               <div class="range-selector">
-                <button class="range-btn" :class="{ active: importRange === 30 }" @click="importRange = 30">30d</button>
-                <button class="range-btn" :class="{ active: importRange === 90 }" @click="importRange = 90">90d</button>
-                <button class="range-btn" :class="{ active: importRange === 0 }" @click="importRange = 0">All</button>
+                <button
+                  class="range-btn"
+                  :class="{ active: importRange === 30 }"
+                  @click="importRange = 30"
+                >
+                  30d
+                </button>
+                <button
+                  class="range-btn"
+                  :class="{ active: importRange === 90 }"
+                  @click="importRange = 90"
+                >
+                  90d
+                </button>
+                <button
+                  class="range-btn"
+                  :class="{ active: importRange === 0 }"
+                  @click="importRange = 0"
+                >
+                  All
+                </button>
               </div>
             </div>
-            <div v-if="importDayData.length === 0" class="chart-empty">No imports in this period</div>
+            <div v-if="importDayData.length === 0" class="chart-empty">
+              No imports in this period
+            </div>
             <div v-else class="line-chart-wrapper">
-              <svg
-                class="line-chart-svg"
-                :viewBox="`0 0 ${svgW} ${svgH}`"
-              >
+              <svg class="line-chart-svg" :viewBox="`0 0 ${svgW} ${svgH}`">
                 <!-- 100% guideline -->
                 <line
                   :x1="padL"
@@ -296,15 +313,34 @@
                   stroke-width="2"
                   stroke-linejoin="round"
                 />
-                <!-- Dots on each data point -->
-                <circle
+                <!-- Hover groups + dots per data point -->
+                <g
                   v-for="(d, i) in importDayData"
-                  :key="'id-dot-' + i"
-                  :cx="importXPos(i)"
-                  :cy="importYPos(d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0)"
-                  r="2.5"
-                  fill="var(--success)"
-                />
+                  :key="'id-pt-' + i"
+                  @mouseenter="showImportTip(i)"
+                  @mouseleave="importTooltip = null"
+                  style="cursor: crosshair"
+                >
+                  <rect
+                    :x="importXPos(i) - 6"
+                    :y="padT"
+                    width="12"
+                    :height="svgH - padT - padB"
+                    fill="transparent"
+                  />
+                  <circle
+                    :cx="importXPos(i)"
+                    :cy="
+                      importYPos(
+                        d.total > 0
+                          ? Math.round((d.accepted / d.total) * 100)
+                          : 0
+                      )
+                    "
+                    r="2.5"
+                    fill="var(--success)"
+                  />
+                </g>
                 <!-- X labels -->
                 <text
                   v-for="item in importDayLabelItems"
@@ -313,7 +349,9 @@
                   :y="svgH - 4"
                   text-anchor="middle"
                   class="axis-label"
-                >{{ item.label }}</text>
+                >
+                  {{ item.label }}
+                </text>
                 <!-- Y labels -->
                 <text
                   v-for="tick in importYTicks"
@@ -325,6 +363,45 @@
                 >
                   {{ tick }}%
                 </text>
+                <!-- Crosshair + Tooltip (last = renders on top) -->
+                <line
+                  v-if="importTooltip"
+                  pointer-events="none"
+                  :x1="importTooltip.px"
+                  :y1="padT"
+                  :x2="importTooltip.px"
+                  :y2="svgH - padB"
+                  stroke="var(--text-tertiary)"
+                  stroke-width="0.5"
+                  stroke-dasharray="2 2"
+                />
+                <g v-if="importTooltip" pointer-events="none">
+                  <circle
+                    :cx="importTooltip.px"
+                    :cy="importTooltip.py"
+                    r="5"
+                    fill="none"
+                    stroke="var(--success)"
+                    stroke-width="1.5"
+                    opacity="0.5"
+                  />
+                  <text
+                    :x="tipLabelX(importTooltip)"
+                    :y="tipLabelY(importTooltip)"
+                    text-anchor="middle"
+                    font-size="7.5"
+                    font-weight="600"
+                    font-family="inherit"
+                    class="tip-label"
+                    paint-order="stroke fill"
+                    stroke="var(--bg-base)"
+                    stroke-width="3"
+                    stroke-linejoin="round"
+                    fill="var(--text-primary)"
+                  >
+                    {{ importTooltip.label }}
+                  </text>
+                </g>
               </svg>
             </div>
           </div>
@@ -487,7 +564,9 @@
                   v-if="item.category"
                   :to="{ name: 'browse', query: { category: item.category } }"
                   class="stat-link"
-                >{{ item.category }}</router-link>
+                >
+                  {{ item.category }}
+                </router-link>
                 <span v-else>Uncategorized</span>
               </div>
               <div class="bar-track">
@@ -507,20 +586,45 @@
         <div class="chart-card wide">
           <div class="chart-header">
             <h3 class="chart-title">Prints Over Time</h3>
-            <div class="range-selector" v-if="(detailedStats?.printsByMonth?.length || 0) > 1">
-              <button class="range-btn" :class="{ active: printRange === 6 }" @click="printRange = 6">6mo</button>
-              <button class="range-btn" :class="{ active: printRange === 12 }" @click="printRange = 12">1yr</button>
-              <button class="range-btn" :class="{ active: printRange === 0 }" @click="printRange = 0">All</button>
+            <div
+              class="range-selector"
+              v-if="(detailedStats?.printsByMonth?.length || 0) > 0"
+            >
+              <button
+                class="range-btn"
+                :class="{ active: printRange === 30 }"
+                @click="printRange = 30"
+              >
+                30d
+              </button>
+              <button
+                class="range-btn"
+                :class="{ active: printRange === 6 }"
+                @click="printRange = 6"
+              >
+                6mo
+              </button>
+              <button
+                class="range-btn"
+                :class="{ active: printRange === 12 }"
+                @click="printRange = 12"
+              >
+                1yr
+              </button>
+              <button
+                class="range-btn"
+                :class="{ active: printRange === 0 }"
+                @click="printRange = 0"
+              >
+                All
+              </button>
             </div>
           </div>
           <div v-if="!printData.length" class="chart-empty">
             No print history yet
           </div>
           <div v-else class="line-chart-wrapper">
-            <svg
-              class="line-chart-svg"
-              :viewBox="`0 0 ${svgW} ${svgH}`"
-            >
+            <svg class="line-chart-svg" :viewBox="`0 0 ${svgW} ${svgH}`">
               <!-- Grid lines -->
               <line
                 v-for="tick in yTicks"
@@ -551,26 +655,37 @@
                 stroke-dasharray="4 2"
                 stroke-linejoin="round"
               />
-              <!-- Dots for each data point (visible when n=1) -->
-              <circle
+              <!-- Hover groups + dots per data point -->
+              <g
                 v-for="(d, i) in printData"
-                :key="`total-dot-${i}`"
-                :cx="xPos(i)"
-                :cy="yPos(d.total)"
-                r="3"
-                fill="var(--accent-primary)"
-              />
-              <circle
-                v-for="(d, i) in printData"
-                :key="`good-dot-${i}`"
-                :cx="xPos(i)"
-                :cy="yPos(d.good_count)"
-                r="2.5"
-                fill="var(--success)"
-              />
+                :key="`print-pt-${i}`"
+                @mouseenter="showPrintTip(i)"
+                @mouseleave="printTooltip = null"
+                style="cursor: crosshair"
+              >
+                <rect
+                  :x="xPos(i) - 6"
+                  :y="padT"
+                  width="12"
+                  :height="svgH - padT - padB"
+                  fill="transparent"
+                />
+                <circle
+                  :cx="xPos(i)"
+                  :cy="yPos(d.total)"
+                  r="3"
+                  fill="var(--accent-primary)"
+                />
+                <circle
+                  :cx="xPos(i)"
+                  :cy="yPos(d.good_count)"
+                  r="2.5"
+                  fill="var(--success)"
+                />
+              </g>
               <!-- X axis labels -->
               <text
-                v-for="(item, i) in printMonthLabels"
+                v-for="(item, i) in printXLabels"
                 :key="i"
                 :x="xPos(i)"
                 :y="svgH - 4"
@@ -590,6 +705,45 @@
               >
                 {{ tick }}
               </text>
+              <!-- Crosshair + Tooltip (last = renders on top) -->
+              <line
+                v-if="printTooltip"
+                pointer-events="none"
+                :x1="printTooltip.px"
+                :y1="padT"
+                :x2="printTooltip.px"
+                :y2="svgH - padB"
+                stroke="var(--text-tertiary)"
+                stroke-width="0.5"
+                stroke-dasharray="2 2"
+              />
+              <g v-if="printTooltip" pointer-events="none">
+                <circle
+                  :cx="printTooltip.px"
+                  :cy="printTooltip.py"
+                  r="5"
+                  fill="none"
+                  stroke="var(--accent-primary)"
+                  stroke-width="1.5"
+                  opacity="0.5"
+                />
+                <text
+                  :x="tipLabelX(printTooltip)"
+                  :y="tipLabelY(printTooltip)"
+                  text-anchor="middle"
+                  font-size="7.5"
+                  font-weight="600"
+                  font-family="inherit"
+                  class="tip-label"
+                  paint-order="stroke fill"
+                  stroke="var(--bg-base)"
+                  stroke-width="3"
+                  stroke-linejoin="round"
+                  fill="var(--text-primary)"
+                >
+                  {{ printTooltip.label }}
+                </text>
+              </g>
             </svg>
             <div class="line-legend">
               <span class="line-legend-item">
@@ -639,7 +793,9 @@
                   v-if="item.category"
                   :to="{ name: 'browse', query: { category: item.category } }"
                   class="stat-link"
-                >{{ item.category }}</router-link>
+                >
+                  {{ item.category }}
+                </router-link>
                 <span v-else>Uncategorized</span>
               </div>
               <div class="bar-track">
@@ -660,17 +816,35 @@
         >
           <div class="chart-header">
             <h3 class="chart-title">Models Added Over Time</h3>
-            <div class="range-selector" v-if="(detailedStats?.modelsAddedByMonth?.length || 0) > 1">
-              <button class="range-btn" :class="{ active: addedRange === 6 }" @click="addedRange = 6">6mo</button>
-              <button class="range-btn" :class="{ active: addedRange === 12 }" @click="addedRange = 12">1yr</button>
-              <button class="range-btn" :class="{ active: addedRange === 0 }" @click="addedRange = 0">All</button>
+            <div
+              class="range-selector"
+              v-if="(detailedStats?.modelsAddedByMonth?.length || 0) > 0"
+            >
+              <button
+                class="range-btn"
+                :class="{ active: addedRange === 6 }"
+                @click="addedRange = 6"
+              >
+                6mo
+              </button>
+              <button
+                class="range-btn"
+                :class="{ active: addedRange === 12 }"
+                @click="addedRange = 12"
+              >
+                1yr
+              </button>
+              <button
+                class="range-btn"
+                :class="{ active: addedRange === 0 }"
+                @click="addedRange = 0"
+              >
+                All
+              </button>
             </div>
           </div>
           <div class="line-chart-wrapper">
-            <svg
-              class="line-chart-svg"
-              :viewBox="`0 0 ${svgW} ${svgH}`"
-            >
+            <svg class="line-chart-svg" :viewBox="`0 0 ${svgW} ${svgH}`">
               <line
                 v-for="tick in addedYTicks"
                 :key="tick"
@@ -689,14 +863,28 @@
                 stroke-width="2"
                 stroke-linejoin="round"
               />
-              <circle
+              <!-- Hover groups + dots per data point -->
+              <g
                 v-for="(d, i) in addedData"
-                :key="`added-dot-${i}`"
-                :cx="addedXPos(i)"
-                :cy="addedYPos(d.count)"
-                r="3"
-                fill="var(--accent-primary)"
-              />
+                :key="`added-pt-${i}`"
+                @mouseenter="showAddedTip(i)"
+                @mouseleave="addedTooltip = null"
+                style="cursor: crosshair"
+              >
+                <rect
+                  :x="addedXPos(i) - 6"
+                  :y="padT"
+                  width="12"
+                  :height="svgH - padT - padB"
+                  fill="transparent"
+                />
+                <circle
+                  :cx="addedXPos(i)"
+                  :cy="addedYPos(d.count)"
+                  r="3"
+                  fill="var(--accent-primary)"
+                />
+              </g>
               <text
                 v-for="(item, i) in addedMonthLabels"
                 :key="i"
@@ -717,6 +905,45 @@
               >
                 {{ tick }}
               </text>
+              <!-- Crosshair + Tooltip (last = renders on top) -->
+              <line
+                v-if="addedTooltip"
+                pointer-events="none"
+                :x1="addedTooltip.px"
+                :y1="padT"
+                :x2="addedTooltip.px"
+                :y2="svgH - padB"
+                stroke="var(--text-tertiary)"
+                stroke-width="0.5"
+                stroke-dasharray="2 2"
+              />
+              <g v-if="addedTooltip" pointer-events="none">
+                <circle
+                  :cx="addedTooltip.px"
+                  :cy="addedTooltip.py"
+                  r="5"
+                  fill="none"
+                  stroke="var(--accent-primary)"
+                  stroke-width="1.5"
+                  opacity="0.5"
+                />
+                <text
+                  :x="tipLabelX(addedTooltip)"
+                  :y="tipLabelY(addedTooltip)"
+                  text-anchor="middle"
+                  font-size="7.5"
+                  font-weight="600"
+                  font-family="inherit"
+                  class="tip-label"
+                  paint-order="stroke fill"
+                  stroke="var(--bg-base)"
+                  stroke-width="3"
+                  stroke-linejoin="round"
+                  fill="var(--text-primary)"
+                >
+                  {{ addedTooltip.label }}
+                </text>
+              </g>
             </svg>
           </div>
         </div>
@@ -776,32 +1003,55 @@
         <div class="summary-cards">
           <div class="stat-card">
             <div class="stat-icon designer-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
                 <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
                 <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
               </svg>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ designerStats.totalDesigners.toLocaleString() }}</div>
+              <div class="stat-value">
+                {{ designerStats.totalDesigners.toLocaleString() }}
+              </div>
               <div class="stat-label">Designers</div>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon designer-linked-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path
+                  d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"
+                />
+                <path
+                  d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"
+                />
               </svg>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ designerStats.modelsWithDesigner.toLocaleString() }}</div>
+              <div class="stat-value">
+                {{ designerStats.modelsWithDesigner.toLocaleString() }}
+              </div>
               <div class="stat-label">Models Linked</div>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon designer-avg-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
                 <rect x="3" y="3" width="7" height="7" rx="1" />
                 <rect x="14" y="3" width="7" height="7" rx="1" />
                 <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -810,19 +1060,36 @@
             </div>
             <div class="stat-info">
               <div class="stat-value">
-                {{ designerStats.totalDesigners > 0 ? Math.round(designerStats.modelsWithDesigner / designerStats.totalDesigners * 10) / 10 : 0 }}
+                {{
+                  designerStats.totalDesigners > 0
+                    ? Math.round(
+                        (designerStats.modelsWithDesigner /
+                          designerStats.totalDesigners) *
+                          10
+                      ) / 10
+                    : 0
+                }}
               </div>
               <div class="stat-label">Avg Models/Designer</div>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon designer-fav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path
+                  d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
+                />
               </svg>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ designerStats.favoritedDesigners.toLocaleString() }}</div>
+              <div class="stat-value">
+                {{ designerStats.favoritedDesigners.toLocaleString() }}
+              </div>
               <div class="stat-label">Favorited</div>
             </div>
           </div>
@@ -830,7 +1097,10 @@
 
         <div class="charts-grid">
           <!-- Top designers by collection size -->
-          <div class="chart-card wide" v-if="designerStats.topByModelCount.length">
+          <div
+            class="chart-card wide"
+            v-if="designerStats.topByModelCount.length"
+          >
             <h3 class="chart-title">Top Designers by Collection Size</h3>
             <div class="bar-chart compact">
               <div
@@ -839,15 +1109,21 @@
                 class="bar-row"
               >
                 <div class="bar-label" :title="item.name">
-                  <router-link :to="`/designers/${item.id}`" class="stat-link">{{ item.name }}</router-link>
+                  <router-link :to="`/designers/${item.id}`" class="stat-link">
+                    {{ item.name }}
+                  </router-link>
                 </div>
                 <div class="bar-track">
                   <div
                     class="bar-fill purple"
-                    :style="{ width: barWidth(item.model_count, maxDesignerModelCount) }"
+                    :style="{
+                      width: barWidth(item.model_count, maxDesignerModelCount),
+                    }"
                   ></div>
                 </div>
-                <div class="bar-value">{{ item.model_count.toLocaleString() }}</div>
+                <div class="bar-value">
+                  {{ item.model_count.toLocaleString() }}
+                </div>
               </div>
             </div>
           </div>
@@ -862,12 +1138,16 @@
                 class="bar-row"
               >
                 <div class="bar-label" :title="item.name">
-                  <router-link :to="`/designers/${item.id}`" class="stat-link">{{ item.name }}</router-link>
+                  <router-link :to="`/designers/${item.id}`" class="stat-link">
+                    {{ item.name }}
+                  </router-link>
                 </div>
                 <div class="bar-track">
                   <div
                     class="bar-fill accent"
-                    :style="{ width: barWidth(item.print_count, maxDesignerPrintCount) }"
+                    :style="{
+                      width: barWidth(item.print_count, maxDesignerPrintCount),
+                    }"
                   ></div>
                 </div>
                 <div class="bar-value">{{ item.print_count }}</div>
@@ -878,7 +1158,9 @@
           <!-- Print quality by designer -->
           <div class="chart-card" v-if="designerStats.printQuality.length">
             <h3 class="chart-title">Print Quality by Designer</h3>
-            <p class="chart-sub">% good prints, for designers with at least one print</p>
+            <p class="chart-sub">
+              % good prints, for designers with at least one print
+            </p>
             <div class="bar-chart compact">
               <div
                 v-for="item in designerStats.printQuality"
@@ -886,7 +1168,9 @@
                 class="bar-row designer-quality-row"
               >
                 <div class="bar-label" :title="item.name">
-                  <router-link :to="`/designers/${item.id}`" class="stat-link">{{ item.name }}</router-link>
+                  <router-link :to="`/designers/${item.id}`" class="stat-link">
+                    {{ item.name }}
+                  </router-link>
                 </div>
                 <div class="bar-track">
                   <div
@@ -917,6 +1201,12 @@ interface DetailedStats {
     good_count: number;
     bad_count: number;
   }>;
+  printsByDay: Array<{
+    day: string;
+    total: number;
+    good_count: number;
+    bad_count: number;
+  }>;
   printRatings: { good: number; bad: number; unrated: number };
   topPrintedCategories: Array<{ category: string; print_count: number }>;
   avgFilesPerModel: number;
@@ -934,7 +1224,13 @@ interface DesignerStats {
   modelsWithDesigner: number;
   topByModelCount: Array<{ id: number; name: string; model_count: number }>;
   topByPrintCount: Array<{ id: number; name: string; print_count: number }>;
-  printQuality: Array<{ id: number; name: string; good_count: number; bad_count: number; total_prints: number }>;
+  printQuality: Array<{
+    id: number;
+    name: string;
+    good_count: number;
+    bad_count: number;
+    total_prints: number;
+  }>;
 }
 
 interface ImportStats {
@@ -1046,8 +1342,22 @@ const goodDeg = computed(
 );
 
 // --- Prints over time line chart ---
-const printRange = ref(12); // months; 0 = all
+const printRange = ref(30); // 30 = last 30 days; 6/12 = months; 0 = all
 const printData = computed(() => {
+  if (printRange.value === 30) {
+    const all = detailedStats.value?.printsByDay || [];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    return all
+      .filter((d) => d.day >= cutoffStr)
+      .map((d) => ({
+        month: d.day,
+        total: d.total,
+        good_count: d.good_count,
+        bad_count: d.bad_count,
+      }));
+  }
   const all = detailedStats.value?.printsByMonth || [];
   if (printRange.value === 0) return all;
   return all.slice(-printRange.value);
@@ -1098,9 +1408,26 @@ const areaPath = computed(() => {
   return `M ${xPos(0)},${base} L ${pts} L ${xPos(n - 1)},${base} Z`;
 });
 
-const printMonthLabels = computed(
-  () => printData.value.map((d) => d.month.slice(5)) // "MM" from "YYYY-MM"
-);
+const printXLabels = computed(() => {
+  const data = printData.value;
+  const n = data.length;
+  if (n === 0) return [];
+  if (printRange.value === 30) {
+    // Daily: show up to ~8 labels as "Mon D"
+    const step = Math.max(1, Math.round(n / 8));
+    return data.map((d, i) => {
+      if (i % step !== 0 && i !== n - 1) return '';
+      const date = new Date(d.month + 'T00:00:00');
+      return (
+        date.toLocaleString('default', { month: 'short' }) +
+        ' ' +
+        date.getDate()
+      );
+    });
+  }
+  // Monthly: show "MM" (e.g. "03")
+  return data.map((d) => d.month.slice(5));
+});
 
 // --- Models added over time ---
 const addedRange = ref(12); // months; 0 = all
@@ -1165,14 +1492,21 @@ const maxTagCount = computed(() =>
 
 // --- Designer stats ---
 const maxDesignerModelCount = computed(() =>
-  Math.max(...(designerStats.value?.topByModelCount.map((x) => x.model_count) || [1]))
+  Math.max(
+    ...(designerStats.value?.topByModelCount.map((x) => x.model_count) || [1])
+  )
 );
 
 const maxDesignerPrintCount = computed(() =>
-  Math.max(...(designerStats.value?.topByPrintCount.map((x) => x.print_count) || [1]))
+  Math.max(
+    ...(designerStats.value?.topByPrintCount.map((x) => x.print_count) || [1])
+  )
 );
 
-function designerGoodPct(item: { good_count: number; total_prints: number }): number {
+function designerGoodPct(item: {
+  good_count: number;
+  total_prints: number;
+}): number {
   if (!item.total_prints) return 0;
   return Math.round((item.good_count / item.total_prints) * 100);
 }
@@ -1260,6 +1594,49 @@ const importDayLabelItems = computed(() => {
   }
   return items;
 });
+
+// --- SVG chart tooltips ---
+interface SvgTooltip {
+  px: number;
+  py: number;
+  label: string;
+}
+const printTooltip = ref<SvgTooltip | null>(null);
+const addedTooltip = ref<SvgTooltip | null>(null);
+const importTooltip = ref<SvgTooltip | null>(null);
+
+function tipLabelX(t: SvgTooltip): number {
+  return Math.max(40, Math.min(svgW - 40, t.px));
+}
+function tipLabelY(t: SvgTooltip): number {
+  return t.py < padT + 14 ? t.py + 18 : t.py - 12;
+}
+
+function showPrintTip(i: number) {
+  const d = printData.value[i];
+  printTooltip.value = {
+    px: xPos(i),
+    py: yPos(d.total),
+    label: `${d.total} total · ${d.good_count} good`,
+  };
+}
+function showAddedTip(i: number) {
+  const d = addedData.value[i];
+  addedTooltip.value = {
+    px: addedXPos(i),
+    py: addedYPos(d.count),
+    label: `${d.count.toLocaleString()} added`,
+  };
+}
+function showImportTip(i: number) {
+  const d = importDayData.value[i];
+  const rate = d.total > 0 ? Math.round((d.accepted / d.total) * 100) : 0;
+  importTooltip.value = {
+    px: importXPos(i),
+    py: importYPos(rate),
+    label: `${rate}% · ${d.accepted}/${d.total}`,
+  };
+}
 </script>
 
 <style scoped>
@@ -1446,7 +1823,9 @@ const importDayLabelItems = computed(() => {
   background: none;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background var(--transition-base), color var(--transition-base);
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
   line-height: 1.4;
 }
 
@@ -1631,6 +2010,10 @@ const importDayLabelItems = computed(() => {
   font-family: inherit;
 }
 
+.tip-label {
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.9)) drop-shadow(0 0 3px rgba(0, 0, 0, 0.9));
+}
+
 .line-legend {
   display: flex;
   gap: 1.5rem;
@@ -1747,8 +2130,7 @@ const importDayLabelItems = computed(() => {
 
 .confidence-badge {
   display: inline-block;
-  font-size: 0.6875rem;
-  font-weight: 600;
+  font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 0.125rem 0.375rem;
@@ -1756,11 +2138,9 @@ const importDayLabelItems = computed(() => {
 }
 
 .confidence-badge.high {
-  background: rgba(34, 197, 94, 0.15);
   color: var(--success);
 }
 .confidence-badge.medium {
-  background: rgba(251, 191, 36, 0.15);
   color: var(--warning);
 }
 .confidence-badge.low {

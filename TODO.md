@@ -1,9 +1,8 @@
 - [ ] Support drag/drop in the queue to reorder
-- [x] On the import view, show an image preview if there is an image in the model folder. Do not do the whole extraction process until it's imported, but just if there is already an image. Remove the generic placeholder folder icon, as it is confusing in the same row as the "show in finder" button
 - [ ] Saved searches / smart collections: Allow saving search queries + filter combinations as named collections (e.g., "Unpainted toys", "Large prints to try"). These would appear as quick-access buttons or a sidebar section.
-- [x] Add the "currently printing" row at the top of the browse page as well
 - [ ] Any time a change is made to a model, whether it's via a button on the card/table row or within a modal, all instances of that model should update on the current page. For example, on the designer page card view if you click "printed", it is not reflected in the UI
 - [ ] Be consistent with icons across all buttons. For instance the queue icon has the hamburger lines in some places, and the + and a check mark on the browse page. In general all the icons for queue are bad. Let's figure something better out
 - [ ] Add a new bulk recategorization feature. It should be able to search/filter through all models, bulk-select, and recategorize. It should allow creating new categories entirely, splitting off from old ones. Plan out a good user experience for this feature and make sure the code paths are generic enough that we can have some automated recategorization later on, with manual user approval.
 - [ ] Paid model categorization: Paid should be a tag and we should keep the current folder structure for paid models, but "Paid" itself is not a category.
 - [ ] Bulk purge mode: a feature where you suggest models to delete (move to the macOS trash), based on an algorithm we determine via AskUserQuestion and can fine tune over time, including the aged of the model, if it was marked as a bad print, etc.
+- [ ] Make the search bar on the stats page follow the same behavior as the settings page, where it will take you to the browse view and search there if you enter a query

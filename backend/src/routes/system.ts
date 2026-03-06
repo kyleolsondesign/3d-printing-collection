@@ -235,7 +235,7 @@ router.get('/stats/detail', (req, res) => {
             LIMIT 20
         `).all() as Array<{ category: string; count: number }>;
 
-        // Prints per month (last 18 months)
+        // Prints per month (from 2026-03 onward, excluding Feb bulk-import)
         const printsByMonth = db.prepare(`
             SELECT
                 strftime('%Y-%m', printed_at) as month,
@@ -243,10 +243,23 @@ router.get('/stats/detail', (req, res) => {
                 SUM(CASE WHEN rating = 'good' THEN 1 ELSE 0 END) as good_count,
                 SUM(CASE WHEN rating = 'bad' THEN 1 ELSE 0 END) as bad_count
             FROM printed_models
-            WHERE strftime('%Y-%m', printed_at) >= '2026-03' AND printed_at >= date('now', '-18 months')
+            WHERE strftime('%Y-%m', printed_at) >= '2026-03'
             GROUP BY month
             ORDER BY month ASC
         `).all() as Array<{ month: string; total: number; good_count: number; bad_count: number }>;
+
+        // Prints per day (from 2026-03 onward, for granular 30-day view)
+        const printsByDay = db.prepare(`
+            SELECT
+                date(printed_at) as day,
+                COUNT(*) as total,
+                SUM(CASE WHEN rating = 'good' THEN 1 ELSE 0 END) as good_count,
+                SUM(CASE WHEN rating = 'bad' THEN 1 ELSE 0 END) as bad_count
+            FROM printed_models
+            WHERE date(printed_at) >= '2026-03-01'
+            GROUP BY day
+            ORDER BY day ASC
+        `).all() as Array<{ day: string; total: number; good_count: number; bad_count: number }>;
 
         // Good vs bad print ratio
         const printRatings = db.prepare(`
@@ -325,6 +338,7 @@ router.get('/stats/detail', (req, res) => {
         res.json({
             modelsByCategory,
             printsByMonth,
+            printsByDay,
             printRatings,
             topPrintedCategories,
             avgFilesPerModel: avgFilesRow.avg ? Math.round(avgFilesRow.avg * 10) / 10 : 0,
