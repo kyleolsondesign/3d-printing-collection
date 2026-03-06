@@ -78,7 +78,7 @@ export interface Category {
 
 // Models API
 export const modelsApi = {
-    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string }) =>
+    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string; noImage?: boolean }) =>
         api.get('/models', { params }),
 
     getById: (id: number) =>
@@ -92,6 +92,9 @@ export const modelsApi = {
 
     rescan: (id: number) =>
         api.post(`/models/${id}/rescan`),
+
+    bulkRescan: (ids: number[]) =>
+        api.post('/models/bulk-rescan', { ids }),
 
     getFiles: (id: number) =>
         api.get(`/models/${id}/files`),
@@ -210,7 +213,8 @@ export const systemApi = {
     deduplicateImages: () => api.post('/system/deduplicate-images'),
     trashLooseFile: (looseFileId: number) => api.post('/system/trash-loose-file', { looseFileId }),
     getWatcherStatus: () => api.get<WatcherStatus>('/system/watcher/status'),
-    toggleWatcher: (enabled: boolean) => api.post('/system/watcher/toggle', { enabled })
+    toggleWatcher: (enabled: boolean) => api.post('/system/watcher/toggle', { enabled }),
+    auditNestedModels: () => api.get<{ count: number; items: Array<{ child_id: number; child_filename: string; child_filepath: string; child_category: string; parent_id: number; parent_filename: string; parent_filepath: string; parent_category: string }> }>('/system/audit/nested-models')
 };
 
 // Ingestion API

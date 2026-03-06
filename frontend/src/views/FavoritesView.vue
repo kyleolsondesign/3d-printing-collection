@@ -1,5 +1,17 @@
 <template>
   <div class="favorites-view">
+    <Teleport to="#topbar-view-actions">
+      <button
+        @click="toggleSelectionMode"
+        :class="['select-btn', { active: selectionMode }]"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path v-if="selectionMode" d="M9 12l2 2 4-4"/>
+        </svg>
+        <span>{{ selectionMode ? 'Cancel' : 'Select' }}</span>
+      </button>
+    </Teleport>
     <div class="header">
       <div class="header-left">
         <h2>Favorites</h2>
@@ -11,16 +23,6 @@
     <!-- View Controls -->
     <div v-if="favorites.length > 0 || hasActiveFilters" class="view-controls">
       <div class="controls-left">
-        <button
-          @click="toggleSelectionMode"
-          :class="['select-btn', { active: selectionMode }]"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <path v-if="selectionMode" d="M9 12l2 2 4-4"/>
-          </svg>
-          <span>{{ selectionMode ? 'Cancel' : 'Select' }}</span>
-        </button>
         <div class="sort-controls">
           <select v-model="sortField" class="sort-select">
             <option value="added_at">Date Favorited</option>

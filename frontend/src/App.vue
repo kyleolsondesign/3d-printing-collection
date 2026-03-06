@@ -82,16 +82,6 @@
         <!-- Manage Section -->
         <div class="nav-group">
           <span class="nav-group-label">Manage</span>
-          <router-link to="/loose-files" :class="{ active: $route.name === 'loose-files' }" data-label="Loose Files" class="nav-item">
-            <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
-                <path d="M13 2v7h7"/>
-              </svg>
-            </span>
-            <span class="nav-text">Loose Files</span>
-            <span v-if="looseFilesCount > 0" class="nav-badge">{{ looseFilesCount }}</span>
-          </router-link>
           <router-link to="/designers" :class="{ active: $route.name === 'designers' }" data-label="Designers" class="nav-item">
             <span class="nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -138,6 +128,7 @@
       <header class="topbar">
         <h2 class="page-title">{{ pageTitle }}</h2>
         <div class="topbar-right">
+          <div id="topbar-view-actions"></div>
           <div class="search-wrapper">
             <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"/>
@@ -181,13 +172,11 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAppStore } from './store';
-import { systemApi } from './services/api';
 import BackToTopButton from './components/BackToTopButton.vue';
 
 const store = useAppStore();
 const router = useRouter();
 const route = useRoute();
-const looseFilesCount = ref(0);
 const searchInput = ref('');
 
 // Persist sidebar state across sessions
@@ -202,17 +191,7 @@ function toggleSidebar() {
 onMounted(async () => {
   await store.loadConfig();
   await store.loadCategories();
-  await loadLooseFilesCount();
 });
-
-async function loadLooseFilesCount() {
-  try {
-    const response = await systemApi.getStats();
-    looseFilesCount.value = response.data.totalLooseFiles || 0;
-  } catch (error) {
-    console.error('Failed to load loose files count:', error);
-  }
-}
 
 function handleSearch() {
   if (searchInput.value.trim()) {

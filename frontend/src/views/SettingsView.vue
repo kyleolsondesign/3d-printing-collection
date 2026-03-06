@@ -219,6 +219,21 @@
       <div class="maintenance-actions">
         <div class="maintenance-item">
           <div class="maintenance-info">
+            <span class="maintenance-title">
+              Loose Files
+              <span v-if="stats.totalLooseFiles > 0" class="loose-count-badge">{{ stats.totalLooseFiles }}</span>
+            </span>
+            <span class="maintenance-desc">Review and organize files that aren't inside a model folder.</span>
+          </div>
+          <button @click="router.push('/loose-files')" class="btn-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+            View
+          </button>
+        </div>
+        <div class="maintenance-item">
+          <div class="maintenance-info">
             <span class="maintenance-title">Deduplicate Images</span>
             <span class="maintenance-desc">Find and hide visually identical images within each model, keeping the highest quality version.</span>
           </div>
@@ -235,6 +250,62 @@
             {{ deduplicating ? 'Deduplicating...' : 'Run Deduplication' }}
           </button>
         </div>
+        <div class="maintenance-item">
+          <div class="maintenance-info">
+            <span class="maintenance-title">Audit Nested Models</span>
+            <span class="maintenance-desc">Find models erroneously indexed as separate entries when they are actually subfolders of another model.</span>
+          </div>
+          <button @click="runNestedAudit" class="btn-secondary" :disabled="auditLoading || scanStatus.scanning">
+            <svg v-if="auditLoading" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 11-6.219-8.56"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+            {{ auditLoading ? 'Auditing...' : 'Run Audit' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="auditItems !== null" class="audit-results">
+        <div v-if="auditItems.length === 0" class="audit-empty">
+          No nested models found — collection looks clean.
+        </div>
+        <template v-else>
+          <div class="audit-header">
+            <span class="audit-count">{{ auditItems.length }} nested model{{ auditItems.length === 1 ? '' : 's' }} found</span>
+            <button @click="deleteAllNested" class="btn-danger" :disabled="auditDeleting">
+              <svg v-if="auditDeleting" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+              </svg>
+              Soft-Delete All
+            </button>
+          </div>
+          <div class="audit-list">
+            <div v-for="item in auditItems" :key="item.child_id" class="audit-row">
+              <div class="audit-row-info">
+                <div class="audit-nested">
+                  <span class="audit-label">Nested:</span>
+                  <span class="audit-name">{{ item.child_filename }}</span>
+                  <span class="audit-cat">{{ item.child_category }}</span>
+                </div>
+                <div class="audit-parent-info">
+                  <span class="audit-label">Inside:</span>
+                  <span class="audit-name">{{ item.parent_filename }}</span>
+                  <span class="audit-cat">{{ item.parent_category }}</span>
+                </div>
+              </div>
+              <button @click="deleteNestedItem(item)" class="btn-icon-danger" title="Soft-delete this model">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -315,8 +386,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { systemApi, designersApi, type ScanMode, type WatcherStatus } from '../services/api';
+import { useRouter } from 'vue-router';
+import { systemApi, modelsApi, designersApi, type ScanMode, type WatcherStatus } from '../services/api';
 
+const router = useRouter();
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');
 const scanMode = ref<ScanMode>('full_sync');
 const scanning = ref(false);
@@ -529,6 +602,50 @@ async function syncDesigners() {
   } catch (error) {
     showMessage('Failed to sync designers', 'error');
     designerSyncing.value = false;
+  }
+}
+
+type NestedModelItem = { child_id: number; child_filename: string; child_filepath: string; child_category: string; parent_id: number; parent_filename: string; parent_filepath: string; parent_category: string };
+const auditLoading = ref(false);
+const auditItems = ref<NestedModelItem[] | null>(null);
+const auditDeleting = ref(false);
+
+async function runNestedAudit() {
+  auditLoading.value = true;
+  auditItems.value = null;
+  try {
+    const response = await systemApi.auditNestedModels();
+    auditItems.value = response.data.items;
+  } catch (error) {
+    showMessage('Failed to run audit', 'error');
+  } finally {
+    auditLoading.value = false;
+  }
+}
+
+async function deleteAllNested() {
+  if (!auditItems.value || auditItems.value.length === 0) return;
+  auditDeleting.value = true;
+  try {
+    const ids = auditItems.value.map(i => i.child_id);
+    await modelsApi.bulkDelete(ids);
+    showMessage(`Soft-deleted ${ids.length} nested model${ids.length === 1 ? '' : 's'}`, 'success');
+    auditItems.value = [];
+    await loadStats();
+  } catch (error) {
+    showMessage('Failed to delete nested models', 'error');
+  } finally {
+    auditDeleting.value = false;
+  }
+}
+
+async function deleteNestedItem(item: NestedModelItem) {
+  try {
+    await modelsApi.bulkDelete([item.child_id]);
+    auditItems.value = auditItems.value?.filter(i => i.child_id !== item.child_id) ?? [];
+    await loadStats();
+  } catch (error) {
+    showMessage('Failed to delete model', 'error');
   }
 }
 
@@ -1011,6 +1128,21 @@ h2 {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.loose-count-badge {
+  background: var(--warning);
+  color: var(--bg-deepest);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+  line-height: 1.4;
 }
 
 .maintenance-desc {
@@ -1129,5 +1261,142 @@ h2 {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.audit-results {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 1rem;
+}
+
+.audit-empty {
+  font-size: 0.875rem;
+  color: var(--success);
+  padding: 0.5rem 0;
+}
+
+.audit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.audit-count {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--danger-dim, rgba(239, 68, 68, 0.1));
+  color: var(--danger, #ef4444);
+  border: 1px solid var(--danger, #ef4444);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.btn-danger svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger, #ef4444);
+  color: #fff;
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.audit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.audit-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.audit-nested,
+.audit-parent-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+
+.audit-label {
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.audit-name {
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-cat {
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.btn-icon-danger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  color: var(--text-tertiary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+}
+
+.btn-icon-danger svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-icon-danger:hover {
+  background: var(--danger-dim, rgba(239, 68, 68, 0.1));
+  color: var(--danger, #ef4444);
+  border-color: var(--danger, #ef4444);
 }
 </style>

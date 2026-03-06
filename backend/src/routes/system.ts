@@ -151,6 +151,35 @@ router.post('/deduplicate-images', async (req, res) => {
     }
 });
 
+// Audit: find models whose filepath is nested inside another model's filepath
+router.get('/audit/nested-models', (req, res) => {
+    try {
+        const rows = db.prepare(`
+            SELECT
+                child.id AS child_id,
+                child.filename AS child_filename,
+                child.filepath AS child_filepath,
+                child.category AS child_category,
+                parent.id AS parent_id,
+                parent.filename AS parent_filename,
+                parent.filepath AS parent_filepath,
+                parent.category AS parent_category
+            FROM models child
+            JOIN models parent ON child.filepath LIKE parent.filepath || '/%'
+            WHERE child.deleted_at IS NULL AND parent.deleted_at IS NULL
+            ORDER BY parent.filepath, child.filepath
+        `).all() as Array<{
+            child_id: number; child_filename: string; child_filepath: string; child_category: string;
+            parent_id: number; parent_filename: string; parent_filepath: string; parent_category: string;
+        }>;
+
+        res.json({ count: rows.length, items: rows });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 // Get all categories (excludes soft-deleted models)
 router.get('/categories', (req, res) => {
     try {

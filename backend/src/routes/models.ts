@@ -21,6 +21,7 @@ router.get('/', (req, res) => {
         const filterPrinted = req.query.filterPrinted as string || '';
         const filterQueued = req.query.filterQueued as string || '';
         const filterFavorites = req.query.filterFavorites as string || '';
+        const noImage = req.query.noImage === 'true';
         // Legacy support
         const hidePrinted = req.query.hidePrinted === 'true';
         const hideQueued = req.query.hideQueued === 'true';
@@ -62,6 +63,10 @@ router.get('/', (req, res) => {
             conditions.push('NOT EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)');
         } else if (filterFavorites === 'only') {
             conditions.push('EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)');
+        }
+
+        if (noImage) {
+            conditions.push('NOT EXISTS (SELECT 1 FROM model_assets WHERE model_assets.model_id = models.id AND model_assets.asset_type = \'image\' AND (model_assets.is_hidden = 0 OR model_assets.is_hidden IS NULL))');
         }
 
         if (conditions.length > 0) {
@@ -138,6 +143,9 @@ router.get('/', (req, res) => {
             countConditions.push('NOT EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)');
         } else if (filterFavorites === 'only') {
             countConditions.push('EXISTS (SELECT 1 FROM favorites WHERE favorites.model_id = models.id)');
+        }
+        if (noImage) {
+            countConditions.push('NOT EXISTS (SELECT 1 FROM model_assets WHERE model_assets.model_id = models.id AND model_assets.asset_type = \'image\' AND (model_assets.is_hidden = 0 OR model_assets.is_hidden IS NULL))');
         }
         if (countConditions.length > 0) {
             countQuery += ' WHERE ' + countConditions.join(' AND ');
@@ -460,6 +468,30 @@ router.get('/file/serve', (req, res) => {
         }
 
         res.sendFile(resolvedPath);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Bulk rescan multiple model folders
+router.post('/bulk-rescan', async (req, res) => {
+    try {
+        const { ids } = req.body as { ids: number[] };
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'ids must be a non-empty array' });
+        }
+        let succeeded = 0;
+        let failed = 0;
+        for (const id of ids) {
+            try {
+                const result = await scanner.rescanModel(id);
+                if (result) succeeded++; else failed++;
+            } catch {
+                failed++;
+            }
+        }
+        res.json({ success: true, succeeded, failed });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

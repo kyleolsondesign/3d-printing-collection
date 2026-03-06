@@ -1,5 +1,19 @@
 <template>
   <div class="browse-view">
+    <Teleport to="#topbar-view-actions">
+      <button
+        @click="toggleSelectionMode"
+        :class="['select-btn', { active: selectionMode }]"
+        title="Toggle selection mode"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path v-if="selectionMode" d="M9 12l2 2 4-4"/>
+        </svg>
+        <span>{{ selectionMode ? 'Cancel' : 'Select' }}</span>
+      </button>
+    </Teleport>
+
     <div class="header">
       <div class="header-left">
         <h2>Browse Models</h2>
@@ -65,17 +79,6 @@
               <span>{{ filterLabel(filterPrinted, 'Printed') }}</span>
             </button>
           </div>
-          <button
-            @click="toggleSelectionMode"
-            :class="['select-btn', { active: selectionMode }]"
-            title="Toggle selection mode"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-              <path v-if="selectionMode" d="M9 12l2 2 4-4"/>
-            </svg>
-            <span>{{ selectionMode ? 'Cancel' : 'Select' }}</span>
-          </button>
           <div class="sort-controls">
             <select v-model="sortField" @change="handleSortChange" class="sort-select">
               <option value="date_added">Date Added</option>
@@ -115,6 +118,17 @@
               </svg>
             </button>
           </div>
+          <button
+            @click="filterNoImage = !filterNoImage"
+            :class="['no-image-audit-btn', { active: filterNoImage }]"
+            title="Show only models without images"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <path d="M3 9l4 4 4-4 4 5 3-3"/>
+              <line x1="2" y1="2" x2="22" y2="22"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -215,6 +229,14 @@
             <button @click="bulkAddTag" class="bulk-tag-confirm" :disabled="!bulkTagInput.trim()">Apply</button>
           </div>
         </div>
+        <button @click="bulkRescan" class="bulk-btn" title="Rescan folders" :disabled="bulkLoading || selectedCount === 0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6"/>
+            <path d="M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+          <span>Rescan</span>
+        </button>
         <button @click="bulkDelete" class="bulk-btn delete-btn" title="Delete" :disabled="bulkLoading || selectedCount === 0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
@@ -570,6 +592,7 @@ type FilterState = '' | 'only' | 'hide';
 const filterPrinted = ref<FilterState>('hide');
 const filterQueued = ref<FilterState>('');
 const filterFavorites = ref<FilterState>('');
+const filterNoImage = ref(false);
 
 function cycleFilter(current: FilterState): FilterState {
   if (current === '') return 'only';
@@ -658,6 +681,7 @@ function initFromQueryParams() {
   else if (fq === '') filterQueued.value = '';
   if (ff === 'only' || ff === 'hide') filterFavorites.value = ff;
   else if (ff === '') filterFavorites.value = '';
+  if (route.query.noImage === 'true') filterNoImage.value = true;
 }
 
 // Update URL query params when state changes
@@ -689,6 +713,9 @@ function updateQueryParams() {
   }
   if (filterFavorites.value) {
     query.ff = filterFavorites.value;
+  }
+  if (filterNoImage.value) {
+    query.noImage = 'true';
   }
   if (selectedModelId.value) {
     query.model = String(selectedModelId.value);
@@ -723,7 +750,7 @@ onUnmounted(() => {
 });
 
 // Watch for changes that require reloading
-watch([sortField, sortOrder, filterPrinted, filterQueued, filterFavorites], () => {
+watch([sortField, sortOrder, filterPrinted, filterQueued, filterFavorites, filterNoImage], () => {
   if (isSearchActive.value) {
     handleSearch(store.globalSearchQuery);
   } else {
@@ -768,7 +795,8 @@ async function loadInitialModels() {
     order: sortOrder.value,
     filterPrinted: filterPrinted.value || undefined,
     filterQueued: filterQueued.value || undefined,
-    filterFavorites: filterFavorites.value || undefined
+    filterFavorites: filterFavorites.value || undefined,
+    noImage: filterNoImage.value || undefined
   });
   store.models = response.data.models;
   store.currentPage = 1;
@@ -817,7 +845,8 @@ async function loadMoreModels() {
       order: sortOrder.value,
       filterPrinted: filterPrinted.value || undefined,
       filterQueued: filterQueued.value || undefined,
-      filterFavorites: filterFavorites.value || undefined
+      filterFavorites: filterFavorites.value || undefined,
+      noImage: filterNoImage.value || undefined
     });
 
     store.models = [...store.models, ...response.data.models];
@@ -849,7 +878,8 @@ async function filterByCategory(category: string) {
       order: sortOrder.value,
       filterPrinted: filterPrinted.value || undefined,
       filterQueued: filterQueued.value || undefined,
-      filterFavorites: filterFavorites.value || undefined
+      filterFavorites: filterFavorites.value || undefined,
+      noImage: filterNoImage.value || undefined
     });
     store.models = response.data.models;
     store.currentPage = 1;
@@ -1062,6 +1092,23 @@ async function bulkDelete() {
     selectionMode.value = false;
   } catch (error) {
     console.error('Failed to delete models:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkRescan() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await modelsApi.bulkRescan(ids);
+    // Reload the current page to pick up any updated assets/file counts
+    await resetAndLoad();
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to rescan models:', error);
   } finally {
     bulkLoading.value = false;
   }
@@ -1441,6 +1488,39 @@ async function bulkAddTag() {
 .view-btn.active {
   background: var(--accent-primary);
   color: var(--bg-deepest);
+}
+
+/* No-image audit filter */
+.no-image-audit-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  opacity: 0.5;
+  transition: all var(--transition-base);
+}
+
+.no-image-audit-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.no-image-audit-btn:hover {
+  opacity: 1;
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.no-image-audit-btn.active {
+  opacity: 1;
+  border-color: #d97706;
+  color: #d97706;
+  background: rgba(217, 119, 6, 0.1);
 }
 
 /* Grid View */
