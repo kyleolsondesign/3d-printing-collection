@@ -195,7 +195,7 @@ onMounted(async () => {
 
 function handleSearch() {
   if (searchInput.value.trim()) {
-    if (route.name === 'settings') {
+    if (route.name === 'settings' || route.name === 'stats') {
       router.push({ path: '/', query: { q: searchInput.value.trim() } });
       return;
     }
