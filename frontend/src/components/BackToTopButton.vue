@@ -7,15 +7,14 @@
       title="Back to top"
       aria-label="Scroll back to top"
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M18 15l-6-6-6 6"/>
-      </svg>
+      <AppIcon name="chevron-up" stroke-width="2.5" />
     </button>
   </Transition>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import AppIcon from './AppIcon.vue';
 
 const SHOW_THRESHOLD = 400;
 

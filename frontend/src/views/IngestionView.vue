@@ -29,23 +29,15 @@
             <template v-else>
               <span class="config-path">{{ ingestionDir || 'Not configured' }}</span>
               <button @click="startEditPath" class="btn-sm btn-ghost" title="Change folder">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
+                <AppIcon name="edit" />
               </button>
             </template>
           </div>
         </div>
       </div>
       <button @click="scanFolder" class="btn-scan" :disabled="scanning || !ingestionDir">
-        <svg v-if="scanning" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"/>
-        </svg>
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="M21 21l-4.35-4.35"/>
-        </svg>
+        <AppIcon v-if="scanning" name="spinner" class="spinner" />
+        <AppIcon v-else name="search" />
         {{ scanning ? 'Scanning...' : 'Scan' }}
       </button>
     </div>
@@ -54,10 +46,7 @@
     <div class="ai-categorize-bar">
       <div class="ai-categorize-header">
         <div class="ai-categorize-info">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2a7 7 0 017 7c0 3-2 5.5-5 7-.5.25-1 .5-1.5.5H11.5c-.5 0-1-.25-1.5-.5-3-1.5-5-4-5-7a7 7 0 017-7z"/>
-            <path d="M9 22h6M12 18v4"/>
-          </svg>
+          <AppIcon name="brain" />
           <div>
             <span class="ai-title" v-if="!categorizing && !aiDone">Use AI to improve category suggestions</span>
             <span class="ai-title" v-else-if="categorizing">{{ aiProgress.status }}</span>
@@ -73,10 +62,7 @@
             <span class="ai-progress-text">Batch {{ aiProgress.currentBatch }}/{{ aiProgress.totalBatches }}</span>
           </div>
           <button v-if="!categorizing && items.length > 0 && hasApiKey" @click="categorizeWithAI" class="btn-ai" :disabled="scanning">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2a7 7 0 017 7c0 3-2 5.5-5 7-.5.25-1 .5-1.5.5H11.5c-.5 0-1-.25-1.5-.5-3-1.5-5-4-5-7a7 7 0 017-7z"/>
-              <path d="M9 22h6M12 18v4"/>
-            </svg>
+            <AppIcon name="brain" />
             {{ aiDone ? 'Re-categorize with AI' : 'Categorize with AI' }}
           </button>
         </div>
@@ -102,24 +88,17 @@
                 {{ hasApiKey ? 'Configured' : 'Not set' }}
               </span>
               <button @click="editingApiKey = true; editApiKeyValue = ''" class="btn-sm btn-ghost" :title="hasApiKey ? 'Change API key' : 'Set API key'">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
+                <AppIcon name="edit" />
               </button>
               <button v-if="hasApiKey" @click="clearApiKey" class="btn-sm btn-ghost" title="Remove API key">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 6L6 18M6 6l12 12"/>
-                </svg>
+                <AppIcon name="x" />
               </button>
             </template>
           </div>
         </div>
         <div class="config-row">
           <button @click="showPromptEditor = !showPromptEditor" class="prompt-toggle" :class="{ active: showPromptEditor }">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
+            <AppIcon name="chevron-right" />
             <label class="config-label" style="margin-bottom: 0; cursor: pointer;">
               Categorization prompt
             </label>
@@ -147,14 +126,8 @@
     <div v-if="lastResults" class="results-panel" :class="{ success: lastResults.succeeded > 0, error: lastResults.failed > 0 && lastResults.succeeded === 0 }">
       <div class="results-content">
         <div class="results-header">
-          <svg v-if="lastResults.succeeded > 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 12l2 2 4-4"/>
-            <circle cx="12" cy="12" r="10"/>
-          </svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M15 9l-6 6M9 9l6 6"/>
-          </svg>
+          <AppIcon v-if="lastResults.succeeded > 0" name="check-circle" />
+          <AppIcon v-else name="circle-x" />
           <span>
             Imported {{ lastResults.succeeded }} of {{ lastResults.total }} item{{ lastResults.total > 1 ? 's' : '' }}
             <template v-if="lastResults.failed > 0">
@@ -170,12 +143,8 @@
             class="result-item"
             :class="{ success: detail.success, error: !detail.success }"
           >
-            <svg v-if="detail.success" class="result-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 12l2 2 4-4"/>
-            </svg>
-            <svg v-else class="result-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
+            <AppIcon v-if="detail.success" name="check" class="result-icon" />
+            <AppIcon v-else name="x" class="result-icon" />
             <span class="result-filename">{{ detail.filename }}</span>
             <span v-if="detail.success && detail.category" class="result-folder">
               &rarr; {{ detail.category }}/
@@ -197,11 +166,7 @@
     <!-- Not scanned yet -->
     <div v-else-if="!hasScanned && items.length === 0" class="empty">
       <div class="empty-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-          <path d="M7 10l5 5 5-5"/>
-          <path d="M12 15V3"/>
-        </svg>
+        <AppIcon name="folder-download" stroke-width="1.5" />
       </div>
       <h3>Import models from a folder</h3>
       <p>Click "Scan" to search for 3D model files in your ingestion folder.</p>
@@ -210,10 +175,7 @@
     <!-- Empty results -->
     <div v-else-if="hasScanned && items.length === 0" class="empty">
       <div class="empty-icon success">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M9 12l2 2 4-4"/>
-          <circle cx="12" cy="12" r="10"/>
-        </svg>
+        <AppIcon name="check-circle" stroke-width="1.5" />
       </div>
       <h3>No model files found</h3>
       <p>No 3D model files were found in {{ ingestionDir }}</p>
@@ -261,11 +223,7 @@
             </button>
           </div>
           <button @click="importSelected" class="btn-import-bulk" :disabled="importing">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-              <path d="M7 10l5 5 5-5"/>
-              <path d="M12 15V3"/>
-            </svg>
+            <AppIcon name="folder-download" />
             Import {{ selectedIds.size }} Item{{ selectedIds.size > 1 ? 's' : '' }}
           </button>
         </div>
@@ -308,15 +266,11 @@
               loading="lazy"
             />
             <div v-if="importingPaths.has(item.filepath)" class="thumb-spinner">
-              <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"/>
-              </svg>
+              <AppIcon name="spinner" class="spinner" />
             </div>
           </div>
           <div class="item-icon-mini" v-else-if="importingPaths.has(item.filepath)">
-            <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"/>
-            </svg>
+            <AppIcon name="spinner" class="spinner" />
           </div>
           <div class="item-info">
             <h3>{{ item.filename }}</h3>
@@ -329,9 +283,7 @@
           </div>
           <div class="item-actions" @click.stop>
             <button @click="openInFinder(item.filepath)" class="btn-finder" title="Show in Finder">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-              </svg>
+              <AppIcon name="folder" />
             </button>
           </div>
           <div class="item-category" @click.stop>
@@ -390,6 +342,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { ingestionApi, systemApi } from '../services/api';
 import { useAppStore } from '../store';
+import AppIcon from '../components/AppIcon.vue';
 
 interface ScoreDebugEntry {
   category: string;

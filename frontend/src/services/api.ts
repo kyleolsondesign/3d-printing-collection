@@ -28,6 +28,8 @@ export interface Model {
     designer?: string | null;
     source_platform?: string | null;
     source_url?: string | null;
+    purge_marked_at?: string | null;
+    deleted_at?: string | null;
 }
 
 export interface ModelMetadata {
@@ -124,7 +126,10 @@ export const modelsApi = {
         api.get('/models/recent', { params: { limit } }),
 
     recordView: (modelId: number) =>
-        api.post(`/models/${modelId}/view`)
+        api.post(`/models/${modelId}/view`),
+
+    togglePurgeMark: (modelId: number) =>
+        api.post(`/models/${modelId}/toggle-purge-mark`)
 };
 
 // Favorites API
@@ -214,7 +219,26 @@ export const systemApi = {
     trashLooseFile: (looseFileId: number) => api.post('/system/trash-loose-file', { looseFileId }),
     getWatcherStatus: () => api.get<WatcherStatus>('/system/watcher/status'),
     toggleWatcher: (enabled: boolean) => api.post('/system/watcher/toggle', { enabled }),
-    auditNestedModels: () => api.get<{ count: number; items: Array<{ child_id: number; child_filename: string; child_filepath: string; child_category: string; parent_id: number; parent_filename: string; parent_filepath: string; parent_category: string }> }>('/system/audit/nested-models')
+    auditNestedModels: () => api.get<{ count: number; items: Array<{ child_id: number; child_filename: string; child_filepath: string; child_category: string; parent_id: number; parent_filename: string; parent_filepath: string; parent_category: string }> }>('/system/audit/nested-models'),
+    getPurgeStats: () => api.get('/system/stats/purge')
+};
+
+export interface PurgeCandidate {
+    id: number;
+    filename: string;
+    filepath: string;
+    category: string;
+    is_paid: number;
+    purge_marked_at: string | null;
+    deleted_at: string | null;
+    reasons: Array<'marked' | 'deleted' | 'bad_print'>;
+    primaryImage: string | null;
+}
+
+export const purgeApi = {
+    getCandidates: () => api.get<{ candidates: PurgeCandidate[] }>('/system/purge/candidates'),
+    execute: (modelIds: number[], confirmedPaid?: boolean) =>
+        api.post('/system/purge/execute', { model_ids: modelIds, confirmedPaid })
 };
 
 // Ingestion API

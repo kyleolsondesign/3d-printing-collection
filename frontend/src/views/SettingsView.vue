@@ -8,9 +8,7 @@
     <div class="settings-section">
       <div class="section-header">
         <div class="section-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-          </svg>
+          <AppIcon name="folder" />
         </div>
         <div>
           <h3>Model Directory</h3>
@@ -55,21 +53,13 @@
 
       <div class="scan-actions">
         <button @click="saveAndScan" class="btn-primary" :disabled="scanning || scanStatus.scanning">
-          <svg v-if="scanning || scanStatus.scanning" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 0 11-6.219-8.56"/>
-          </svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6M1 20v-6h6"/>
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-          </svg>
+          <AppIcon v-if="scanning || scanStatus.scanning" name="spinner" class="spin" />
+          <AppIcon v-else name="refresh" />
           {{ scanning || scanStatus.scanning ? 'Scan in Progress...' : 'Start Scan' }}
         </button>
       </div>
       <p v-if="lastScan" class="last-scan">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M12 6v6l4 2"/>
-        </svg>
+        <AppIcon name="clock" />
         Last scanned: {{ formatDate(lastScan) }}
       </p>
     </div>
@@ -77,9 +67,7 @@
     <div v-if="scanStatus.scanning" class="scan-progress">
       <div class="progress-header">
         <div class="progress-icon">
-          <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 0 11-6.219-8.56"/>
-          </svg>
+          <AppIcon name="spinner" class="spin" />
         </div>
         <div>
           <h4>{{ scanStatus.stepDescription || 'Scan in Progress' }}</h4>
@@ -122,24 +110,15 @@
     </div>
 
     <div v-if="message" :class="['message', messageType]">
-      <svg v-if="messageType === 'success'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M9 12l2 2 4-4"/>
-        <circle cx="12" cy="12" r="10"/>
-      </svg>
-      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M15 9l-6 6M9 9l6 6"/>
-      </svg>
+      <AppIcon v-if="messageType === 'success'" name="check-circle" />
+      <AppIcon v-else name="circle-x" />
       {{ message }}
     </div>
 
     <div class="settings-section">
       <div class="section-header">
         <div class="section-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
+          <AppIcon name="eye" />
         </div>
         <div>
           <h3>File Watcher</h3>
@@ -162,9 +141,7 @@
           class="btn-secondary watcher-toggle"
           :class="{ 'watcher-active': watcherStatus.enabled }"
         >
-          <svg v-if="watcherToggling" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 0 11-6.219-8.56"/>
-          </svg>
+          <AppIcon v-if="watcherToggling" name="spinner" class="spin" />
           {{ watcherToggling ? 'Updating...' : watcherStatus.enabled ? 'Disable Watcher' : 'Enable Watcher' }}
         </button>
       </div>
@@ -177,12 +154,7 @@
     <div class="settings-section">
       <div class="section-header">
         <div class="section-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 00-3-3.87"/>
-            <path d="M16 3.13a4 4 0 010 7.75"/>
-          </svg>
+          <AppIcon name="users" />
         </div>
         <div>
           <h3>Designer Sync</h3>
@@ -195,10 +167,7 @@
           :disabled="designerSyncing || scanStatus.scanning"
           class="btn-secondary"
         >
-          <svg :class="{ spin: designerSyncing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6M1 20v-6h6"/>
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-          </svg>
+          <AppIcon name="refresh" :class="{ spin: designerSyncing }" />
           {{ designerSyncing ? 'Syncing...' : 'Sync Designers' }}
         </button>
       </div>
@@ -207,9 +176,7 @@
     <div class="settings-section">
       <div class="section-header">
         <div class="section-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
-          </svg>
+          <AppIcon name="wrench" />
         </div>
         <div>
           <h3>Maintenance</h3>
@@ -226,9 +193,7 @@
             <span class="maintenance-desc">Review and organize files that aren't inside a model folder.</span>
           </div>
           <button @click="router.push('/loose-files')" class="btn-secondary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
+            <AppIcon name="chevron-right" />
             View
           </button>
         </div>
@@ -238,15 +203,8 @@
             <span class="maintenance-desc">Find and hide visually identical images within each model, keeping the highest quality version.</span>
           </div>
           <button @click="deduplicateImages" class="btn-secondary" :disabled="deduplicating || scanStatus.scanning">
-            <svg v-if="deduplicating" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 11-6.219-8.56"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7"/>
-              <rect x="14" y="3" width="7" height="7" opacity="0.4"/>
-              <rect x="14" y="14" width="7" height="7" opacity="0.4"/>
-              <rect x="3" y="14" width="7" height="7"/>
-            </svg>
+            <AppIcon v-if="deduplicating" name="spinner" class="spin" />
+            <AppIcon v-else name="camera" />
             {{ deduplicating ? 'Deduplicating...' : 'Run Deduplication' }}
           </button>
         </div>
@@ -256,12 +214,8 @@
             <span class="maintenance-desc">Find models erroneously indexed as separate entries when they are actually subfolders of another model.</span>
           </div>
           <button @click="runNestedAudit" class="btn-secondary" :disabled="auditLoading || scanStatus.scanning">
-            <svg v-if="auditLoading" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 11-6.219-8.56"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-            </svg>
+            <AppIcon v-if="auditLoading" name="spinner" class="spin" />
+            <AppIcon v-else name="search" />
             {{ auditLoading ? 'Auditing...' : 'Run Audit' }}
           </button>
         </div>
@@ -275,12 +229,8 @@
           <div class="audit-header">
             <span class="audit-count">{{ auditItems.length }} nested model{{ auditItems.length === 1 ? '' : 's' }} found</span>
             <button @click="deleteAllNested" class="btn-danger" :disabled="auditDeleting">
-              <svg v-if="auditDeleting" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12a9 9 0 11-6.219-8.56"/>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-              </svg>
+              <AppIcon v-if="auditDeleting" name="spinner" class="spin" />
+              <AppIcon v-else name="trash" />
               Soft-Delete All
             </button>
           </div>
@@ -299,9 +249,7 @@
                 </div>
               </div>
               <button @click="deleteNestedItem(item)" class="btn-icon-danger" title="Soft-delete this model">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                </svg>
+                <AppIcon name="trash" />
               </button>
             </div>
           </div>
@@ -312,10 +260,7 @@
     <div class="settings-section">
       <div class="section-header">
         <div class="section-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
-            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-          </svg>
+          <AppIcon name="clipboard" />
         </div>
         <div>
           <h3>Database Statistics</h3>
@@ -325,56 +270,42 @@
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-icon models">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-            </svg>
+            <AppIcon name="package" stroke-width="1.5" />
           </div>
           <div class="stat-value">{{ stats.totalModels.toLocaleString() }}</div>
           <div class="stat-label">Total Models</div>
         </div>
         <div class="stat-card">
           <div class="stat-icon favorites">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-            </svg>
+            <AppIcon name="star" stroke-width="1.5" />
           </div>
           <div class="stat-value">{{ stats.totalFavorites.toLocaleString() }}</div>
           <div class="stat-label">Favorites</div>
         </div>
         <div class="stat-card">
           <div class="stat-icon printed">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M9 12l2 2 4-4"/>
-              <circle cx="12" cy="12" r="10"/>
-            </svg>
+            <AppIcon name="check-circle" stroke-width="1.5" />
           </div>
           <div class="stat-value">{{ stats.totalPrinted.toLocaleString() }}</div>
           <div class="stat-label">Printed</div>
         </div>
         <div class="stat-card">
           <div class="stat-icon queued">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-            </svg>
+            <AppIcon name="list" stroke-width="1.5" />
           </div>
           <div class="stat-value">{{ stats.totalQueued.toLocaleString() }}</div>
           <div class="stat-label">Queued</div>
         </div>
         <div :class="['stat-card', { warning: stats.totalLooseFiles > 0 }]">
           <div class="stat-icon loose">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
-              <path d="M13 2v7h7"/>
-            </svg>
+            <AppIcon name="file" stroke-width="1.5" />
           </div>
           <div class="stat-value">{{ stats.totalLooseFiles.toLocaleString() }}</div>
           <div class="stat-label">Loose Files</div>
         </div>
         <div v-if="stats.deletedModels > 0" class="stat-card muted">
           <div class="stat-icon deleted">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-            </svg>
+            <AppIcon name="trash" stroke-width="1.5" />
           </div>
           <div class="stat-value">{{ stats.deletedModels.toLocaleString() }}</div>
           <div class="stat-label">Deleted</div>
@@ -388,6 +319,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { systemApi, modelsApi, designersApi, type ScanMode, type WatcherStatus } from '../services/api';
+import AppIcon from '../components/AppIcon.vue';
 
 const router = useRouter();
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');

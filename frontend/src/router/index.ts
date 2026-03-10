@@ -10,6 +10,7 @@ import DesignersView from '../views/DesignersView.vue';
 import DesignerDetailView from '../views/DesignerDetailView.vue';
 import StatsView from '../views/StatsView.vue';
 import SettingsView from '../views/SettingsView.vue';
+import PurgeView from '../views/PurgeView.vue';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -68,6 +69,11 @@ const router = createRouter({
             path: '/settings',
             name: 'settings',
             component: SettingsView
+        },
+        {
+            path: '/settings/purge',
+            name: 'purge',
+            component: PurgeView
         }
     ]
 });

@@ -64,6 +64,13 @@ function initializeDatabase(): void {
         // Column already exists, ignore
     }
 
+    // Add purge_marked_at for bulk purge feature
+    try {
+        db.exec(`ALTER TABLE models ADD COLUMN purge_marked_at TEXT`);
+    } catch (e) {
+        // Column already exists, ignore
+    }
+
     // Add is_hidden for hiding thumbnails without deleting files
     try {
         db.exec(`ALTER TABLE model_assets ADD COLUMN is_hidden INTEGER DEFAULT 0`);
@@ -265,6 +272,18 @@ function initializeDatabase(): void {
             designer_id INTEGER PRIMARY KEY,
             added_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (designer_id) REFERENCES designers(id) ON DELETE CASCADE
+        )
+    `);
+
+    // Purge events — track every model that gets permanently purged to Trash
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS purge_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            purged_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            model_name TEXT NOT NULL,
+            category TEXT,
+            is_paid INTEGER DEFAULT 0,
+            reasons TEXT
         )
     `);
 

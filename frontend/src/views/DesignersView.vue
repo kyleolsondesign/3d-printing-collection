@@ -30,24 +30,8 @@
             class="sort-order-btn"
             :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'"
           >
-            <svg
-              v-if="sortOrder === 'desc'"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M12 5v14M19 12l-7 7-7-7" />
-            </svg>
-            <svg
-              v-else
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
+            <AppIcon v-if="sortOrder === 'desc'" name="sort-desc" />
+            <AppIcon v-else name="sort-asc" />
           </button>
         </div>
         <div class="filter-toggles">
@@ -68,15 +52,7 @@
                   : 'Click to clear filter'
             "
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <line x1="12" y1="1" x2="12" y2="23" />
-              <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-            </svg>
+            <AppIcon name="dollar" />
             <span>{{ paidFilterLabel }}</span>
           </button>
           <button
@@ -84,16 +60,7 @@
             :class="['filter-toggle-btn', { active: hideSmall }]"
             title="Hide designers with fewer than 2 models"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <line x1="18" y1="8" x2="23" y2="8" />
-            </svg>
+            <AppIcon name="user-minus" />
             <span>Hide &lt; 2 models</span>
           </button>
           <button
@@ -101,16 +68,7 @@
             :class="['filter-toggle-btn', { active: favoritesOnly }]"
             title="Show only favorited designers"
           >
-            <svg
-              viewBox="0 0 24 24"
-              :fill="favoritesOnly ? 'currentColor' : 'none'"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
-              />
-            </svg>
+            <AppIcon name="heart" :fill="favoritesOnly ? 'currentColor' : 'none'" />
             <span>Favorites</span>
           </button>
         </div>
@@ -124,17 +82,7 @@
 
     <div v-else-if="dStore.designers.length === 0" class="empty">
       <div class="empty-icon">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M23 21v-2a4 4 0 00-3-3.87" />
-          <path d="M16 3.13a4 4 0 010 7.75" />
-        </svg>
+        <AppIcon name="users" stroke-width="1.5" style="width: 40px; height: 40px;" />
       </div>
       <h3>No designers yet</h3>
       <p>
@@ -187,11 +135,7 @@
 
           <!-- Favorite indicator (always visible when favorited) -->
           <div v-if="designer.is_favorite" class="favorite-indicator">
-            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-              <path
-                d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
-              />
-            </svg>
+            <AppIcon name="heart" fill="currentColor" stroke="none" />
           </div>
 
           <!-- Hover overlay with actions -->
@@ -205,16 +149,7 @@
                   : 'Add to favorites'
               "
             >
-              <svg
-                viewBox="0 0 24 24"
-                :fill="designer.is_favorite ? 'currentColor' : 'none'"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
-                />
-              </svg>
+              <AppIcon name="heart" :fill="designer.is_favorite ? 'currentColor' : 'none'" />
             </button>
             <a
               v-if="designer.profile_url"
@@ -225,31 +160,14 @@
               @click.stop
               title="View profile"
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                <path d="M15 3h6v6" />
-                <path d="M10 14L21 3" />
-              </svg>
+              <AppIcon name="link" />
             </a>
             <button
               class="overlay-btn"
               @click.stop="startEditDesigner(designer)"
               title="Edit designer"
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
+              <AppIcon name="pencil" />
             </button>
           </div>
         </div>
@@ -259,16 +177,7 @@
           <div class="designer-name">{{ designer.name }}</div>
           <div class="designer-stats">
             <span class="stat-models">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"
-                />
-              </svg>
+              <AppIcon name="package" />
               {{ designer.model_count }} model{{
                 designer.model_count !== 1 ? 's' : ''
               }}
@@ -354,6 +263,7 @@ import { storeToRefs } from 'pinia';
 import { designersApi, modelsApi, type Designer } from '../services/api';
 import { useAppStore } from '../store';
 import { useDesignersStore } from '../store/designers';
+import AppIcon from '../components/AppIcon.vue';
 
 const route = useRoute();
 const router = useRouter();

@@ -3,19 +3,13 @@
     <!-- Lightbox overlay -->
     <div v-if="lightboxOpen && imageAssets.length > 0" class="lightbox-overlay" @click.self="closeLightbox">
       <button class="lightbox-close" @click="closeLightbox">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 6L6 18M6 6l12 12"/>
-        </svg>
+        <AppIcon name="x" />
       </button>
       <button v-if="imageAssets.length > 1" class="lightbox-nav lightbox-prev" @click="lightboxPrev">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 18l-6-6 6-6"/>
-        </svg>
+        <AppIcon name="chevron-left" />
       </button>
       <button v-if="imageAssets.length > 1" class="lightbox-nav lightbox-next" @click="lightboxNext">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 18l6-6-6-6"/>
-        </svg>
+        <AppIcon name="chevron-right" />
       </button>
       <img
         :src="getFileUrl(imageAssets[lightboxIndex]?.filepath)"
@@ -30,21 +24,15 @@
     <div class="modal-overlay" @click.self="$emit('close')">
       <!-- Navigation arrows -->
       <button v-if="canNavigatePrev" class="nav-arrow nav-arrow-left" @click="navigatePrev" title="Previous model (Left arrow)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 18l-6-6 6-6"/>
-        </svg>
+        <AppIcon name="chevron-left" />
       </button>
       <button v-if="canNavigateNext" class="nav-arrow nav-arrow-right" @click="navigateNext" title="Next model (Right arrow)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 18l6-6-6-6"/>
-        </svg>
+        <AppIcon name="chevron-right" />
       </button>
 
       <div class="modal-container" @click.stop>
         <button class="close-btn" @click="$emit('close')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12"/>
-          </svg>
+          <AppIcon name="x" />
         </button>
 
         <div v-if="loading" class="loading">
@@ -90,9 +78,7 @@
                     @click="setPrimaryImage(asset)"
                     title="Set as primary image"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                    </svg>
+                    <AppIcon name="star" />
                   </button>
                   <button
                     v-if="!asset.is_primary"
@@ -100,10 +86,7 @@
                     @click="hideAsset(asset)"
                     title="Hide this thumbnail"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
-                    </svg>
+                    <AppIcon name="eye-off" />
                   </button>
                 </div>
               </div>
@@ -128,17 +111,14 @@
                   class="edit-name-btn"
                   title="Edit model name"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
+                  <AppIcon name="edit" />
                 </button>
                 <div v-else class="edit-name-actions">
                   <button @click="saveName" class="save-name-btn" title="Save">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+                    <AppIcon name="check" />
                   </button>
                   <button @click="cancelEditName" class="cancel-name-btn" title="Cancel">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    <AppIcon name="x" />
                   </button>
                 </div>
               </div>
@@ -261,10 +241,7 @@
                     target="_blank"
                     class="doc-link"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
-                    </svg>
+                    <AppIcon name="file-text" />
                     {{ getFileName(pdf.filepath) }}
                   </a>
                 </div>
@@ -279,10 +256,7 @@
                     :key="zip.filepath"
                     class="archive-item"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                      <path d="M9 13v4M12 11v6M15 13v4"/>
-                    </svg>
+                    <AppIcon name="folder-download" />
                     <span class="archive-name">{{ zip.filename }}</span>
                     <span class="archive-size">{{ formatFileSize(zip.size) }}</span>
                     <button
@@ -291,13 +265,8 @@
                       :disabled="!!extracting"
                       :title="extracting === zip.filepath ? 'Extracting...' : 'Extract contents'"
                     >
-                      <svg v-if="extracting === zip.filepath" class="spinning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M23 4v6h-6M1 20v-6h6"/>
-                        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                      </svg>
-                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                      </svg>
+                      <AppIcon v-if="extracting === zip.filepath" name="refresh" class="spinning" />
+                      <AppIcon v-else name="download" />
                       {{ extracting === zip.filepath ? 'Extracting...' : 'Extract' }}
                     </button>
                   </div>
@@ -311,17 +280,14 @@
                   <div v-for="img in makeImages" :key="img.id" class="make-image-wrapper">
                     <img :src="getMakeImageUrl(img.filepath)" :alt="img.filename" />
                     <button class="delete-make-btn" @click="deleteMakeImage(img.id)" title="Remove photo">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      <AppIcon name="x" />
                     </button>
                   </div>
                 </div>
                 <p v-else class="no-makes">No make photos yet.</p>
                 <label class="upload-make-btn">
                   <input type="file" accept="image/*" @change="uploadMakeImage" hidden />
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
-                    <circle cx="12" cy="13" r="4"/>
-                  </svg>
+                  <AppIcon name="camera" />
                   Add Photo
                 </label>
               </div>
@@ -339,9 +305,7 @@
                   class="action-btn"
                   :class="{ active: modelDetails.isFavorite }"
                 >
-                  <svg viewBox="0 0 24 24" :fill="modelDetails.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                  </svg>
+                  <AppIcon name="star" :fill="modelDetails.isFavorite ? 'currentColor' : 'none'" />
                   {{ modelDetails.isFavorite ? 'Favorited' : 'Add to Favorites' }}
                 </button>
 
@@ -350,9 +314,7 @@
                   class="action-btn"
                   :class="{ active: modelDetails.isQueued }"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-                  </svg>
+                  <AppIcon name="list" />
                   {{ modelDetails.isQueued ? 'In Queue' : 'Add to Queue' }}
                 </button>
 
@@ -362,9 +324,7 @@
                   :class="{ active: modelDetails.isPrinting }"
                 >
                   <span v-if="modelDetails.isPrinting" class="printing-pulse-dot"></span>
-                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/>
-                  </svg>
+                  <AppIcon v-else name="printer" />
                   {{ modelDetails.isPrinting ? 'Printing Now' : 'Mark Printing' }}
                 </button>
 
@@ -373,9 +333,7 @@
                   class="action-btn"
                   :class="{ active: isPrinted && currentPrintRating === 'good' }"
                 >
-                  <svg viewBox="0 0 24 24" :fill="isPrinted && currentPrintRating === 'good' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                    <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
-                  </svg>
+                  <AppIcon name="thumbs-up" :fill="isPrinted && currentPrintRating === 'good' ? 'currentColor' : 'none'" />
                   {{ isPrinted && currentPrintRating === 'good' ? 'Good Print' : 'Mark Good' }}
                 </button>
 
@@ -384,24 +342,17 @@
                   class="action-btn"
                   :class="{ active: isPrinted && currentPrintRating === 'bad', 'bad-active': isPrinted && currentPrintRating === 'bad' }"
                 >
-                  <svg viewBox="0 0 24 24" :fill="isPrinted && currentPrintRating === 'bad' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                    <path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/>
-                  </svg>
+                  <AppIcon name="thumbs-down" :fill="isPrinted && currentPrintRating === 'bad' ? 'currentColor' : 'none'" />
                   {{ isPrinted && currentPrintRating === 'bad' ? 'Bad Print' : 'Mark Bad' }}
                 </button>
 
                 <button @click="openInFinder" class="action-btn">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                  </svg>
+                  <AppIcon name="folder" />
                   Show in Finder
                 </button>
 
                 <button @click="rescanModel" class="action-btn" :disabled="rescanning">
-                  <svg :class="{ spinning: rescanning }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M23 4v6h-6M1 20v-6h6"/>
-                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                  </svg>
+                  <AppIcon name="refresh" :class="{ spinning: rescanning }" />
                   {{ rescanning ? 'Rescanning...' : 'Rescan Folder' }}
                 </button>
               </div>
@@ -418,6 +369,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, tagsApi, type Model, type ModelAsset, type ModelMetadata, type MakeImage, type Tag } from '../services/api';
 import { useAppStore } from '../store';
+import AppIcon from './AppIcon.vue';
 
 interface ModelFile {
   id: number;

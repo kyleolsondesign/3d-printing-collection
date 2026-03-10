@@ -20,12 +20,8 @@
             <option value="category">Category</option>
           </select>
           <button @click="toggleSortOrder" class="sort-order-btn" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
-            <svg v-if="sortOrder === 'desc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 5v14M19 12l-7 7-7-7"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 19V5M5 12l7-7 7 7"/>
-            </svg>
+            <AppIcon v-if="sortOrder === 'desc'" name="sort-desc" />
+            <AppIcon v-else name="sort-asc" />
           </button>
         </div>
         <div class="filter-toggles">
@@ -34,9 +30,7 @@
             :class="['filter-toggle-btn', { active: filterFavorites, 'filter-hide': filterFavorites === 'hide' }]"
             :title="filterFavorites === 'only' ? 'Only favorites (click to hide)' : filterFavorites === 'hide' ? 'Hiding favorites (click to clear)' : 'Click to show only favorites'"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
-            </svg>
+            <AppIcon name="heart" />
             <span>{{ filterLabel(filterFavorites, 'Favorites') }}</span>
           </button>
           <button
@@ -44,9 +38,7 @@
             :class="['filter-toggle-btn', { active: filterQueued, 'filter-hide': filterQueued === 'hide' }]"
             :title="filterQueued === 'only' ? 'Only queued (click to hide)' : filterQueued === 'hide' ? 'Hiding queued (click to clear)' : 'Click to show only queued'"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-            </svg>
+            <AppIcon name="list" />
             <span>{{ filterLabel(filterQueued, 'Queued') }}</span>
           </button>
         </div>
@@ -57,21 +49,14 @@
           :class="['view-btn', { active: viewMode === 'grid' }]"
           title="Grid view"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="7" rx="1"/>
-            <rect x="14" y="3" width="7" height="7" rx="1"/>
-            <rect x="3" y="14" width="7" height="7" rx="1"/>
-            <rect x="14" y="14" width="7" height="7" rx="1"/>
-          </svg>
+          <AppIcon name="grid" />
         </button>
         <button
           @click="viewMode = 'table'"
           :class="['view-btn', { active: viewMode === 'table' }]"
           title="Table view"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-          </svg>
+          <AppIcon name="list" />
         </button>
       </div>
     </div>
@@ -83,10 +68,7 @@
 
     <div v-else-if="printed.length === 0" class="empty">
       <div class="empty-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M9 12l2 2 4-4"/>
-          <circle cx="12" cy="12" r="10"/>
-        </svg>
+        <AppIcon name="check-circle" stroke-width="1.5" style="width: 40px; height: 40px;" />
       </div>
       <h3>No prints recorded</h3>
       <p>Your print history will appear here once you start tracking prints.</p>
@@ -107,16 +89,9 @@
       >
         <!-- Rating badge overlay -->
         <div class="rating-badge" :class="item.rating || 'neutral'">
-          <svg v-if="item.rating === 'good'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
-          </svg>
-          <svg v-else-if="item.rating === 'bad'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/>
-          </svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M8 12h8"/>
-          </svg>
+          <AppIcon v-if="item.rating === 'good'" name="thumbs-up" />
+          <AppIcon v-else-if="item.rating === 'bad'" name="thumbs-down" />
+          <AppIcon v-else name="circle-neutral" />
         </div>
         <div class="model-image" @click="openModal(item)">
           <img
@@ -127,10 +102,7 @@
             loading="lazy"
           />
           <div v-else class="no-image">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-              <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>
-            </svg>
+            <AppIcon name="package" stroke-width="1.5" style="width: 48px; height: 48px;" />
           </div>
           <a class="image-overlay" :href="modelUrl(item.model_id)" @click="onModelLinkClick($event)">
             <span class="open-hint">View details</span>
@@ -148,27 +120,21 @@
               :class="['action-btn', { active: item.rating === 'good', 'printed-good': item.rating === 'good' }]"
               title="Good print"
             >
-              <svg viewBox="0 0 24 24" :fill="item.rating === 'good' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
-              </svg>
+              <AppIcon name="thumbs-up" :fill="item.rating === 'good' ? 'currentColor' : 'none'" />
             </button>
             <button
               @click.stop="setRating(item, 'bad')"
               :class="['action-btn', { active: item.rating === 'bad', 'printed-bad': item.rating === 'bad' }]"
               title="Bad print"
             >
-              <svg viewBox="0 0 24 24" :fill="item.rating === 'bad' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                <path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/>
-              </svg>
+              <AppIcon name="thumbs-down" :fill="item.rating === 'bad' ? 'currentColor' : 'none'" />
             </button>
             <button
               @click.stop="openInFinder(item)"
               class="action-btn"
               title="Show in Finder"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-              </svg>
+              <AppIcon name="folder" />
             </button>
           </div>
         </div>
@@ -184,38 +150,23 @@
             <th class="col-image"></th>
             <th class="col-name sortable" @click="handleSort('name')">
               <span>Name</span>
-              <svg v-if="sortField === 'name'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'name'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-category sortable" @click="handleSort('category')">
               <span>Category</span>
-              <svg v-if="sortField === 'category'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'category'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-date sortable" @click="handleSort('printed_at')">
               <span>Print Date</span>
-              <svg v-if="sortField === 'printed_at'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'printed_at'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-date sortable" @click="handleSort('date_added')">
               <span>Date Added</span>
-              <svg v-if="sortField === 'date_added'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'date_added'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-date sortable" @click="handleSort('date_created')">
               <span>Date Created</span>
-              <svg v-if="sortField === 'date_created'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'date_created'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-actions">Actions</th>
           </tr>
@@ -229,16 +180,9 @@
           >
             <td class="col-rating">
               <div class="printed-status" :class="item.rating || 'neutral'">
-                <svg v-if="item.rating === 'good'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
-                </svg>
-                <svg v-else-if="item.rating === 'bad'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/>
-                </svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M8 12h8"/>
-                </svg>
+                <AppIcon v-if="item.rating === 'good'" name="thumbs-up" />
+                <AppIcon v-else-if="item.rating === 'bad'" name="thumbs-down" />
+                <AppIcon v-else name="circle-neutral" />
               </div>
             </td>
             <td class="col-image">
@@ -250,9 +194,7 @@
                   @error="onImageError"
                   loading="lazy"
                 />
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="no-image-icon">
-                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-                </svg>
+                <AppIcon v-else name="package" stroke-width="1.5" class="no-image-icon" />
               </div>
             </td>
             <td class="col-name">
@@ -271,27 +213,21 @@
                   :class="['action-btn-small', { active: item.rating === 'good', 'printed-good': item.rating === 'good' }]"
                   title="Good print"
                 >
-                  <svg viewBox="0 0 24 24" :fill="item.rating === 'good' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                    <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
-                  </svg>
+                  <AppIcon name="thumbs-up" :fill="item.rating === 'good' ? 'currentColor' : 'none'" />
                 </button>
                 <button
                   @click="setRating(item, 'bad')"
                   :class="['action-btn-small', { active: item.rating === 'bad', 'printed-bad': item.rating === 'bad' }]"
                   title="Bad print"
                 >
-                  <svg viewBox="0 0 24 24" :fill="item.rating === 'bad' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                    <path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17"/>
-                  </svg>
+                  <AppIcon name="thumbs-down" :fill="item.rating === 'bad' ? 'currentColor' : 'none'" />
                 </button>
                 <button
                   @click="openInFinder(item)"
                   class="action-btn-small"
                   title="Show in Finder"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                  </svg>
+                  <AppIcon name="folder" />
                 </button>
               </div>
             </td>
@@ -326,6 +262,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { printedApi, modelsApi, systemApi } from '../services/api';
 import { useAppStore } from '../store';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
+import AppIcon from '../components/AppIcon.vue';
 
 const store = useAppStore();
 const route = useRoute();

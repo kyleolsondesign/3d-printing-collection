@@ -15,16 +15,7 @@
       <div class="summary-cards">
         <div class="stat-card">
           <div class="stat-icon models-icon">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-              />
-            </svg>
+            <AppIcon name="cube" stroke-width="1.5" />
           </div>
           <div class="stat-info">
             <div class="stat-value">
@@ -35,15 +26,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-icon printed-icon">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path d="M9 12l2 2 4-4" />
-              <circle cx="12" cy="12" r="10" />
-            </svg>
+            <AppIcon name="check-circle" stroke-width="1.5" />
           </div>
           <div class="stat-info">
             <div class="stat-value">
@@ -54,16 +37,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-icon fav-icon">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-              />
-            </svg>
+            <AppIcon name="star" stroke-width="1.5" />
           </div>
           <div class="stat-info">
             <div class="stat-value">
@@ -74,14 +48,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-icon queue-icon">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-            </svg>
+            <AppIcon name="list" stroke-width="1.5" />
           </div>
           <div class="stat-info">
             <div class="stat-value">
@@ -92,16 +59,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-icon storage-icon">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <ellipse cx="12" cy="5" rx="9" ry="3" />
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-            </svg>
+            <AppIcon name="database" stroke-width="1.5" />
           </div>
           <div class="stat-info">
             <div class="stat-value">
@@ -112,15 +70,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-icon files-icon">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-              <path d="M14 2v6h6" />
-            </svg>
+            <AppIcon name="file" stroke-width="1.5" />
           </div>
           <div class="stat-info">
             <div class="stat-value">
@@ -141,15 +91,7 @@
       >
         <div class="stat-card wide">
           <div class="stat-icon time-icon">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v6l4 2" />
-            </svg>
+            <AppIcon name="clock" stroke-width="1.5" />
           </div>
           <div class="stat-info">
             <div class="stat-value">
@@ -160,17 +102,7 @@
         </div>
         <div class="stat-card wide">
           <div class="stat-icon filament-icon">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
-              />
-              <path d="M12 8v4l3 3" />
-            </svg>
+            <AppIcon name="clock" stroke-width="1.5" />
           </div>
           <div class="stat-info">
             <div class="stat-value">
@@ -193,15 +125,7 @@
         <div class="summary-cards">
           <div class="stat-card">
             <div class="stat-icon import-icon">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                <path d="M7 10l5 5 5-5M12 15V3" />
-              </svg>
+              <AppIcon name="upload" stroke-width="1.5" />
             </div>
             <div class="stat-info">
               <div class="stat-value">
@@ -212,15 +136,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-icon accept-icon">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path d="M9 12l2 2 4-4" />
-                <circle cx="12" cy="12" r="10" />
-              </svg>
+              <AppIcon name="check-circle" stroke-width="1.5" />
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ importStats.acceptanceRate }}%</div>
@@ -1003,16 +919,7 @@
         <div class="summary-cards">
           <div class="stat-card">
             <div class="stat-icon designer-icon">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-              </svg>
+              <AppIcon name="users" stroke-width="1.5" />
             </div>
             <div class="stat-info">
               <div class="stat-value">
@@ -1023,19 +930,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-icon designer-linked-icon">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path
-                  d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"
-                />
-                <path
-                  d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"
-                />
-              </svg>
+              <AppIcon name="link" stroke-width="1.5" />
             </div>
             <div class="stat-info">
               <div class="stat-value">
@@ -1046,17 +941,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-icon designer-avg-icon">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <rect x="3" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="3" width="7" height="7" rx="1" />
-                <rect x="3" y="14" width="7" height="7" rx="1" />
-                <rect x="14" y="14" width="7" height="7" rx="1" />
-              </svg>
+              <AppIcon name="grid" stroke-width="1.5" />
             </div>
             <div class="stat-info">
               <div class="stat-value">
@@ -1075,16 +960,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-icon designer-fav-icon">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path
-                  d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
-                />
-              </svg>
+              <AppIcon name="heart" stroke-width="1.5" />
             </div>
             <div class="stat-info">
               <div class="stat-value">
@@ -1192,6 +1068,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { systemApi, ingestionApi } from '../services/api';
+import AppIcon from '../components/AppIcon.vue';
 
 interface DetailedStats {
   modelsByCategory: Array<{ category: string; count: number }>;

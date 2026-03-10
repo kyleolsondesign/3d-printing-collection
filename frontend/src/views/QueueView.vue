@@ -5,10 +5,7 @@
         @click="toggleSelectionMode"
         :class="['select-btn', { active: selectionMode }]"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <path v-if="selectionMode" d="M9 12l2 2 4-4"/>
-        </svg>
+        <AppIcon :name="selectionMode ? 'checkbox-checked' : 'checkbox'" />
         <span>{{ selectionMode ? 'Cancel' : 'Select' }}</span>
       </button>
     </Teleport>
@@ -34,12 +31,8 @@
             <option value="random">Random</option>
           </select>
           <button v-if="sortField !== 'random'" @click="toggleSortOrder" class="sort-order-btn" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
-            <svg v-if="sortOrder === 'desc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 5v14M19 12l-7 7-7-7"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 19V5M5 12l7-7 7 7"/>
-            </svg>
+            <AppIcon v-if="sortOrder === 'desc'" name="sort-desc" />
+            <AppIcon v-else name="sort-asc" />
           </button>
         </div>
         <div class="filter-toggles">
@@ -48,9 +41,7 @@
             :class="['filter-toggle-btn', { active: filterFavorites, 'filter-hide': filterFavorites === 'hide' }]"
             :title="filterFavorites === 'only' ? 'Only favorites (click to hide)' : filterFavorites === 'hide' ? 'Hiding favorites (click to clear)' : 'Click to show only favorites'"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
-            </svg>
+            <AppIcon name="heart" />
             <span>{{ filterLabel(filterFavorites, 'Favorites') }}</span>
           </button>
           <button
@@ -58,10 +49,7 @@
             :class="['filter-toggle-btn', { active: filterPrinted, 'filter-hide': filterPrinted === 'hide' }]"
             :title="filterPrinted === 'only' ? 'Only printed (click to hide)' : filterPrinted === 'hide' ? 'Hiding printed (click to clear)' : 'Click to show only printed'"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 12l2 2 4-4"/>
-              <circle cx="12" cy="12" r="10"/>
-            </svg>
+            <AppIcon name="check-circle" />
             <span>{{ filterLabel(filterPrinted, 'Printed') }}</span>
           </button>
         </div>
@@ -72,21 +60,14 @@
           :class="['view-btn', { active: viewMode === 'grid' }]"
           title="Grid view"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="7" rx="1"/>
-            <rect x="14" y="3" width="7" height="7" rx="1"/>
-            <rect x="3" y="14" width="7" height="7" rx="1"/>
-            <rect x="14" y="14" width="7" height="7" rx="1"/>
-          </svg>
+          <AppIcon name="grid" />
         </button>
         <button
           @click="viewMode = 'table'"
           :class="['view-btn', { active: viewMode === 'table' }]"
           title="Table view"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-          </svg>
+          <AppIcon name="list" />
         </button>
       </div>
     </div>
@@ -101,9 +82,7 @@
       </div>
       <div class="bulk-actions" :class="{ disabled: bulkLoading || selectedCount === 0 }">
         <button @click="bulkRemove" class="bulk-btn delete-btn" :disabled="bulkLoading || selectedCount === 0">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12"/>
-          </svg>
+          <AppIcon name="x" />
           <span>Remove Selected</span>
         </button>
         <div v-if="bulkLoading" class="bulk-loading">
@@ -119,9 +98,7 @@
 
     <div v-else-if="queue.length === 0" class="empty">
       <div class="empty-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-        </svg>
+        <AppIcon name="list" stroke-width="1.5" style="width: 40px; height: 40px;" />
       </div>
       <h3>Queue is empty</h3>
       <p>Add models to your print queue from the Browse page.</p>
@@ -156,9 +133,7 @@
               loading="lazy"
             />
             <div v-else class="printing-card-no-image">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/>
-              </svg>
+              <AppIcon name="printer" stroke-width="1.5" />
             </div>
           </div>
           <div class="printing-card-info">
@@ -174,9 +149,7 @@
               class="printing-card-btn printing-card-btn--done"
               title="Mark as printed (good)"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
-              </svg>
+              <AppIcon name="thumbs-up" />
               Done
             </button>
             <button
@@ -184,9 +157,7 @@
               class="printing-card-btn printing-card-btn--stop"
               title="Stop printing"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="6" y="6" width="12" height="12" rx="1"/>
-              </svg>
+              <AppIcon name="stop-square" />
               Stop
             </button>
           </div>
@@ -207,13 +178,7 @@
         @click="selectionMode ? toggleSelection(item.model_id) : null"
       >
         <div v-if="selectionMode" class="selection-checkbox" @click.stop="toggleSelection(item.model_id)">
-          <svg v-if="selectedItems.has(item.model_id)" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="3" y="3" width="18" height="18" rx="3" fill="var(--accent-primary)"/>
-            <path d="M9 12l2 2 4-4" stroke="var(--bg-deepest)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="3"/>
-          </svg>
+          <AppIcon :name="selectedItems.has(item.model_id) ? 'checkbox-checked' : 'checkbox'" />
         </div>
         <div v-else-if="sortField === 'priority'" class="queue-badge">{{ index + 1 }}</div>
         <div class="model-image" @click.stop="selectionMode ? toggleSelection(item.model_id) : openModal(item)">
@@ -225,10 +190,7 @@
             loading="lazy"
           />
           <div v-else class="no-image">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-              <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>
-            </svg>
+            <AppIcon name="package" stroke-width="1.5" style="width: 48px; height: 48px;" />
           </div>
           <a class="image-overlay" :href="modelUrl(item.model_id)" @click="onModelLinkClick($event)">
             <span class="open-hint">View details</span>
@@ -250,28 +212,21 @@
               :class="['action-btn', { active: item.is_printing || item.printRating, 'printed-printing': item.is_printing && !item.printRating, 'printed-good': item.printRating === 'good', 'printed-bad': item.printRating === 'bad' }]"
               :title="item.is_printing && !item.printRating ? 'Mark as printed (good)' : item.printRating === 'good' ? 'Mark as bad print' : item.printRating ? 'Remove from printed' : 'Mark as printing'"
             >
-              <svg viewBox="0 0 24 24" :fill="item.is_printing || item.printRating ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
-                <path d="M6 14h12v8H6z"/>
-              </svg>
+              <AppIcon name="printer" :fill="item.is_printing || item.printRating ? 'currentColor' : 'none'" />
             </button>
             <button
               @click.stop="item.id ? removeFromQueue(item.id) : stopPrinting(item.model_id)"
               class="action-btn"
               :title="item.id ? 'Remove from queue' : 'Stop printing'"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
+              <AppIcon name="x" />
             </button>
             <button
               @click.stop="openInFinder(item)"
               class="action-btn"
               title="Show in Finder"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-              </svg>
+              <AppIcon name="folder" />
             </button>
           </div>
         </div>
@@ -285,13 +240,7 @@
           <tr>
             <th v-if="selectionMode" class="col-checkbox">
               <div class="table-checkbox" @click="allSelected ? deselectAll() : selectAll()">
-                <svg v-if="allSelected" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="3" y="3" width="18" height="18" rx="3" fill="var(--accent-primary)"/>
-                  <path d="M9 12l2 2 4-4" stroke="var(--bg-deepest)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="3"/>
-                </svg>
+                <AppIcon :name="allSelected ? 'checkbox-checked' : 'checkbox'" />
               </div>
             </th>
             <th v-if="canDrag" class="col-drag"></th>
@@ -299,38 +248,23 @@
             <th class="col-image"></th>
             <th class="col-name sortable" @click="handleSort('name')">
               <span>Name</span>
-              <svg v-if="sortField === 'name'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'name'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-category sortable" @click="handleSort('category')">
               <span>Category</span>
-              <svg v-if="sortField === 'category'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'category'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-date sortable" @click="handleSort('added_at')">
               <span>Date Queued</span>
-              <svg v-if="sortField === 'added_at'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'added_at'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-date sortable" @click="handleSort('date_added')">
               <span>Date Added</span>
-              <svg v-if="sortField === 'date_added'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'date_added'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-date sortable" @click="handleSort('date_created')">
               <span>Date Created</span>
-              <svg v-if="sortField === 'date_created'" class="sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path v-if="sortOrder === 'asc'" d="M12 19V5M5 12l7-7 7 7"/>
-                <path v-else d="M12 5v14M19 12l-7 7-7-7"/>
-              </svg>
+              <AppIcon v-if="sortField === 'date_created'" :name="sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'" class="sort-icon" />
             </th>
             <th class="col-actions">Actions</th>
           </tr>
@@ -356,20 +290,12 @@
           >
             <td v-if="selectionMode" class="col-checkbox" @click.stop="toggleSelection(item.model_id)">
               <div class="table-checkbox">
-                <svg v-if="selectedItems.has(item.model_id)" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="3" y="3" width="18" height="18" rx="3" fill="var(--accent-primary)"/>
-                  <path d="M9 12l2 2 4-4" stroke="var(--bg-deepest)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="3"/>
-                </svg>
+                <AppIcon :name="selectedItems.has(item.model_id) ? 'checkbox-checked' : 'checkbox'" />
               </div>
             </td>
             <td v-if="canDrag" class="col-drag">
               <div class="drag-handle">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M8 6h.01M8 12h.01M8 18h.01M12 6h.01M12 12h.01M12 18h.01"/>
-                </svg>
+                <AppIcon name="drag-handle" />
               </div>
             </td>
             <td v-if="sortField === 'priority'" class="col-number">
@@ -384,9 +310,7 @@
                   @error="onImageError"
                   loading="lazy"
                 />
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="no-image-icon">
-                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-                </svg>
+                <AppIcon v-else name="package" stroke-width="1.5" class="no-image-icon" />
               </div>
             </td>
             <td class="col-name">
@@ -409,28 +333,21 @@
                   :class="['action-btn-small', { active: item.is_printing || item.printRating, 'printed-printing': item.is_printing && !item.printRating, 'printed-good': item.printRating === 'good', 'printed-bad': item.printRating === 'bad' }]"
                   :title="item.is_printing && !item.printRating ? 'Mark as printed (good)' : item.printRating === 'good' ? 'Mark as bad print' : item.printRating ? 'Remove from printed' : 'Mark as printing'"
                 >
-                  <svg viewBox="0 0 24 24" :fill="item.is_printing || item.printRating ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                    <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
-                    <path d="M6 14h12v8H6z"/>
-                  </svg>
+                  <AppIcon name="printer" :fill="item.is_printing || item.printRating ? 'currentColor' : 'none'" />
                 </button>
                 <button
                   @click="item.id ? removeFromQueue(item.id) : stopPrinting(item.model_id)"
                   class="action-btn-small"
                   :title="item.id ? 'Remove from queue' : 'Stop printing'"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M18 6L6 18M6 6l12 12"/>
-                  </svg>
+                  <AppIcon name="x" />
                 </button>
                 <button
                   @click="openInFinder(item)"
                   class="action-btn-small"
                   title="Show in Finder"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                  </svg>
+                  <AppIcon name="folder" />
                 </button>
               </div>
             </td>
@@ -458,6 +375,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { queueApi, printedApi, modelsApi, systemApi } from '../services/api';
 import { useAppStore } from '../store';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
+import AppIcon from '../components/AppIcon.vue';
 
 const store = useAppStore();
 const route = useRoute();

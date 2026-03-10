@@ -15,10 +15,7 @@
 
     <div v-else-if="looseFiles.length === 0" class="empty success">
       <div class="empty-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M9 12l2 2 4-4"/>
-          <circle cx="12" cy="12" r="10"/>
-        </svg>
+        <AppIcon name="check-circle" stroke-width="1.5" />
       </div>
       <h3>All organized!</h3>
       <p>No loose files found. All your models are properly organized in folders.</p>
@@ -49,10 +46,7 @@
             class="btn-organize-bulk"
             :disabled="organizing"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-              <path d="M12 11v6M9 14h6"/>
-            </svg>
+            <AppIcon name="folder-download" />
             Organize {{ selectedIds.size }} File{{ selectedIds.size > 1 ? 's' : '' }}
           </button>
         </div>
@@ -62,14 +56,8 @@
       <div v-if="lastResults" class="results-panel" :class="{ success: lastResults.succeeded > 0, error: lastResults.failed > 0 && lastResults.succeeded === 0 }">
         <div class="results-content">
           <div class="results-header">
-            <svg v-if="lastResults.succeeded > 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 12l2 2 4-4"/>
-              <circle cx="12" cy="12" r="10"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M15 9l-6 6M9 9l6 6"/>
-            </svg>
+            <AppIcon v-if="lastResults.succeeded > 0" name="check-circle" />
+            <AppIcon v-else name="circle-x" />
             <span>
               Organized {{ lastResults.succeeded }} of {{ lastResults.total }} file{{ lastResults.total > 1 ? 's' : '' }}
               <template v-if="lastResults.failed > 0">
@@ -85,12 +73,8 @@
               class="result-item"
               :class="{ success: detail.success, error: !detail.success }"
             >
-              <svg v-if="detail.success" class="result-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 12l2 2 4-4"/>
-              </svg>
-              <svg v-else class="result-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
+              <AppIcon v-if="detail.success" name="check" class="result-icon" />
+              <AppIcon v-else name="x" class="result-icon" />
               <span class="result-filename">{{ detail.filename }}</span>
               <span v-if="detail.success && detail.folderName" class="result-folder">
                 &rarr; {{ detail.folderName }}/
@@ -105,10 +89,7 @@
 
       <div class="info-box">
         <div class="info-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 16v-4M12 8h.01"/>
-          </svg>
+          <AppIcon name="info" />
         </div>
         <div class="info-content">
           <h4>Organize automatically</h4>
@@ -118,10 +99,7 @@
 
       <div v-if="filteredLooseFiles.length === 0 && store.globalSearchQuery" class="empty">
         <div class="empty-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="M21 21l-4.35-4.35"/>
-          </svg>
+          <AppIcon name="search" stroke-width="1.5" />
         </div>
         <h3>No matching files</h3>
         <p>No loose files match "{{ store.globalSearchQuery }}"</p>
@@ -145,13 +123,8 @@
             />
           </label>
           <div class="file-icon">
-            <svg v-if="organizingIds.has(file.id)" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
-              <path d="M13 2v7h7"/>
-            </svg>
+            <AppIcon v-if="organizingIds.has(file.id)" name="spinner" class="spinner" />
+            <AppIcon v-else name="file" stroke-width="1.5" />
           </div>
           <div class="file-info">
             <h3>{{ file.filename }}</h3>
@@ -169,21 +142,14 @@
               :disabled="organizingIds.has(file.id)"
               title="Create folder and move file"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                <path d="M12 11v6M9 14h6"/>
-              </svg>
+              <AppIcon name="folder-download" />
               Organize
             </button>
             <button @click.stop="trashFile(file)" class="btn-danger" title="Move to Trash">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-              </svg>
+              <AppIcon name="trash" />
             </button>
             <button @click.stop="openInFinder(file)" class="btn-secondary" title="Show in Finder">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-              </svg>
+              <AppIcon name="folder" />
             </button>
           </div>
         </div>
@@ -212,9 +178,7 @@
             class="page-btn"
             title="First page"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/>
-            </svg>
+            <AppIcon name="chevrons-left" />
           </button>
           <button
             @click="currentPage--"
@@ -222,9 +186,7 @@
             class="page-btn"
             title="Previous page"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M15 18l-6-6 6-6"/>
-            </svg>
+            <AppIcon name="chevron-left" />
           </button>
           <span class="page-indicator">{{ currentPage }} / {{ totalPages }}</span>
           <button
@@ -233,9 +195,7 @@
             class="page-btn"
             title="Next page"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
+            <AppIcon name="chevron-right" />
           </button>
           <button
             @click="currentPage = totalPages"
@@ -243,9 +203,7 @@
             class="page-btn"
             title="Last page"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M13 17l5-5-5-5M6 17l5-5-5-5"/>
-            </svg>
+            <AppIcon name="chevrons-right" />
           </button>
         </div>
       </div>
@@ -257,6 +215,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { systemApi } from '../services/api';
 import { useAppStore } from '../store';
+import AppIcon from '../components/AppIcon.vue';
 
 interface LooseFile {
   id: number;

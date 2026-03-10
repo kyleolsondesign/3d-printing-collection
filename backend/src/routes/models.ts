@@ -840,4 +840,28 @@ router.put('/:id/assets/:assetId/hide', (req, res) => {
     }
 });
 
+// Toggle purge mark on a model
+router.post('/:id/toggle-purge-mark', (req, res) => {
+    try {
+        const { id } = req.params;
+        const model = db.prepare('SELECT id, purge_marked_at FROM models WHERE id = ?').get(id) as { id: number; purge_marked_at: string | null } | undefined;
+
+        if (!model) {
+            return res.status(404).json({ error: 'Model not found' });
+        }
+
+        if (model.purge_marked_at) {
+            db.prepare('UPDATE models SET purge_marked_at = NULL WHERE id = ?').run(id);
+            res.json({ success: true, purge_marked_at: null });
+        } else {
+            db.prepare('UPDATE models SET purge_marked_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+            const updated = db.prepare('SELECT purge_marked_at FROM models WHERE id = ?').get(id) as { purge_marked_at: string };
+            res.json({ success: true, purge_marked_at: updated.purge_marked_at });
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 export default router;

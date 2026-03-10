@@ -643,4 +643,188 @@ router.post('/trash-loose-file', async (req, res) => {
     }
 });
 
+// Get purge candidates
+router.get('/purge/candidates', (req, res) => {
+    try {
+        // Models with at least one purge signal
+        const candidates = db.prepare(`
+            SELECT DISTINCT
+                m.id, m.filename, m.filepath, m.category, m.is_paid,
+                m.purge_marked_at, m.deleted_at,
+                CASE WHEN
+                    EXISTS(SELECT 1 FROM printed_models WHERE model_id = m.id AND rating = 'bad')
+                    AND NOT EXISTS(SELECT 1 FROM printed_models WHERE model_id = m.id AND rating = 'good')
+                THEN 1 ELSE 0 END AS has_bad_print
+            FROM models m
+            WHERE
+                m.is_paid = 0
+                AND m.category != 'Paid'
+                AND m.category != 'Original Creations'
+                AND (
+                    m.purge_marked_at IS NOT NULL
+                    OR m.deleted_at IS NOT NULL
+                    OR (
+                        EXISTS(SELECT 1 FROM printed_models WHERE model_id = m.id AND rating = 'bad')
+                        AND NOT EXISTS(SELECT 1 FROM printed_models WHERE model_id = m.id AND rating = 'good')
+                    )
+                )
+            ORDER BY
+                (CASE WHEN m.purge_marked_at IS NOT NULL THEN 1 ELSE 0 END +
+                 CASE WHEN m.deleted_at IS NOT NULL THEN 1 ELSE 0 END +
+                 CASE WHEN EXISTS(SELECT 1 FROM printed_models WHERE model_id = m.id AND rating = 'bad')
+                       AND NOT EXISTS(SELECT 1 FROM printed_models WHERE model_id = m.id AND rating = 'good')
+                 THEN 1 ELSE 0 END) DESC,
+                COALESCE(m.purge_marked_at, m.deleted_at) DESC
+        `).all() as Array<{
+            id: number;
+            filename: string;
+            filepath: string;
+            category: string;
+            is_paid: number;
+            purge_marked_at: string | null;
+            deleted_at: string | null;
+            has_bad_print: number;
+        }>;
+
+        const getPrimaryImage = db.prepare(`
+            SELECT filepath FROM model_assets
+            WHERE model_id = ? AND asset_type = 'image' AND (is_hidden = 0 OR is_hidden IS NULL)
+            ORDER BY is_primary DESC, id ASC
+            LIMIT 1
+        `);
+
+        const result = candidates.map(c => {
+            const reasons: string[] = [];
+            if (c.purge_marked_at) reasons.push('marked');
+            if (c.deleted_at) {
+                // Only flag "deleted" signal if folder is gone from disk
+                if (!fs.existsSync(c.filepath)) reasons.push('deleted');
+            }
+            if (c.has_bad_print) reasons.push('bad_print');
+            // Skip models that have no actual reasons (e.g. soft-deleted but folder still exists with no other signals)
+            if (reasons.length === 0) return null;
+            const imageRow = getPrimaryImage.get(c.id) as { filepath: string } | undefined;
+            const primaryImage = imageRow?.filepath || null;
+            return { id: c.id, filename: c.filename, filepath: c.filepath, category: c.category, is_paid: c.is_paid, purge_marked_at: c.purge_marked_at, deleted_at: c.deleted_at, reasons, primaryImage };
+        }).filter(Boolean);
+
+        res.json({ candidates: result });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Execute purge - move model folders to Trash and hard-delete records
+router.post('/purge/execute', async (req, res) => {
+    try {
+        const { model_ids } = req.body as { model_ids: number[] };
+
+        if (!Array.isArray(model_ids) || model_ids.length === 0) {
+            return res.status(400).json({ error: 'model_ids must be a non-empty array' });
+        }
+
+        const models = model_ids.map(id =>
+            db.prepare('SELECT id, filename, filepath, category, is_paid FROM models WHERE id = ?').get(id) as {
+                id: number; filename: string; filepath: string; category: string; is_paid: number;
+            } | undefined
+        ).filter(Boolean) as Array<{ id: number; filename: string; filepath: string; category: string; is_paid: number }>;
+
+        // Refuse to purge Paid or Original Creations models
+        const protected_ = models.filter(m => m.is_paid || m.category === 'Paid' || m.category === 'Original Creations');
+        if (protected_.length > 0) {
+            return res.status(400).json({ error: `Cannot purge protected models: ${protected_.map(m => m.filename).join(', ')}` });
+        }
+
+        const results: Array<{ id: number; success: boolean; error?: string }> = [];
+
+        for (const model of models) {
+            try {
+                // Get reasons before deletion for event log
+                const hasBadPrint = db.prepare(`SELECT id FROM printed_models WHERE model_id = ? AND rating = 'bad'`).get(model.id);
+                const modelRow = db.prepare('SELECT purge_marked_at, deleted_at FROM models WHERE id = ?').get(model.id) as { purge_marked_at: string | null; deleted_at: string | null };
+                const reasons: string[] = [];
+                if (modelRow?.purge_marked_at) reasons.push('marked');
+                if (modelRow?.deleted_at && !fs.existsSync(model.filepath)) reasons.push('deleted');
+                if (hasBadPrint) reasons.push('bad_print');
+
+                // Move to Trash if folder exists
+                if (fs.existsSync(model.filepath)) {
+                    await new Promise<void>((resolve, reject) => {
+                        const escapedPath = model.filepath.replace(/"/g, '\\"');
+                        exec(
+                            `osascript -e 'tell application "Finder" to delete POSIX file "${escapedPath}"'`,
+                            (error) => {
+                                if (error) reject(error);
+                                else resolve();
+                            }
+                        );
+                    });
+                }
+
+                // Record purge event before hard-deleting
+                db.prepare(`
+                    INSERT INTO purge_events (model_name, category, is_paid, reasons)
+                    VALUES (?, ?, ?, ?)
+                `).run(model.filename, model.category, model.is_paid, JSON.stringify(reasons));
+
+                // Hard-delete all related records (cascades handle most, but be explicit)
+                db.prepare('DELETE FROM models WHERE id = ?').run(model.id);
+
+                results.push({ id: model.id, success: true });
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                results.push({ id: model.id, success: false, error: msg });
+            }
+        }
+
+        const purged = results.filter(r => r.success).length;
+        const errors = results.filter(r => !r.success).map(r => `${r.id}: ${r.error}`);
+        res.json({ success: true, purged, errors, results });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Purge stats
+router.get('/stats/purge', (req, res) => {
+    try {
+        const totalPurged = (db.prepare('SELECT COUNT(*) as count FROM purge_events').get() as { count: number }).count;
+
+        const byMonth = db.prepare(`
+            SELECT strftime('%Y-%m', purged_at) as month, COUNT(*) as count
+            FROM purge_events
+            WHERE purged_at >= date('now', '-12 months')
+            GROUP BY month
+            ORDER BY month ASC
+        `).all() as Array<{ month: string; count: number }>;
+
+        const allReasons = db.prepare('SELECT reasons FROM purge_events WHERE reasons IS NOT NULL').all() as Array<{ reasons: string }>;
+        const byReason: Record<string, number> = { marked: 0, deleted: 0, bad_print: 0 };
+        for (const row of allReasons) {
+            try {
+                const reasons = JSON.parse(row.reasons) as string[];
+                for (const r of reasons) {
+                    if (r in byReason) byReason[r]++;
+                }
+            } catch {}
+        }
+
+        const byCategory = db.prepare(`
+            SELECT category, COUNT(*) as count
+            FROM purge_events
+            WHERE category IS NOT NULL
+            GROUP BY category
+            ORDER BY count DESC
+            LIMIT 10
+        `).all() as Array<{ category: string; count: number }>;
+
+        res.json({ totalPurged, byMonth, byReason, byCategory });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 export default router;

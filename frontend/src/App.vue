@@ -6,9 +6,7 @@
       <div class="sidebar-header">
         <router-link to="/" class="brand-link">
           <div class="brand-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            <AppIcon name="cube" style="width: 18px; height: 18px;" stroke-width="1.5" />
           </div>
           <div class="brand-text">
             <span class="brand-name">3D Collection</span>
@@ -16,9 +14,7 @@
           </div>
         </router-link>
         <button class="collapse-btn" @click="toggleSidebar" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
-          <svg class="collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 18l-6-6 6-6"/>
-          </svg>
+          <AppIcon name="chevron-left" class="collapse-icon" />
         </button>
       </div>
 
@@ -29,29 +25,19 @@
           <span class="nav-group-label">Library</span>
           <router-link to="/" :class="{ active: $route.name === 'browse' }" data-label="Browse" class="nav-item">
             <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7" rx="1"/>
-                <rect x="14" y="3" width="7" height="7" rx="1"/>
-                <rect x="3" y="14" width="7" height="7" rx="1"/>
-                <rect x="14" y="14" width="7" height="7" rx="1"/>
-              </svg>
+              <AppIcon name="grid" />
             </span>
             <span class="nav-text">Browse</span>
           </router-link>
           <router-link to="/recent" :class="{ active: $route.name === 'recent' }" data-label="Recent" class="nav-item">
             <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 6v6l4 2"/>
-              </svg>
+              <AppIcon name="clock" />
             </span>
             <span class="nav-text">Recent</span>
           </router-link>
           <router-link to="/favorites" :class="{ active: $route.name === 'favorites' }" data-label="Favorites" class="nav-item">
             <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
+              <AppIcon name="star" />
             </span>
             <span class="nav-text">Favorites</span>
           </router-link>
@@ -62,18 +48,13 @@
           <span class="nav-group-label">Print</span>
           <router-link to="/queue" :class="{ active: $route.name === 'queue' }" data-label="Queue" class="nav-item">
             <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-              </svg>
+              <AppIcon name="list" />
             </span>
             <span class="nav-text">Queue</span>
           </router-link>
           <router-link to="/printed" :class="{ active: $route.name === 'printed' }" data-label="Printed" class="nav-item">
             <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 12l2 2 4-4"/>
-                <circle cx="12" cy="12" r="10"/>
-              </svg>
+              <AppIcon name="check-circle" />
             </span>
             <span class="nav-text">Printed</span>
           </router-link>
@@ -84,12 +65,7 @@
           <span class="nav-group-label">Manage</span>
           <router-link to="/designers" :class="{ active: $route.name === 'designers' }" data-label="Designers" class="nav-item">
             <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 00-3-3.87"/>
-                <path d="M16 3.13a4 4 0 010 7.75"/>
-              </svg>
+              <AppIcon name="users" />
             </span>
             <span class="nav-text">Designers</span>
           </router-link>
@@ -103,18 +79,13 @@
           <span class="nav-group-label">System</span>
           <router-link to="/stats" :class="{ active: $route.name === 'stats' }" data-label="Stats" class="nav-item">
             <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 20V10M12 20V4M6 20v-6"/>
-              </svg>
+              <AppIcon name="bar-chart" />
             </span>
             <span class="nav-text">Stats</span>
           </router-link>
           <router-link to="/settings" :class="{ active: $route.name === 'settings' }" data-label="Settings" class="nav-item">
             <span class="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-              </svg>
+              <AppIcon name="settings" />
             </span>
             <span class="nav-text">Settings</span>
           </router-link>
@@ -130,10 +101,7 @@
         <div class="topbar-right">
           <div id="topbar-view-actions"></div>
           <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/>
-              <path d="M21 21l-4.35-4.35"/>
-            </svg>
+            <AppIcon name="search" class="search-icon" />
             <input
               v-model="searchInput"
               @keyup.enter="handleSearch"
@@ -142,17 +110,11 @@
               class="search-input"
             />
             <button v-if="searchInput" @click="clearSearch" class="search-clear">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
+              <AppIcon name="x" />
             </button>
           </div>
           <router-link to="/ingestion" :class="['import-btn', { active: $route.name === 'ingestion' }]" title="Import models">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-              <path d="M7 10l5 5 5-5"/>
-              <path d="M12 15V3"/>
-            </svg>
+            <AppIcon name="download" />
             <span>Import</span>
           </router-link>
         </div>
@@ -173,6 +135,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAppStore } from './store';
 import BackToTopButton from './components/BackToTopButton.vue';
+import AppIcon from './components/AppIcon.vue';
 
 const store = useAppStore();
 const router = useRouter();
@@ -195,7 +158,7 @@ onMounted(async () => {
 
 function handleSearch() {
   if (searchInput.value.trim()) {
-    if (route.name === 'settings' || route.name === 'stats') {
+    if (route.name === 'settings') {
       router.push({ path: '/', query: { q: searchInput.value.trim() } });
       return;
     }

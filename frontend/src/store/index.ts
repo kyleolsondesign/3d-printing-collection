@@ -3,6 +3,14 @@ import { ref, computed } from 'vue';
 import type { Model, Category } from '../services/api';
 import { modelsApi, favoritesApi, queueApi, printedApi, systemApi } from '../services/api';
 
+interface ModelStateOverride {
+    isFavorite?: boolean;
+    isQueued?: boolean;
+    isPrinted?: boolean;
+    printRating?: string | null;
+    isPrinting?: boolean;
+}
+
 export const useAppStore = defineStore('app', () => {
     // State
     const models = ref<Model[]>([]);
@@ -14,6 +22,21 @@ export const useAppStore = defineStore('app', () => {
     const currentPage = ref(1);
     const totalPages = ref(1);
     const modelDirectory = ref<string>('');
+
+    // Cross-view state override map: modelId → latest known state
+    // Updated after every toggle action so all views reflect changes immediately
+    const modelStateOverrides = ref<Map<number, ModelStateOverride>>(new Map());
+
+    function setModelStateOverride(modelId: number, state: ModelStateOverride) {
+        const updated = new Map(modelStateOverrides.value);
+        updated.set(modelId, { ...(updated.get(modelId) || {}), ...state });
+        modelStateOverrides.value = updated;
+    }
+
+    function resolveModelState<T extends { id: number }>(model: T): T {
+        const override = modelStateOverrides.value.get(model.id);
+        return override ? { ...model, ...override } : model;
+    }
 
     // Computed
     const stats = computed(() => ({
@@ -68,9 +91,9 @@ export const useAppStore = defineStore('app', () => {
         try {
             await favoritesApi.toggle(modelId);
             const model = models.value.find(m => m.id === modelId);
-            if (model) {
-                model.isFavorite = !model.isFavorite;
-            }
+            const newState = model ? !model.isFavorite : !(modelStateOverrides.value.get(modelId)?.isFavorite ?? false);
+            if (model) model.isFavorite = newState;
+            setModelStateOverride(modelId, { isFavorite: newState });
         } catch (error) {
             console.error('Failed to toggle favorite:', error);
         }
@@ -80,9 +103,9 @@ export const useAppStore = defineStore('app', () => {
         try {
             await queueApi.toggle(modelId);
             const model = models.value.find(m => m.id === modelId);
-            if (model) {
-                model.isQueued = !model.isQueued;
-            }
+            const newState = model ? !model.isQueued : !(modelStateOverrides.value.get(modelId)?.isQueued ?? false);
+            if (model) model.isQueued = newState;
+            setModelStateOverride(modelId, { isQueued: newState });
         } catch (error) {
             console.error('Failed to toggle queue:', error);
         }
@@ -92,17 +115,23 @@ export const useAppStore = defineStore('app', () => {
         try {
             const response = await printedApi.toggle(modelId, rating);
             const model = models.value.find(m => m.id === modelId);
-            if (model) {
-                model.isPrinted = response.data.printed;
-                model.printRating = response.data.printed ? response.data.rating : null;
-                // Backend removes from queue and printing state when marking as printed
-                if (response.data.printed && response.data.removedFromQueue) {
-                    model.isQueued = false;
-                }
-                if (response.data.printed) {
-                    model.isPrinting = false;
-                }
+            const stateUpdate: ModelStateOverride = {
+                isPrinted: response.data.printed,
+                printRating: response.data.printed ? response.data.rating : null,
+            };
+            if (response.data.printed && response.data.removedFromQueue) {
+                stateUpdate.isQueued = false;
             }
+            if (response.data.printed) {
+                stateUpdate.isPrinting = false;
+            }
+            if (model) {
+                model.isPrinted = stateUpdate.isPrinted!;
+                model.printRating = stateUpdate.printRating ?? null;
+                if (stateUpdate.isQueued !== undefined) model.isQueued = stateUpdate.isQueued;
+                if (stateUpdate.isPrinting !== undefined) model.isPrinting = stateUpdate.isPrinting;
+            }
+            setModelStateOverride(modelId, stateUpdate);
         } catch (error) {
             console.error('Failed to toggle printed:', error);
         }
@@ -112,14 +141,21 @@ export const useAppStore = defineStore('app', () => {
         try {
             const response = await printedApi.cycle(modelId);
             const model = models.value.find(m => m.id === modelId);
-            if (model) {
-                model.isPrinted = response.data.printed;
-                model.printRating = response.data.rating || null;
-                model.isPrinting = !!response.data.printing;
-                if (response.data.removedFromQueue) {
-                    model.isQueued = false;
-                }
+            const stateUpdate: ModelStateOverride = {
+                isPrinted: response.data.printed,
+                printRating: response.data.rating || null,
+                isPrinting: !!response.data.printing,
+            };
+            if (response.data.removedFromQueue) {
+                stateUpdate.isQueued = false;
             }
+            if (model) {
+                model.isPrinted = stateUpdate.isPrinted!;
+                model.printRating = stateUpdate.printRating ?? null;
+                model.isPrinting = stateUpdate.isPrinting!;
+                if (stateUpdate.isQueued !== undefined) model.isQueued = stateUpdate.isQueued;
+            }
+            setModelStateOverride(modelId, stateUpdate);
         } catch (error) {
             console.error('Failed to cycle printed:', error);
         }
@@ -129,9 +165,8 @@ export const useAppStore = defineStore('app', () => {
         try {
             const response = await queueApi.togglePrinting(modelId);
             const model = models.value.find(m => m.id === modelId);
-            if (model) {
-                model.isPrinting = response.data.printing;
-            }
+            if (model) model.isPrinting = response.data.printing;
+            setModelStateOverride(modelId, { isPrinting: response.data.printing });
         } catch (error) {
             console.error('Failed to toggle printing:', error);
         }
@@ -177,9 +212,12 @@ export const useAppStore = defineStore('app', () => {
         currentPage,
         totalPages,
         modelDirectory,
+        modelStateOverrides,
         // Computed
         stats,
         // Actions
+        setModelStateOverride,
+        resolveModelState,
         loadModels,
         searchModels,
         loadCategories,
