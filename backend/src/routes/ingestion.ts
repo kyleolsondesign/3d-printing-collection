@@ -2,8 +2,13 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Anthropic from '@anthropic-ai/sdk';
 import db from '../config/database.js';
+import {
+    ScoreDebugEntry,
+    tokenize,
+    suggestCategoryFuzzy,
+    suggestCategoriesWithClaude,
+} from '../services/categorization.js';
 import scanner from '../services/scanner.js';
 import { isModelFile, isArchiveFile, isDocumentFile, isImageFile } from '../utils/fileTypes.js';
 import { cleanupFolderName } from '../utils/nameCleanup.js';
@@ -47,56 +52,6 @@ function loadCategoryDefinitions(): string {
     return '';
 }
 
-// Categories that require the full phrase to appear in the item name.
-// Individual tokens from these categories (e.g. "mini", "one", "brick") are
-// too generic and cause false matches, so token-based scoring is skipped for them.
-const PHRASE_ONLY_CATEGORIES = new Set([
-    'A1 Mini',
-    'Core One',
-    'CyberBrick',
-]);
-
-// Common noise words to ignore in fuzzy matching
-const NOISE_WORDS = new Set([
-    'free', '3d', 'print', 'model', 'stl', 'file', 'files', 'download',
-    'printable', 'printing', 'printer', 'printed', 'the', 'and', 'for',
-    'with', 'from', 'this', 'that', 'new', 'set', 'version', 'design',
-    'ready', 'high', 'quality', 'low', 'poly', 'obj', 'fbx', 'gcode',
-    // Platform/source names — zero categorization signal
-    'maker', 'world', 'makerworld', 'thangs', 'printables', 'patreon', 'thingiverse', 'com',
-]);
-
-// Semantic synonym groups for 3D printing categories.
-// When an item's tokens include any word in a group, all other words in that group
-// are added to the token set, enabling semantic cross-matching against category names.
-const SYNONYM_GROUPS: string[][] = [
-    // Toys, figures, games
-    ['toy', 'toys', 'figure', 'figures', 'figurine', 'miniature', 'bust', 'statue', 'character', 'diorama', 'game', 'games', 'puzzle'],
-    // Tools, hardware, functional parts
-    ['tool', 'tools', 'wrench', 'bracket', 'mount', 'holder', 'clip', 'organizer', 'jig', 'fixture', 'hardware', 'hanger', 'hook'],
-    // Plants, nature, garden
-    ['plant', 'plants', 'pot', 'vase', 'planter', 'succulent', 'flower', 'garden'],
-    // Vehicles, transportation
-    ['vehicle', 'vehicles', 'car', 'truck', 'boat', 'airplane', 'aircraft', 'ship', 'tank'],
-    // Animals, creatures
-    ['animal', 'animals', 'dog', 'cat', 'bird', 'fish', 'creature', 'beast', 'dinosaur'],
-    // Jewelry, accessories
-    ['jewelry', 'keychain', 'pendant', 'ring', 'earring', 'necklace', 'charm', 'accessory'],
-    // Electronics, tech
-    ['electronic', 'electronics', 'phone', 'cable', 'charger', 'raspberry', 'arduino', 'circuit'],
-    // Household, kitchen, storage
-    ['household', 'kitchen', 'bathroom', 'shelf', 'storage', 'container', 'box', 'drawer'],
-    // Stands, supports, bases
-    ['stand', 'stands', 'base', 'support', 'platform', 'riser', 'dock'],
-];
-
-// Build reverse lookup: word → synonym group
-const SYNONYM_MAP = new Map<string, string[]>();
-for (const group of SYNONYM_GROUPS) {
-    for (const word of group) {
-        SYNONYM_MAP.set(word, group);
-    }
-}
 
 interface IngestionItem {
     filename: string;
@@ -148,353 +103,6 @@ function getExistingCategories(): string[] {
     return rows.map(r => r.category);
 }
 
-// --- Fuzzy matching fallback ---
-
-function tokenize(name: string): string[] {
-    return name
-        .replace(/[_\-./\\()[\]{}]+/g, ' ')
-        .replace(/([a-z])([A-Z])/g, '$1 $2')
-        .toLowerCase()
-        .split(/\s+/)
-        .filter(w => w.length > 2 && !NOISE_WORDS.has(w));
-}
-
-// Expand a token set with synonyms from SYNONYM_GROUPS
-function expandWithSynonyms(tokens: string[]): string[] {
-    const expanded = new Set(tokens);
-    for (const token of tokens) {
-        const group = SYNONYM_MAP.get(token);
-        if (group) {
-            for (const synonym of group) {
-                expanded.add(synonym);
-            }
-        }
-    }
-    return Array.from(expanded);
-}
-
-// Pure token overlap score: what fraction of catTokens are covered by itemTokens
-function scoreTokensVsCategory(itemTokens: string[], catTokens: string[]): number {
-    if (itemTokens.length === 0 || catTokens.length === 0) return 0;
-    let matchCount = 0;
-    for (const catToken of catTokens) {
-        if (itemTokens.some(t => t.includes(catToken) || catToken.includes(t))) {
-            matchCount++;
-        }
-    }
-    return matchCount / catTokens.length;
-}
-
-// Score a named source (with pre-expanded tokens) against a single category.
-// Handles phrase-only enforcement, substring check, and token overlap.
-function scoreNameVsCategory(
-    name: string,
-    expandedTokens: string[],
-    category: string,
-    catTokens: string[],
-    normalizedCat: string,
-    isPhraseOnly: boolean
-): { score: number; isExact: boolean } {
-    const normalizedName = name.toLowerCase().replace(/[\s_-]+/g, '');
-
-    if (isPhraseOnly) {
-        const match = name.toLowerCase().includes(category.toLowerCase())
-            || normalizedName.includes(normalizedCat);
-        return { score: match ? 100 : 0, isExact: match };
-    }
-
-    if (name.toLowerCase().includes(category.toLowerCase())) {
-        return { score: 100, isExact: true };
-    }
-
-    return { score: scoreTokensVsCategory(expandedTokens, catTokens), isExact: false };
-}
-
-// Load per-category hint boosts from learned associations (AI-accepted + manual imports).
-// Returns a Map<category, boost> where boost is in [0, 0.4].
-// The boost is proportional to how many times the item's tokens have been associated
-// with each category relative to the most-associated category — so over time, repeatedly
-// AI-accepted categorizations accumulate enough signal to override weak token matches.
-function loadHintBoosts(tokens: string[], categories: string[]): Map<string, number> {
-    if (tokens.length === 0) return new Map();
-    try {
-        const placeholders = tokens.map(() => '?').join(',');
-        const rows = db.prepare(`
-            SELECT category, SUM(count) as total
-            FROM categorization_hints
-            WHERE token IN (${placeholders})
-            GROUP BY category
-        `).all(...tokens) as Array<{ category: string; total: number }>;
-
-        if (rows.length === 0) return new Map();
-
-        const boosts = new Map<string, number>();
-        for (const row of rows) {
-            if (categories.includes(row.category) && row.total > 0) {
-                // Absolute formula: ~5 confirmed imports reach max boost (0.4).
-                // count=1 → 0.08 (negligible alone), count=5+ → 0.4 (max).
-                // Avoids the relative normalization problem where one dominating
-                // category suppresses all others.
-                boosts.set(row.category, Math.min(row.total / 5, 1) * 0.4);
-            }
-        }
-        return boosts;
-    } catch {
-        return new Map();
-    }
-}
-
-interface FuzzyMatchContext {
-    name: string;
-    modelFileNames?: string[];
-    pdfTags?: string[];
-    readmeText?: string | null;
-    pdfText?: string | null;
-}
-
-interface ScoreDebugEntry {
-    category: string;
-    score: number;  // 0–100 integer percentage
-    source: 'exact' | 'name' | 'files' | 'tags' | 'text' | 'hint';
-}
-
-function suggestCategoryFuzzy(
-    item: FuzzyMatchContext,
-    categories: string[]
-): { category: string; confidence: 'high' | 'medium' | 'low'; debugScores: ScoreDebugEntry[] } {
-    // Pre-compute expanded tokens for each source
-    const primaryTokens = expandWithSynonyms(tokenize(item.name));
-
-    // Model file names: strip extension, tokenize + expand per file
-    const modelFileContexts = (item.modelFileNames || []).map(fn => {
-        const baseName = fn.replace(/\.(stl|3mf|obj|gcode|ply|amf|zip|rar|7z)$/i, '');
-        return { name: baseName, tokens: expandWithSynonyms(tokenize(baseName)) };
-    });
-
-    // PDF tags: tokenize all tags combined
-    const pdfTagTokens = expandWithSynonyms(
-        (item.pdfTags || []).flatMap(tag => tokenize(tag))
-    );
-
-    // Readme / PDF text: limit length to avoid noise
-    const textContent = [item.readmeText, item.pdfText]
-        .filter(Boolean)
-        .join(' ')
-        .substring(0, 500);
-    const textTokens = textContent ? expandWithSynonyms(tokenize(textContent)) : [];
-
-    // Load per-category hint boosts before the main loop (single DB query).
-    // Boosts accumulate from prior AI-accepted imports, so over time the fuzzy
-    // matcher learns from correct AI suggestions without user intervention.
-    const allTokensForHints = Array.from(new Set([
-        ...primaryTokens,
-        ...modelFileContexts.flatMap(fc => fc.tokens),
-        ...pdfTagTokens,
-        ...textTokens,
-    ]));
-    const hintBoosts = loadHintBoosts(allTokensForHints, categories);
-
-    const hasAnyTokens = primaryTokens.length > 0
-        || modelFileContexts.some(fc => fc.tokens.length > 0)
-        || pdfTagTokens.length > 0
-        || textTokens.length > 0
-        || hintBoosts.size > 0;
-
-    if (!hasAnyTokens) {
-        return { category: 'Uncategorized', confidence: 'low', debugScores: [] };
-    }
-
-    let bestCategory = 'Uncategorized';
-    let bestRawScore = 0;
-    let bestAdjustedScore = 0;
-    let bestIsExact = false;
-
-    const allDebugScores: ScoreDebugEntry[] = [];
-
-    for (const category of categories) {
-        const isPhraseOnly = PHRASE_ONLY_CATEGORIES.has(category);
-        const normalizedCat = category.toLowerCase().replace(/[\s_-]+/g, '');
-        const catTokens = tokenize(category);
-
-        // Source 1: Primary name — unrestricted, can reach high confidence
-        const nameResult = scoreNameVsCategory(
-            item.name, primaryTokens, category, catTokens, normalizedCat, isPhraseOnly
-        );
-
-        // Sources 2–4: secondary — never override primary for high confidence.
-        // Track each source separately to report the dominant one.
-        let fileScore = 0;
-        let tagScore = 0;
-        let textScore = 0;
-
-        if (!isPhraseOnly) {
-            // Source 2: Individual model file names
-            for (const fc of modelFileContexts) {
-                const r = scoreNameVsCategory(
-                    fc.name, fc.tokens, category, catTokens, normalizedCat, false
-                );
-                if (r.score > fileScore) fileScore = r.score;
-            }
-
-            // Source 3: PDF tags (pure token overlap)
-            if (pdfTagTokens.length > 0) {
-                tagScore = scoreTokensVsCategory(pdfTagTokens, catTokens);
-            }
-
-            // Source 4: Text content (capped lower — noisy signal)
-            if (textTokens.length > 0) {
-                textScore = Math.min(scoreTokensVsCategory(textTokens, catTokens), 0.5);
-            }
-        }
-
-        const secondaryScore = Math.min(Math.max(fileScore, tagScore, textScore), 0.79);
-        const rawScore = nameResult.isExact ? 100 : Math.max(nameResult.score, secondaryScore);
-        const catIsExact = nameResult.isExact;
-
-        // Apply hint boost additively: AI-accepted categorizations gradually improve
-        // fuzzy results for similar items in the future.
-        const hintBoost = hintBoosts.get(category) ?? 0;
-        const adjustedScore = catIsExact ? 100 : Math.min(rawScore + hintBoost, 0.95);
-
-        // Determine the dominant signal source for this category
-        let source: ScoreDebugEntry['source'];
-        if (catIsExact) {
-            source = 'exact';
-        } else if (rawScore === 0 && hintBoost > 0) {
-            source = 'hint';
-        } else if (nameResult.score >= Math.max(fileScore, tagScore, textScore)) {
-            source = 'name';
-        } else if (fileScore >= Math.max(tagScore, textScore)) {
-            source = 'files';
-        } else if (tagScore >= textScore) {
-            source = 'tags';
-        } else {
-            source = 'text';
-        }
-
-        allDebugScores.push({
-            category,
-            score: adjustedScore === 100 ? 100 : Math.round(adjustedScore * 100),
-            source
-        });
-
-        if (adjustedScore > bestAdjustedScore
-            || (adjustedScore === bestAdjustedScore && category.length > bestCategory.length)) {
-            bestRawScore = rawScore;
-            bestAdjustedScore = adjustedScore;
-            bestCategory = category;
-            bestIsExact = catIsExact;
-        }
-    }
-
-    let confidence: 'high' | 'medium' | 'low';
-    if (bestIsExact || bestAdjustedScore >= 0.8) {
-        confidence = 'high';
-    } else if (bestRawScore > 0 || bestAdjustedScore > 0.35) {
-        confidence = 'medium';
-    } else {
-        confidence = 'low';
-    }
-
-    const debugScores = allDebugScores
-        .filter(e => e.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
-
-    return { category: bestCategory, confidence, debugScores };
-}
-
-// Normalize a category suggestion to the exact casing of a known category.
-// Falls back to the raw value so Claude-invented new categories still work.
-function normalizeSuggestedCategory(raw: string, categories: string[]): string {
-    if (!raw) return 'Uncategorized';
-    const lower = raw.toLowerCase();
-    return categories.find(c => c.toLowerCase() === lower) ?? raw;
-}
-
-// --- Claude-powered categorization ---
-
-async function suggestCategoriesWithClaude(
-    items: ScannedItem[],
-    categories: string[]
-): Promise<Map<string, { category: string; confidence: 'high' | 'medium' | 'low' }>> {
-    const apiKey = getConfig('anthropic_api_key');
-    if (!apiKey) {
-        throw new Error('no_api_key');
-    }
-
-    const client = new Anthropic({ apiKey });
-
-    const itemList = items.map((item, i) => {
-        const lines = [`${i + 1}. "${item.filename}"`];
-        lines.push(`   Type: ${item.isFolder ? 'folder' : 'file'}, ${item.fileCount} model file${item.fileCount > 1 ? 's' : ''}`);
-        if (item.modelFileNames.length > 0 && item.isFolder) {
-            lines.push(`   Model files: ${item.modelFileNames.join(', ')}`);
-        }
-        if (item.pdfFilename) {
-            lines.push(`   PDF filename: "${item.pdfFilename}"`);
-        }
-        if (item.pdfText) {
-            lines.push(`   PDF text: "${item.pdfText}"`);
-        }
-        if (item.pdfTags.length > 0) {
-            lines.push(`   Tags from PDF: ${item.pdfTags.join(', ')}`);
-        }
-        if (item.designer) {
-            lines.push(`   Designer: ${item.designer}`);
-        }
-        if (item.readmeText) {
-            lines.push(`   Readme: "${item.readmeText}"`);
-        }
-        return lines.join('\n');
-    }).join('\n\n');
-
-    const categoryList = categories.join(', ');
-
-    // Use custom prompt or default, with placeholder substitution
-    const promptTemplate = getConfig('ingestion_prompt') || DEFAULT_PROMPT;
-    const categoryDefs = loadCategoryDefinitions();
-    const prompt = promptTemplate
-        .replace('{categories}', categoryList)
-        .replace('{category_definitions}', categoryDefs ? `Here are detailed descriptions of each category to help you decide:\n\n${categoryDefs}` : '')
-        .replace('{items}', itemList);
-
-    const response = await client.messages.create({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 2048,
-        messages: [{
-            role: 'user',
-            content: prompt
-        }]
-    });
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    const results = new Map<string, { category: string; confidence: 'high' | 'medium' | 'low' }>();
-
-    try {
-        // Extract JSON from response (handle markdown code blocks)
-        const jsonMatch = text.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) throw new Error('No JSON array found in response');
-
-        const parsed = JSON.parse(jsonMatch[0]) as Array<{ category: string; confidence: string }>;
-        for (let i = 0; i < items.length && i < parsed.length; i++) {
-            const suggestion = parsed[i];
-            const confidence = ['high', 'medium', 'low'].includes(suggestion.confidence)
-                ? suggestion.confidence as 'high' | 'medium' | 'low'
-                : 'low';
-            const rawCategory = suggestion.category || 'Uncategorized';
-            results.set(items[i].filepath, {
-                category: normalizeSuggestedCategory(rawCategory, categories),
-                confidence
-            });
-        }
-    } catch (parseError) {
-        console.error('Failed to parse Claude response:', parseError, text);
-        // Fall through — caller will use fuzzy fallback for missing items
-    }
-
-    return results;
-}
 
 // --- File scanning ---
 
@@ -856,7 +464,26 @@ router.post('/categorize', async (req, res) => {
 
             const batchStart = Date.now();
             try {
-                const batchResults = await suggestCategoriesWithClaude(batch, categories);
+                        const promptTemplate = getConfig('ingestion_prompt') || DEFAULT_PROMPT;
+                const categoryDefs = loadCategoryDefinitions();
+                const batchResults = await suggestCategoriesWithClaude(
+                    batch.map(item => ({
+                        identifier: item.filepath,
+                        name: item.filename,
+                        isFolder: item.isFolder,
+                        fileCount: item.fileCount,
+                        modelFileNames: item.modelFileNames,
+                        pdfFilename: item.pdfFilename,
+                        pdfText: item.pdfText,
+                        pdfTags: item.pdfTags,
+                        readmeText: item.readmeText,
+                        designer: item.designer,
+                    })),
+                    categories,
+                    apiKey,
+                    promptTemplate,
+                    categoryDefs
+                );
                 const batchTime = ((Date.now() - batchStart) / 1000).toFixed(1);
 
                 let matched = 0;

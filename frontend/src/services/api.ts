@@ -78,6 +78,21 @@ export interface Category {
     count: number;
 }
 
+export interface ScoreDebugEntry {
+    category: string;
+    score: number;
+    source: 'exact' | 'name' | 'files' | 'tags' | 'text' | 'hint';
+}
+
+export interface CategorySuggestion {
+    model_id: number;
+    model_name: string;
+    current_category: string;
+    suggested_category: string;
+    confidence: 'high' | 'medium' | 'low';
+    debug_scores: ScoreDebugEntry[];
+}
+
 // Models API
 export const modelsApi = {
     getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string; noImage?: boolean }) =>
@@ -129,7 +144,10 @@ export const modelsApi = {
         api.post(`/models/${modelId}/view`),
 
     togglePurgeMark: (modelId: number) =>
-        api.post(`/models/${modelId}/toggle-purge-mark`)
+        api.post(`/models/${modelId}/toggle-purge-mark`),
+
+    suggestCategories: (modelIds: number[], useAi?: boolean) =>
+        api.post('/models/suggest-categories', { model_ids: modelIds, use_ai: useAi ?? false }, { timeout: 60000 })
 };
 
 // Favorites API

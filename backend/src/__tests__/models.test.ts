@@ -403,4 +403,65 @@ describe('Models Routes', () => {
             expect(res.body.models).toHaveLength(2);
         });
     });
+
+    describe('POST /api/models/suggest-categories', () => {
+        it('returns 400 when model_ids is missing', async () => {
+            const res = await request(app).post('/api/models/suggest-categories').send({});
+            expect(res.status).toBe(400);
+        });
+
+        it('returns 400 when model_ids is empty', async () => {
+            const res = await request(app).post('/api/models/suggest-categories').send({ model_ids: [] });
+            expect(res.status).toBe(400);
+        });
+
+        it('returns suggestions for all provided model_ids', async () => {
+            const res = await request(app).post('/api/models/suggest-categories').send({ model_ids: [1, 2, 3] });
+            expect(res.status).toBe(200);
+            expect(res.body.suggestions).toHaveLength(3);
+            expect(res.body.used_ai).toBe(false);
+        });
+
+        it('each suggestion has required fields', async () => {
+            const res = await request(app).post('/api/models/suggest-categories').send({ model_ids: [1] });
+            expect(res.status).toBe(200);
+            const s = res.body.suggestions[0];
+            expect(s).toHaveProperty('model_id', 1);
+            expect(s).toHaveProperty('model_name');
+            expect(s).toHaveProperty('current_category');
+            expect(s).toHaveProperty('suggested_category');
+            expect(['high', 'medium', 'low']).toContain(s.confidence);
+            expect(Array.isArray(s.debug_scores)).toBe(true);
+        });
+
+        it('returns empty array for non-existent model_ids', async () => {
+            const res = await request(app).post('/api/models/suggest-categories').send({ model_ids: [999] });
+            expect(res.status).toBe(200);
+            expect(res.body.suggestions).toHaveLength(0);
+        });
+
+        it('falls back to fuzzy (used_ai: false) when no Anthropic key configured', async () => {
+            const res = await request(app)
+                .post('/api/models/suggest-categories')
+                .send({ model_ids: [1, 2], use_ai: true });
+            expect(res.status).toBe(200);
+            expect(res.body.used_ai).toBe(false);
+        });
+
+        it('uses model file names from model_files table in fuzzy context', async () => {
+            // Model 1 has model.stl and model.3mf in seedTestData
+            const res = await request(app).post('/api/models/suggest-categories').send({ model_ids: [1] });
+            expect(res.status).toBe(200);
+            expect(res.body.suggestions[0].model_id).toBe(1);
+            expect(Array.isArray(res.body.suggestions[0].debug_scores)).toBe(true);
+        });
+
+        it('excludes soft-deleted models', async () => {
+            testDb.prepare('UPDATE models SET deleted_at = CURRENT_TIMESTAMP WHERE id = 1').run();
+            const res = await request(app).post('/api/models/suggest-categories').send({ model_ids: [1, 2] });
+            expect(res.status).toBe(200);
+            expect(res.body.suggestions).toHaveLength(1);
+            expect(res.body.suggestions[0].model_id).toBe(2);
+        });
+    });
 });

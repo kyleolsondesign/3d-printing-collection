@@ -150,6 +150,15 @@
             <AppIcon name="folder-download" />
             <span>Move</span>
           </button>
+          <button
+            @click="showRecategorizeModal = true"
+            class="bulk-btn"
+            title="Recategorize with suggestions"
+            :disabled="bulkLoading || selectedCount === 0"
+          >
+            <AppIcon name="tag" />
+            <span>Recategorize</span>
+          </button>
           <div v-if="showBulkCategoryPicker" class="bulk-tag-input-row">
             <input
               v-model="bulkCategoryTarget"
@@ -472,6 +481,14 @@
       @updated="handleModelUpdated"
       @navigate="selectedModelId = $event"
     />
+
+    <!-- Recategorization Modal -->
+    <RecategorizationModal
+      v-if="showRecategorizeModal"
+      :model-ids="Array.from(selectedModels)"
+      @close="showRecategorizeModal = false"
+      @applied="onRecategorizeApplied"
+    />
   </div>
 </template>
 
@@ -482,6 +499,7 @@ import { useAppStore } from '../store';
 import { modelsApi, systemApi, queueApi, printedApi, favoritesApi, tagsApi } from '../services/api';
 import type { Model } from '../services/api';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
+import RecategorizationModal from '../components/RecategorizationModal.vue';
 import AppIcon from '../components/AppIcon.vue';
 
 const store = useAppStore();
@@ -527,6 +545,7 @@ const bulkTagInput = ref('');
 // Bulk category reassignment state
 const showBulkCategoryPicker = ref(false);
 const bulkCategoryTarget = ref('');
+const showRecategorizeModal = ref(false);
 
 // Currently printing items loaded globally from queue API (not paginated)
 const allPrintingItems = ref<any[]>([]);
@@ -1035,6 +1054,13 @@ async function bulkAddToFavorites() {
   } finally {
     bulkLoading.value = false;
   }
+}
+
+async function onRecategorizeApplied() {
+  showRecategorizeModal.value = false;
+  toggleSelectionMode(); // exit selection mode
+  await store.loadModels();
+  await store.loadCategories();
 }
 
 async function bulkReassignCategory() {

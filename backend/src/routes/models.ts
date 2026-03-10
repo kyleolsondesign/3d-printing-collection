@@ -6,6 +6,11 @@ import mime from 'mime-types';
 import scanner from '../services/scanner.js';
 import extractZip from 'extract-zip';
 import { exec } from 'child_process';
+import {
+    suggestCategoryFuzzy,
+    suggestCategoriesWithClaude,
+    CategorizationItem,
+} from '../services/categorization.js';
 
 const router = express.Router();
 
@@ -776,6 +781,96 @@ router.post('/bulk-reassign-category', async (req, res) => {
 
         const succeeded = results.filter(r => r.success).length;
         res.json({ success: true, results, succeeded, total: model_ids.length });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Suggest categories for a set of models using fuzzy or AI matching
+router.post('/suggest-categories', async (req, res) => {
+    try {
+        const { model_ids, use_ai } = req.body;
+
+        if (!Array.isArray(model_ids) || model_ids.length === 0) {
+            return res.status(400).json({ error: 'model_ids must be a non-empty array' });
+        }
+
+        // Fetch models
+        const placeholders = model_ids.map(() => '?').join(',');
+        const models = db.prepare(
+            `SELECT id, filename, filepath, category FROM models WHERE id IN (${placeholders}) AND deleted_at IS NULL`
+        ).all(...model_ids) as Array<{ id: number; filename: string; filepath: string; category: string }>;
+
+        if (models.length === 0) {
+            return res.json({ suggestions: [], used_ai: false });
+        }
+
+        // Get model file names from model_files table (no disk reads needed)
+        const modelFileNamesByModel = new Map<number, string[]>();
+        for (const model of models) {
+            const files = db.prepare('SELECT filename FROM model_files WHERE model_id = ?')
+                .all(model.id) as Array<{ filename: string }>;
+            modelFileNamesByModel.set(model.id, files.map(f => f.filename));
+        }
+
+        // Get all categories for scoring
+        const categories = (db.prepare(
+            'SELECT DISTINCT category FROM models WHERE deleted_at IS NULL AND category IS NOT NULL ORDER BY category'
+        ).all() as Array<{ category: string }>).map(r => r.category);
+
+        // Determine whether to use AI
+        const apiKey = use_ai
+            ? (db.prepare('SELECT value FROM config WHERE key = ?').get('anthropic_api_key') as { value: string } | undefined)?.value || null
+            : null;
+        let usedAi = false;
+
+        const suggestionMap = new Map<number, { category: string; confidence: 'high' | 'medium' | 'low' }>();
+
+        if (apiKey) {
+            try {
+                const items: CategorizationItem[] = models.map(m => ({
+                    identifier: m.id.toString(),
+                    name: m.filename,
+                    modelFileNames: modelFileNamesByModel.get(m.id) || [],
+                }));
+                const aiResults = await suggestCategoriesWithClaude(items, categories, apiKey);
+                for (const [idStr, result] of aiResults) {
+                    suggestionMap.set(parseInt(idStr), result);
+                }
+                usedAi = true;
+            } catch (aiError) {
+                console.error('[suggest-categories] AI failed, falling back to fuzzy:', aiError);
+            }
+        }
+
+        // Build final suggestions: AI where available, fuzzy fallback otherwise
+        const suggestions = models.map(model => {
+            let suggested: { category: string; confidence: 'high' | 'medium' | 'low' };
+            let debugScores: Array<{ category: string; score: number; source: string }> = [];
+
+            if (suggestionMap.has(model.id)) {
+                suggested = suggestionMap.get(model.id)!;
+            } else {
+                const fuzzy = suggestCategoryFuzzy({
+                    name: model.filename,
+                    modelFileNames: modelFileNamesByModel.get(model.id) || [],
+                }, categories);
+                suggested = { category: fuzzy.category, confidence: fuzzy.confidence };
+                debugScores = fuzzy.debugScores;
+            }
+
+            return {
+                model_id: model.id,
+                model_name: model.filename,
+                current_category: model.category,
+                suggested_category: suggested.category,
+                confidence: suggested.confidence,
+                debug_scores: debugScores,
+            };
+        });
+
+        res.json({ suggestions, used_ai: usedAi });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });
