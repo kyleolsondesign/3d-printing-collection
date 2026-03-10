@@ -95,7 +95,7 @@ export interface CategorySuggestion {
 
 // Models API
 export const modelsApi = {
-    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string; noImage?: boolean }) =>
+    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string; noImage?: boolean; tag?: string }) =>
         api.get('/models', { params }),
 
     getById: (id: number) =>

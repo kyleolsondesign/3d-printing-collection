@@ -115,6 +115,12 @@
       <button @click="clearSearch" class="clear-search-btn">Clear search</button>
     </div>
 
+    <!-- Tag filter indicator -->
+    <div v-if="filterTag && !isSearchActive" class="search-results-bar">
+      <span>Filtering by tag: <strong>#{{ filterTag }}</strong></span>
+      <button @click="filterTag = ''" class="clear-search-btn">Clear filter</button>
+    </div>
+
     <!-- Bulk actions bar -->
     <div v-if="selectionMode" class="bulk-actions-bar">
       <div class="bulk-left">
@@ -514,6 +520,7 @@ const filterPrinted = ref<FilterState>('hide');
 const filterQueued = ref<FilterState>('');
 const filterFavorites = ref<FilterState>('');
 const filterNoImage = ref(false);
+const filterTag = ref('');
 
 function cycleFilter(current: FilterState): FilterState {
   if (current === '') return 'only';
@@ -604,6 +611,9 @@ function initFromQueryParams() {
   if (ff === 'only' || ff === 'hide') filterFavorites.value = ff;
   else if (ff === '') filterFavorites.value = '';
   if (route.query.noImage === 'true') filterNoImage.value = true;
+  const { tag } = route.query;
+  if (tag && typeof tag === 'string') filterTag.value = tag;
+  else filterTag.value = '';
 }
 
 // Update URL query params when state changes
@@ -639,6 +649,9 @@ function updateQueryParams() {
   if (filterNoImage.value) {
     query.noImage = 'true';
   }
+  if (filterTag.value) {
+    query.tag = filterTag.value;
+  }
   if (selectedModelId.value) {
     query.model = String(selectedModelId.value);
   }
@@ -672,7 +685,7 @@ onUnmounted(() => {
 });
 
 // Watch for changes that require reloading
-watch([sortField, sortOrder, filterPrinted, filterQueued, filterFavorites, filterNoImage], () => {
+watch([sortField, sortOrder, filterPrinted, filterQueued, filterFavorites, filterNoImage, filterTag], () => {
   if (isSearchActive.value) {
     handleSearch(store.globalSearchQuery);
   } else {
@@ -718,7 +731,8 @@ async function loadInitialModels() {
     filterPrinted: filterPrinted.value || undefined,
     filterQueued: filterQueued.value || undefined,
     filterFavorites: filterFavorites.value || undefined,
-    noImage: filterNoImage.value || undefined
+    noImage: filterNoImage.value || undefined,
+    tag: filterTag.value || undefined
   });
   store.models = response.data.models;
   store.currentPage = 1;
@@ -768,7 +782,8 @@ async function loadMoreModels() {
       filterPrinted: filterPrinted.value || undefined,
       filterQueued: filterQueued.value || undefined,
       filterFavorites: filterFavorites.value || undefined,
-      noImage: filterNoImage.value || undefined
+      noImage: filterNoImage.value || undefined,
+      tag: filterTag.value || undefined
     });
 
     store.models = [...store.models, ...response.data.models];
@@ -788,6 +803,7 @@ async function filterByCategory(category: string) {
     store.clearGlobalSearch();
     isSearchActive.value = false;
   }
+  filterTag.value = '';
 
   store.loading = true;
   store.selectedCategory = category;

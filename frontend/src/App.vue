@@ -105,6 +105,8 @@
             <input
               v-model="searchInput"
               @keyup.enter="handleSearch"
+              @focus="showTagSuggestions = true"
+              @blur="hideTagSuggestionsDelayed"
               type="text"
               :placeholder="searchPlaceholder"
               class="search-input"
@@ -112,6 +114,17 @@
             <button v-if="searchInput" @click="clearSearch" class="search-clear">
               <AppIcon name="x" />
             </button>
+            <div v-if="showTagSuggestions && tagSuggestions.length > 0" class="tag-suggestion-dropdown">
+              <button
+                v-for="tag in tagSuggestions"
+                :key="tag.id"
+                class="tag-suggestion-item"
+                @mousedown.prevent="navigateToTag(tag.name)"
+              >
+                <span class="tag-hash">#</span>{{ tag.name }}
+                <span v-if="tag.model_count" class="tag-suggestion-count">{{ tag.model_count }}</span>
+              </button>
+            </div>
           </div>
           <router-link to="/ingestion" :class="['import-btn', { active: $route.name === 'ingestion' }]" title="Import models">
             <AppIcon name="download" />
@@ -134,6 +147,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAppStore } from './store';
+import { tagsApi, type Tag } from './services/api';
 import BackToTopButton from './components/BackToTopButton.vue';
 import AppIcon from './components/AppIcon.vue';
 
@@ -141,6 +155,8 @@ const store = useAppStore();
 const router = useRouter();
 const route = useRoute();
 const searchInput = ref('');
+const allTags = ref<Tag[]>([]);
+const showTagSuggestions = ref(false);
 
 // Persist sidebar state across sessions
 const savedCollapsed = localStorage.getItem('sidebar-collapsed');
@@ -154,7 +170,32 @@ function toggleSidebar() {
 onMounted(async () => {
   await store.loadConfig();
   await store.loadCategories();
+  try {
+    const res = await tagsApi.getAll();
+    allTags.value = res.data;
+  } catch {
+    // tags are non-critical
+  }
 });
+
+const tagSuggestions = computed(() => {
+  if (!searchInput.value.trim()) return [];
+  const q = searchInput.value.toLowerCase();
+  return allTags.value
+    .filter(t => t.name.toLowerCase().includes(q) && (t.model_count ?? 0) >= 2)
+    .slice(0, 5);
+});
+
+function navigateToTag(tagName: string) {
+  searchInput.value = '';
+  store.clearGlobalSearch();
+  showTagSuggestions.value = false;
+  router.push({ path: '/', query: { tag: tagName } });
+}
+
+function hideTagSuggestionsDelayed() {
+  setTimeout(() => { showTagSuggestions.value = false; }, 150);
+}
 
 function handleSearch() {
   if (searchInput.value.trim()) {
@@ -678,6 +719,50 @@ const pageTitle = computed(() => {
 .search-clear:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+.tag-suggestion-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.tag-suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-base);
+}
+
+.tag-suggestion-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tag-hash {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.tag-suggestion-count {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
 }
 
 .search-clear svg {

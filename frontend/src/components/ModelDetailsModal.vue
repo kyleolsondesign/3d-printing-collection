@@ -170,8 +170,8 @@
               <!-- Tags -->
               <div class="tags-section">
                 <div class="tags-list">
-                  <span v-for="tag in modelTags" :key="tag.id" class="tag-chip editable">
-                    {{ tag.name }}
+                  <span v-for="tag in visibleModelTags" :key="tag.id" class="tag-chip editable">
+                    <button class="tag-name-btn" @click="navigateToTag(tag.name)" :title="`Browse #${tag.name}`">{{ tag.name }}</button>
                     <button class="tag-remove-btn" @click="removeTag(tag)" title="Remove tag">×</button>
                   </span>
                   <div class="tag-input-wrapper" ref="tagInputWrapperRef">
@@ -476,11 +476,15 @@ const tagInput = ref('');
 const showTagSuggestions = ref(false);
 const tagInputWrapperRef = ref<HTMLElement | null>(null);
 
+const visibleModelTags = computed(() =>
+  modelTags.value.filter(t => (t.model_count ?? 0) >= 2)
+);
+
 const filteredTagSuggestions = computed(() => {
   const q = tagInput.value.trim().toLowerCase();
   const existingIds = new Set(modelTags.value.map(t => t.id));
   return allTags.value.filter(t =>
-    !existingIds.has(t.id) && (q === '' || t.name.includes(q))
+    !existingIds.has(t.id) && (t.model_count ?? 0) >= 2 && (q === '' || t.name.includes(q))
   ).slice(0, 8);
 });
 
@@ -854,6 +858,10 @@ async function deleteMakeImage(imageId: number) {
   } catch (error) {
     console.error('Failed to delete make image:', error);
   }
+}
+
+function navigateToTag(tagName: string) {
+  router.push({ path: '/', query: { tag: tagName } }).then(() => emit('close'));
 }
 
 async function addTag() {
@@ -1946,6 +1954,22 @@ async function extractZipFile(zipFile: ZipFile) {
 
 .tag-chip.editable {
   padding-right: 0.25rem;
+}
+
+.tag-name-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  font-size: inherit;
+  line-height: 1;
+  transition: color var(--transition-base);
+}
+
+.tag-name-btn:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .tag-remove-btn {

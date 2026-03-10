@@ -74,6 +74,12 @@ router.get('/', (req, res) => {
             conditions.push('NOT EXISTS (SELECT 1 FROM model_assets WHERE model_assets.model_id = models.id AND model_assets.asset_type = \'image\' AND (model_assets.is_hidden = 0 OR model_assets.is_hidden IS NULL))');
         }
 
+        const tag = req.query.tag as string;
+        if (tag) {
+            conditions.push('EXISTS (SELECT 1 FROM model_tags mt JOIN tags t ON mt.tag_id = t.id WHERE mt.model_id = models.id AND LOWER(t.name) = LOWER(?))');
+            params.push(tag);
+        }
+
         if (conditions.length > 0) {
             query += ' WHERE ' + conditions.join(' AND ');
         }
@@ -314,7 +320,11 @@ router.get('/:id', (req, res) => {
 
         // Get tags
         const tags = db.prepare(`
-            SELECT t.id, t.name FROM tags t
+            SELECT t.id, t.name,
+                (SELECT COUNT(*) FROM model_tags mt2
+                 JOIN models m2 ON m2.id = mt2.model_id
+                 WHERE mt2.tag_id = t.id AND m2.deleted_at IS NULL) as model_count
+            FROM tags t
             JOIN model_tags mt ON mt.tag_id = t.id
             WHERE mt.model_id = ?
             ORDER BY t.name

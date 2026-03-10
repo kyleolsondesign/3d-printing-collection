@@ -7,9 +7,11 @@ const router = express.Router();
 router.get('/', (req, res) => {
     try {
         const tags = db.prepare(`
-            SELECT t.id, t.name, t.created_at, COUNT(mt.model_id) as model_count
+            SELECT t.id, t.name, t.created_at,
+                   COUNT(CASE WHEN m.deleted_at IS NULL THEN 1 END) as model_count
             FROM tags t
             LEFT JOIN model_tags mt ON mt.tag_id = t.id
+            LEFT JOIN models m ON m.id = mt.model_id
             GROUP BY t.id
             ORDER BY t.name ASC
         `).all();
