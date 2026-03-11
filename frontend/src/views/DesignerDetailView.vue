@@ -336,7 +336,7 @@
       :modelId="selectedModelId"
       :modelIds="models.map((m: any) => m.id)"
       @close="selectedModelId = null"
-      @updated="reloadModels"
+      @updated="handleModelUpdated"
       @navigate="selectedModelId = $event"
     />
   </div>
@@ -498,6 +498,16 @@ async function loadMore() {
 async function reloadModels() {
   resetList();
   await loadModels();
+}
+
+function handleModelUpdated(updatedModel: any) {
+  if (!updatedModel) { reloadModels(); return; }
+  const index = models.value.findIndex((m: any) => m.id === updatedModel.id);
+  if (index !== -1) {
+    models.value[index] = { ...models.value[index], ...updatedModel };
+  } else {
+    reloadModels();
+  }
 }
 
 function setupObserver() {
