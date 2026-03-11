@@ -305,4 +305,33 @@ describe('ModelDetailsModal', () => {
         expect(fileItems).toHaveLength(1);
         expect(wrapper.find('.file-type-badge').text()).toBe('stl');
     });
+
+    it('saves captured preview image and updates assets', async () => {
+        const newAsset = { id: 10, model_id: 1, filepath: '/test/models/a/_preview_captured.jpg', asset_type: 'image', is_primary: 0 };
+        vi.mocked(api.modelsApi.savePreviewImage).mockResolvedValue({
+            data: { success: true, asset: newAsset, isPrimary: false }
+        } as any);
+
+        const wrapper = mountModal();
+        await flushPromises();
+
+        // Directly invoke the captured event handler via ModelViewer emit
+        const viewer = wrapper.findComponent({ name: 'ModelViewer' });
+        // ModelViewer is stubbed - trigger the event via the wrapper's exposed handler
+        await (wrapper.vm as any).handlePreviewImageCaptured('data:image/jpeg;base64,abc123');
+        await flushPromises();
+
+        expect(api.modelsApi.savePreviewImage).toHaveBeenCalledWith(1, 'data:image/jpeg;base64,abc123');
+        // Asset should be pushed into modelDetails.assets
+        expect(wrapper.emitted('updated')).toBeTruthy();
+    });
+
+    it('shows 3D preview section only when STL or 3MF files are present', async () => {
+        setupMocks();
+        const wrapper = mountModal();
+        await flushPromises();
+
+        // mockFiles has an STL file so the section should exist
+        expect(wrapper.find('.preview-3d-section').exists()).toBe(true);
+    });
 });

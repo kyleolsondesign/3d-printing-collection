@@ -331,6 +331,20 @@
           <div class="stat-label">Deleted</div>
         </div>
       </div>
+
+      <!-- Tools -->
+      <div class="tools-section">
+        <button class="tool-card" @click="router.push('/settings/thumbnails')">
+          <div class="tool-icon">
+            <AppIcon name="image" stroke-width="1.5" />
+          </div>
+          <div class="tool-info">
+            <div class="tool-name">Generate Thumbnails</div>
+            <div class="tool-desc">Render 3D previews for models without images</div>
+          </div>
+          <AppIcon name="chevron-right" class="tool-arrow" />
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -1356,5 +1370,65 @@ h2 {
   background: var(--danger-dim, rgba(239, 68, 68, 0.1));
   color: var(--danger, #ef4444);
   border-color: var(--danger, #ef4444);
+}
+
+.tools-section {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tool-card {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+  color: var(--text-primary);
+}
+.tool-card:hover {
+  background: var(--bg-tertiary);
+  border-color: rgba(110, 168, 254, 0.3);
+}
+
+.tool-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(110, 168, 254, 0.12);
+  color: #6ea8fe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tool-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.tool-arrow {
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 </style>

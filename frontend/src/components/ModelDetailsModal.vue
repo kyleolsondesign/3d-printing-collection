@@ -44,7 +44,19 @@
           <div class="modal-content">
             <!-- Image Section -->
             <div class="image-section">
-              <div class="primary-image" :class="{ clickable: primaryImage }" @click="primaryImage && openLightbox()">
+              <!-- 3D Viewer takes over the primary image area when active -->
+              <div v-if="showingPreview" class="primary-image primary-image--3d">
+                <ModelViewer
+                  :key="previewFileId ?? 0"
+                  :modelFiles="previewableFiles"
+                  :modelId="modelDetails.id"
+                  :initialFileId="previewFileId ?? undefined"
+                  :autoActivate="true"
+                  @imageCaptured="handlePreviewImageCaptured"
+                />
+              </div>
+              <!-- Normal image display -->
+              <div v-else class="primary-image" :class="{ clickable: primaryImage }" @click="primaryImage && openLightbox()">
                 <img
                   v-if="primaryImage"
                   :src="getFileUrl(primaryImage)"
@@ -55,7 +67,8 @@
                   <span class="emoji">📦</span>
                 </div>
               </div>
-              <div v-if="imageAssets.length > 1" class="image-thumbnails">
+              <!-- Thumbnail strip: visible when multiple images, or when previewable 3D files exist -->
+              <div v-if="imageAssets.length > 1 || previewableFiles.length > 0" class="image-thumbnails">
                 <div
                   v-for="asset in imageAssets"
                   :key="asset.id"
@@ -64,10 +77,10 @@
                   <button
                     class="thumbnail"
                     :class="{
-                      active: primaryImage === asset.filepath,
+                      active: !showingPreview && primaryImage === asset.filepath,
                       'is-primary': asset.is_primary
                     }"
-                    @click="primaryImage = asset.filepath"
+                    @click="primaryImage = asset.filepath; showingPreview = false"
                   >
                     <img :src="getFileUrl(asset.filepath)" :alt="'Image ' + asset.id" />
                     <span v-if="asset.is_primary" class="primary-badge">Primary</span>
@@ -89,6 +102,18 @@
                     <AppIcon name="eye-off" />
                   </button>
                 </div>
+                <!-- 3D Preview trigger thumbnail -->
+                <button
+                  class="thumbnail thumbnail--3d"
+                  :class="{ active: showingPreview }"
+                  @click="showingPreview = true; previewFileId = null"
+                  title="3D Preview"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 1 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+                  </svg>
+                </button>
               </div>
             </div>
 
@@ -226,6 +251,16 @@
                     <span class="file-type-badge">{{ file.file_type }}</span>
                     <span class="file-name">{{ file.filename }}</span>
                     <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
+                    <button
+                      v-if="['stl', '3mf'].includes(file.file_type?.toLowerCase() ?? '')"
+                      class="preview-file-btn"
+                      @click.stop="previewFile(file)"
+                      title="Preview in 3D"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 1 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -370,6 +405,7 @@ import { useRouter } from 'vue-router';
 import { modelsApi, systemApi, favoritesApi, queueApi, printedApi, tagsApi, type Model, type ModelAsset, type ModelMetadata, type MakeImage, type Tag } from '../services/api';
 import { useAppStore } from '../store';
 import AppIcon from './AppIcon.vue';
+import ModelViewer from './ModelViewer.vue';
 
 interface ModelFile {
   id: number;
@@ -460,6 +496,8 @@ const extracting = ref<string | null>(null); // filepath of ZIP being extracted
 const modelDetails = ref<ModelDetails | null>(null);
 const modelFiles = ref<ModelFile[]>([]);
 const primaryImage = ref<string | null>(null);
+const showingPreview = ref(false);
+const previewFileId = ref<number | null>(null);
 const editingName = ref(false);
 const editingNameValue = ref('');
 const nameInputRef = ref<HTMLInputElement | null>(null);
@@ -502,6 +540,10 @@ const currentPrintRating = computed(() =>
 
 const pdfAssets = computed(() =>
   modelDetails.value?.assets.filter(a => a.asset_type === 'pdf') || []
+);
+
+const previewableFiles = computed(() =>
+  modelFiles.value.filter(f => ['stl', '3mf'].includes(f.file_type?.toLowerCase() ?? ''))
 );
 
 const hasMetadata = computed(() => {
@@ -590,6 +632,8 @@ watch(() => props.modelId, async (newId) => {
 
 async function loadModelDetails() {
   loading.value = true;
+  showingPreview.value = false;
+  previewFileId.value = null;
   try {
     const [detailsRes, filesRes, allTagsRes] = await Promise.all([
       modelsApi.getById(props.modelId),
@@ -619,6 +663,11 @@ async function loadModelDetails() {
   } finally {
     loading.value = false;
   }
+}
+
+function previewFile(file: ModelFile) {
+  previewFileId.value = file.id;
+  showingPreview.value = true;
 }
 
 function getFileUrl(filepath: string): string {
@@ -741,6 +790,28 @@ async function rescanModel() {
     console.error('Failed to rescan model:', error);
   } finally {
     rescanning.value = false;
+  }
+}
+
+async function handlePreviewImageCaptured(dataUrl: string) {
+  if (!modelDetails.value) return;
+  try {
+    const resp = await modelsApi.savePreviewImage(modelDetails.value.id, dataUrl);
+    const newAsset: ModelAsset = resp.data.asset;
+    // Upsert into local assets array (avoid duplicates on re-capture)
+    const existingIdx = modelDetails.value.assets.findIndex(a => a.filepath === newAsset.filepath);
+    if (existingIdx >= 0) {
+      modelDetails.value.assets[existingIdx] = newAsset;
+    } else {
+      modelDetails.value.assets.push(newAsset);
+    }
+    if (resp.data.isPrimary) {
+      primaryImage.value = newAsset.filepath;
+      (modelDetails.value as any).primaryImage = newAsset.filepath;
+    }
+    emit('updated', modelDetails.value);
+  } catch (error) {
+    console.error('Failed to save preview image:', error);
   }
 }
 
@@ -999,7 +1070,6 @@ async function extractZipFile(zipFile: ZipFile) {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
-  max-width: 900px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -1464,7 +1534,72 @@ async function extractZipFile(zipFile: ZipFile) {
   color: var(--text-muted);
 }
 
+/* 3D Preview primary area */
+.primary-image--3d {
+  cursor: default;
+  padding: 0;
+  overflow: hidden;
+}
+
+.primary-image--3d .model-viewer {
+  border-radius: var(--radius-lg);
+}
+
+/* 3D Preview thumbnail in strip */
+.thumbnail--3d {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-default);
+  background: var(--bg-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.thumbnail--3d:hover {
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.thumbnail--3d.active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
+/* Per-file preview button in files list */
+.preview-file-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.375rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.file-item:hover .preview-file-btn {
+  opacity: 1;
+}
+
+.preview-file-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
+  color: var(--accent-primary);
+}
+
 /* Files Section */
+
 .files-section,
 .docs-section {
   display: flex;

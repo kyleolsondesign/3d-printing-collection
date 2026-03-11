@@ -270,6 +270,8 @@ export function initSchema(db: InstanceType<typeof Database>): void {
  * Seeds test data: 3 models with assets, 1 printed, 1 queued, 1 favorited.
  */
 export function seedTestData(db: InstanceType<typeof Database>): void {
+    db.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`).run('model_directory', '/test/models');
+
     db.prepare(`INSERT INTO models (id, filename, filepath, category, file_count) VALUES (?, ?, ?, ?, ?)`).run(1, 'Test Model A', '/test/models/a', 'Toys', 3);
     db.prepare(`INSERT INTO models (id, filename, filepath, category, file_count) VALUES (?, ?, ?, ?, ?)`).run(2, 'Test Model B', '/test/models/b', 'Tools', 1);
     db.prepare(`INSERT INTO models (id, filename, filepath, category, file_count) VALUES (?, ?, ?, ?, ?)`).run(3, 'Test Model C', '/test/models/c', 'Toys', 2);

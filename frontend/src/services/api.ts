@@ -147,7 +147,10 @@ export const modelsApi = {
         api.post(`/models/${modelId}/toggle-purge-mark`),
 
     suggestCategories: (modelIds: number[], useAi?: boolean) =>
-        api.post('/models/suggest-categories', { model_ids: modelIds, use_ai: useAi ?? false }, { timeout: 60000 })
+        api.post('/models/suggest-categories', { model_ids: modelIds, use_ai: useAi ?? false }, { timeout: 60000 }),
+
+    savePreviewImage: (modelId: number, imageData: string) =>
+        api.post(`/models/${modelId}/save-preview-image`, { imageData }, { timeout: 30000 })
 };
 
 // Favorites API

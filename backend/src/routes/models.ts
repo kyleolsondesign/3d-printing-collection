@@ -488,9 +488,14 @@ router.get('/file/serve', (req, res) => {
         }
 
         // Set appropriate content type
-        const mimeType = mime.lookup(resolvedPath);
-        if (mimeType) {
-            res.setHeader('Content-Type', mimeType);
+        const ext = path.extname(resolvedPath).toLowerCase();
+        if (ext === '.3mf') {
+            res.setHeader('Content-Type', 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml');
+        } else {
+            const mimeType = mime.lookup(resolvedPath);
+            if (mimeType) {
+                res.setHeader('Content-Type', mimeType);
+            }
         }
 
         res.sendFile(resolvedPath);
@@ -971,6 +976,77 @@ router.post('/:id/toggle-purge-mark', (req, res) => {
             const updated = db.prepare('SELECT purge_marked_at FROM models WHERE id = ?').get(id) as { purge_marked_at: string };
             res.json({ success: true, purge_marked_at: updated.purge_marked_at });
         }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Save a screenshot captured from the 3D viewer as a model thumbnail
+router.post('/:id/save-preview-image', async (req, res) => {
+    try {
+        const modelId = parseInt(req.params.id);
+        if (isNaN(modelId)) {
+            return res.status(400).json({ error: 'Invalid model ID' });
+        }
+
+        const { imageData } = req.body;
+        if (!imageData || typeof imageData !== 'string') {
+            return res.status(400).json({ error: 'imageData is required' });
+        }
+
+        const matches = imageData.match(/^data:image\/\w+;base64,(.+)$/);
+        if (!matches) {
+            return res.status(400).json({ error: 'Invalid image data URL format' });
+        }
+        const base64Data = matches[1];
+
+        const model = db.prepare('SELECT filepath FROM models WHERE id = ?').get(modelId) as { filepath: string } | undefined;
+        if (!model) {
+            return res.status(404).json({ error: 'Model not found' });
+        }
+
+        const configResult = db.prepare('SELECT value FROM config WHERE key = ?').get('model_directory');
+        if (!configResult) {
+            return res.status(500).json({ error: 'Model directory not configured' });
+        }
+        const modelRoot = path.resolve((configResult as { value: string }).value);
+        const modelFolder = path.resolve(model.filepath);
+        if (!modelFolder.startsWith(modelRoot)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        const outputPath = path.join(modelFolder, '_preview_captured.png');
+        fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
+
+        // Upsert: update existing captured preview row rather than inserting duplicates
+        const existing = db.prepare(
+            `SELECT id, is_primary FROM model_assets WHERE model_id = ? AND filepath LIKE '%_preview_captured.png'`
+        ).get(modelId) as { id: number; is_primary: number } | undefined;
+
+        let assetId: number;
+        let isPrimary: number;
+
+        if (existing) {
+            assetId = existing.id;
+            isPrimary = existing.is_primary;
+            // Update filepath in case folder moved, ensure not hidden
+            db.prepare('UPDATE model_assets SET filepath = ?, is_hidden = 0 WHERE id = ?').run(outputPath, assetId);
+        } else {
+            // Only set as primary if no other non-hidden primary image exists
+            const hasPrimary = db.prepare(
+                `SELECT id FROM model_assets WHERE model_id = ? AND asset_type = 'image' AND is_primary = 1 AND (is_hidden = 0 OR is_hidden IS NULL)`
+            ).get(modelId);
+            isPrimary = hasPrimary ? 0 : 1;
+
+            const result = db.prepare(
+                `INSERT INTO model_assets (model_id, filepath, asset_type, is_primary, is_hidden) VALUES (?, ?, 'image', ?, 0)`
+            ).run(modelId, outputPath, isPrimary);
+            assetId = result.lastInsertRowid as number;
+        }
+
+        const asset = db.prepare('SELECT * FROM model_assets WHERE id = ?').get(assetId);
+        res.json({ success: true, asset, isPrimary: isPrimary === 1 });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

@@ -11,6 +11,7 @@ import DesignerDetailView from '../views/DesignerDetailView.vue';
 import StatsView from '../views/StatsView.vue';
 import SettingsView from '../views/SettingsView.vue';
 import PurgeView from '../views/PurgeView.vue';
+import ThumbnailsView from '../views/ThumbnailsView.vue';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -74,6 +75,11 @@ const router = createRouter({
             path: '/settings/purge',
             name: 'purge',
             component: PurgeView
+        },
+        {
+            path: '/settings/thumbnails',
+            name: 'thumbnails',
+            component: ThumbnailsView
         }
     ]
 });

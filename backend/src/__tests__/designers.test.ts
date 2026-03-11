@@ -132,13 +132,15 @@ describe('Designers Routes', () => {
 
     describe('POST /api/designers/sync', () => {
         it('requires model directory config', async () => {
+            // Remove the model_directory that seedTestData inserts
+            testDb.prepare("DELETE FROM config WHERE key = 'model_directory'").run();
             const res = await request(app).post('/api/designers/sync');
             expect(res.status).toBe(400);
             expect(res.body.error).toContain('Model directory not configured');
         });
 
         it('starts sync and returns immediately', async () => {
-            testDb.prepare("INSERT INTO config (key, value) VALUES ('model_directory', '/test/root')").run();
+            testDb.prepare("INSERT OR REPLACE INTO config (key, value) VALUES ('model_directory', '/test/root')").run();
 
             const res = await request(app).post('/api/designers/sync');
             expect(res.status).toBe(200);
@@ -146,7 +148,7 @@ describe('Designers Routes', () => {
         });
 
         it('creates designers from paid model paths', async () => {
-            testDb.prepare("INSERT INTO config (key, value) VALUES ('model_directory', '/test/root')").run();
+            testDb.prepare("INSERT OR REPLACE INTO config (key, value) VALUES ('model_directory', '/test/root')").run();
             // Add a paid model with a designer in path
             testDb.prepare(`INSERT INTO models (id, filename, filepath, category, is_paid, file_count) VALUES (?, ?, ?, ?, ?, ?)`).run(
                 10, 'Cool Model', '/test/root/Paid/DesignerX/Cool Model', 'Paid', 1, 1
@@ -165,7 +167,7 @@ describe('Designers Routes', () => {
         });
 
         it('links models from model_metadata', async () => {
-            testDb.prepare("INSERT INTO config (key, value) VALUES ('model_directory', '/test/root')").run();
+            testDb.prepare("INSERT OR REPLACE INTO config (key, value) VALUES ('model_directory', '/test/root')").run();
             // Add metadata with designer for a non-paid model
             testDb.prepare(`INSERT INTO model_metadata (model_id, designer, designer_url) VALUES (?, ?, ?)`).run(
                 1, 'MetaDesigner', 'https://example.com/profile'
@@ -182,7 +184,7 @@ describe('Designers Routes', () => {
         });
 
         it('sync completes and allows subsequent sync', async () => {
-            testDb.prepare("INSERT INTO config (key, value) VALUES ('model_directory', '/test/root')").run();
+            testDb.prepare("INSERT OR REPLACE INTO config (key, value) VALUES ('model_directory', '/test/root')").run();
 
             const first = await request(app).post('/api/designers/sync');
             expect(first.status).toBe(200);

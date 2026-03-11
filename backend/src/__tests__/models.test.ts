@@ -16,6 +16,13 @@ vi.mock('../utils/finderTags.js', () => ({
     TAG_COLORS: { PRINTED_GOOD: 'Green', PRINTED_BAD: 'Red', QUEUED: 'Blue' }
 }));
 
+// Mock fs to prevent actual disk writes in save-preview-image tests
+const { mockWriteFileSync } = vi.hoisted(() => ({ mockWriteFileSync: vi.fn() }));
+vi.mock('fs', async () => {
+    const actual = await vi.importActual<typeof import('fs')>('fs');
+    return { ...actual, default: { ...actual, writeFileSync: mockWriteFileSync } };
+});
+
 import modelsRouter from '../routes/models.js';
 import { initSchema, seedTestData } from './setup.js';
 
@@ -512,6 +519,88 @@ describe('Models Routes', () => {
 
             expect(res.status).toBe(200);
             expect(res.body.results[0].success).toBe(true);
+        });
+    });
+
+    describe('POST /api/models/:id/save-preview-image', () => {
+        // Minimal 1x1 white JPEG in base64
+        const validDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABgUEB/8QAIhAAAQMEAgMAAAAAAAAAAAAAAQIDBBEhMQUSQWH/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8Aqk1bXNe1bXNSiWGCGaRtIQfBJJ4AAyeSTk5JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ/9k=';
+
+        beforeEach(() => {
+            mockWriteFileSync.mockClear();
+        });
+
+        it('inserts asset as primary when model has no existing image', async () => {
+            // Model 3 (Test Model C) has no assets in seed data
+            const res = await request(app)
+                .post('/api/models/3/save-preview-image')
+                .set('Content-Type', 'application/json')
+                .send({ imageData: validDataUrl });
+
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(true);
+            expect(res.body.isPrimary).toBe(true);
+            expect(res.body.asset).toBeDefined();
+            expect(res.body.asset.asset_type).toBe('image');
+            expect(res.body.asset.is_primary).toBe(1);
+            expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+        });
+
+        it('inserts asset as non-primary when model already has a primary image', async () => {
+            // Model 1 already has a primary image from seed data
+            const res = await request(app)
+                .post('/api/models/1/save-preview-image')
+                .set('Content-Type', 'application/json')
+                .send({ imageData: validDataUrl });
+
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(true);
+            expect(res.body.isPrimary).toBe(false);
+            expect(res.body.asset.is_primary).toBe(0);
+        });
+
+        it('updates existing _preview_captured asset row instead of inserting duplicate', async () => {
+            // First capture
+            await request(app)
+                .post('/api/models/3/save-preview-image')
+                .send({ imageData: validDataUrl });
+
+            const countBefore = (testDb.prepare(
+                `SELECT COUNT(*) as n FROM model_assets WHERE model_id = 3 AND filepath LIKE '%_preview_captured.png'`
+            ).get() as { n: number }).n;
+
+            // Second capture
+            await request(app)
+                .post('/api/models/3/save-preview-image')
+                .send({ imageData: validDataUrl });
+
+            const countAfter = (testDb.prepare(
+                `SELECT COUNT(*) as n FROM model_assets WHERE model_id = 3 AND filepath LIKE '%_preview_captured.png'`
+            ).get() as { n: number }).n;
+
+            expect(countBefore).toBe(1);
+            expect(countAfter).toBe(1);  // no duplicate row
+        });
+
+        it('returns 404 for unknown model', async () => {
+            const res = await request(app)
+                .post('/api/models/999/save-preview-image')
+                .send({ imageData: validDataUrl });
+            expect(res.status).toBe(404);
+        });
+
+        it('returns 400 when imageData is missing', async () => {
+            const res = await request(app)
+                .post('/api/models/3/save-preview-image')
+                .send({});
+            expect(res.status).toBe(400);
+        });
+
+        it('returns 400 when imageData is not a valid data URL', async () => {
+            const res = await request(app)
+                .post('/api/models/3/save-preview-image')
+                .send({ imageData: 'not-a-data-url' });
+            expect(res.status).toBe(400);
         });
     });
 });
