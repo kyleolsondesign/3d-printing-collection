@@ -867,4 +867,236 @@ router.get('/stats', (req, res) => {
     }
 });
 
+// ─── Paid Models Categorization ───────────────────────────────────────────────
+
+// GET /api/ingestion/paid-uncategorized — paginated paid models still needing a real category
+router.get('/paid-uncategorized', (req, res) => {
+    try {
+        const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+        const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '100'), 10)));
+        const search = String(req.query.search || '').toLowerCase().trim();
+        const offset = (page - 1) * limit;
+
+        const baseWhere = `
+            WHERE m.is_paid = 1
+              AND (m.category = 'Uncategorized' OR m.category = 'Paid')
+              AND m.deleted_at IS NULL
+        `;
+        const searchClause = search ? `AND (LOWER(m.filename) LIKE ? OR LOWER(d.name) LIKE ?)` : '';
+        const searchParams: string[] = search ? [`%${search}%`, `%${search}%`] : [];
+
+        const { total } = db.prepare(`
+            SELECT COUNT(*) as total
+            FROM models m
+            LEFT JOIN designers d ON m.designer_id = d.id
+            ${baseWhere} ${searchClause}
+        `).get(...searchParams) as { total: number };
+
+        const designers = (db.prepare(`
+            SELECT DISTINCT d.name
+            FROM models m
+            LEFT JOIN designers d ON m.designer_id = d.id
+            ${baseWhere} ${searchClause}
+            AND d.name IS NOT NULL
+            ORDER BY d.name
+        `).all(...searchParams) as Array<{ name: string }>).map(r => r.name);
+
+        const rows = db.prepare(`
+            SELECT m.id, m.filename, m.filepath, m.category,
+                   d.name as designer_name,
+                   ma.filepath as primary_image
+            FROM models m
+            LEFT JOIN designers d ON m.designer_id = d.id
+            LEFT JOIN model_assets ma ON ma.model_id = m.id AND ma.is_primary = 1 AND (ma.is_hidden IS NULL OR ma.is_hidden = 0) AND ma.asset_type = 'image'
+            ${baseWhere} ${searchClause}
+            ORDER BY m.filename
+            LIMIT ? OFFSET ?
+        `).all(...searchParams, limit, offset) as Array<{ id: number; filename: string; filepath: string; category: string; designer_name: string | null; primary_image: string | null }>;
+
+        const items = rows.map(item => {
+            const fileNames = (db.prepare(
+                'SELECT filename FROM model_files WHERE model_id = ? LIMIT 10'
+            ).all(item.id) as Array<{ filename: string }>).map(r => r.filename);
+
+            return {
+                model_id: item.id,
+                model_name: item.filename,
+                model_filepath: item.filepath,
+                current_category: item.category,
+                designer: item.designer_name,
+                primary_image: item.primary_image,
+                model_file_names: fileNames,
+            };
+        });
+
+        res.json({
+            items,
+            total,
+            page,
+            totalPages: Math.max(1, Math.ceil(total / limit)),
+            designers,
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Progress state for paid categorization (separate from download import progress)
+let paidCategorizationProgress = {
+    active: false,
+    totalItems: 0,
+    processedItems: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+    status: '' as string
+};
+
+// GET /api/ingestion/categorize-paid/status — poll AI categorization progress
+router.get('/categorize-paid/status', (_req, res) => {
+    res.json(paidCategorizationProgress);
+});
+
+// POST /api/ingestion/categorize-paid — AI-only categorization for paid uncategorized models
+router.post('/categorize-paid', async (req, res) => {
+    if (paidCategorizationProgress.active) {
+        return res.status(409).json({ error: 'AI categorization already in progress' });
+    }
+
+    const apiKey = getConfig('anthropic_api_key');
+    if (!apiKey) {
+        return res.status(400).json({ error: 'Anthropic API key not configured. AI categorization is required for paid models.' });
+    }
+
+    try {
+        const paidItems = db.prepare(`
+            SELECT m.id, m.filename
+            FROM models m
+            WHERE m.is_paid = 1
+              AND (m.category = 'Uncategorized' OR m.category = 'Paid')
+              AND m.deleted_at IS NULL
+            ORDER BY m.filename
+        `).all() as Array<{ id: number; filename: string }>;
+
+        if (paidItems.length === 0) {
+            return res.json({ items: [], batches: 0, aiCategorized: 0 });
+        }
+
+        const categories = getExistingCategories().filter(c => c !== 'Uncategorized' && c !== 'Paid');
+
+        const BATCH_SIZE = 15;
+        const batches: Array<typeof paidItems> = [];
+        for (let i = 0; i < paidItems.length; i += BATCH_SIZE) {
+            batches.push(paidItems.slice(i, i + BATCH_SIZE));
+        }
+
+        paidCategorizationProgress = {
+            active: true,
+            totalItems: paidItems.length,
+            processedItems: 0,
+            currentBatch: 0,
+            totalBatches: batches.length,
+            status: `Starting AI categorization (${paidItems.length} paid models in ${batches.length} batch${batches.length !== 1 ? 'es' : ''})...`
+        };
+
+        const allResults = new Map<string, { category: string; confidence: 'high' | 'medium' | 'low' }>();
+
+        for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+            const batch = batches[batchIdx];
+            paidCategorizationProgress.currentBatch = batchIdx + 1;
+            paidCategorizationProgress.status = `Processing batch ${batchIdx + 1} of ${batches.length}...`;
+
+            try {
+                const fileNamesMap = new Map<number, string[]>();
+                for (const item of batch) {
+                    const fns = (db.prepare('SELECT filename FROM model_files WHERE model_id = ? LIMIT 10').all(item.id) as Array<{ filename: string }>).map(r => r.filename);
+                    fileNamesMap.set(item.id, fns);
+                }
+
+                const batchResults = await suggestCategoriesWithClaude(
+                    batch.map(item => ({
+                        identifier: String(item.id),
+                        name: item.filename,
+                        modelFileNames: fileNamesMap.get(item.id) || [],
+                    })),
+                    categories,
+                    apiKey
+                );
+
+                for (const [id, suggestion] of batchResults) {
+                    allResults.set(id, suggestion);
+                }
+            } catch (err) {
+                console.error(`[AI Categorize Paid] Batch ${batchIdx + 1} failed:`, err instanceof Error ? err.message : err);
+            }
+
+            paidCategorizationProgress.processedItems += batch.length;
+        }
+
+        const items = paidItems.map(item => {
+            const result = allResults.get(String(item.id));
+            return {
+                model_id: item.id,
+                model_name: item.filename,
+                suggested_category: result?.category || null,
+                confidence: result?.confidence || null,
+            };
+        });
+
+        paidCategorizationProgress = {
+            active: false,
+            totalItems: paidItems.length,
+            processedItems: paidItems.length,
+            currentBatch: batches.length,
+            totalBatches: batches.length,
+            status: `Complete: ${allResults.size} of ${paidItems.length} categorized by AI`,
+        };
+
+        res.json({ items, batches: batches.length, aiCategorized: allResults.size });
+    } catch (error) {
+        paidCategorizationProgress.active = false;
+        paidCategorizationProgress.status = 'Failed';
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// POST /api/ingestion/apply-paid-categories — DB-only category update, no stats recorded
+router.post('/apply-paid-categories', (req, res) => {
+    try {
+        const { assignments } = req.body;
+        if (!Array.isArray(assignments) || assignments.length === 0) {
+            return res.status(400).json({ error: 'assignments must be a non-empty array' });
+        }
+
+        const results: Array<{ model_id: number; success: boolean; error?: string }> = [];
+
+        const stmt = db.prepare('UPDATE models SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_paid = 1');
+
+        for (const { model_id, category } of assignments) {
+            if (!model_id || !category) {
+                results.push({ model_id, success: false, error: 'Missing model_id or category' });
+                continue;
+            }
+            try {
+                const info = stmt.run(category.trim(), model_id);
+                if (info.changes === 0) {
+                    results.push({ model_id, success: false, error: 'Model not found or not a paid model' });
+                } else {
+                    results.push({ model_id, success: true });
+                }
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                results.push({ model_id, success: false, error: message });
+            }
+        }
+
+        const succeeded = results.filter(r => r.success).length;
+        res.json({ results, succeeded, total: assignments.length });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 export default router;

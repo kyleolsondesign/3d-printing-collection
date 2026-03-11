@@ -223,7 +223,7 @@ export interface WatcherStatus {
 export const systemApi = {
     getConfig: () => api.get('/system/config'),
     setConfig: (key: string, value: string) => api.post('/system/config', { key, value }),
-    scan: (modelDirectory?: string, mode: ScanMode = 'full') => api.post('/system/scan', { modelDirectory, mode }),
+    scan: (modelDirectory?: string, mode: ScanMode = 'full', scope: 'all' | 'paid' = 'all') => api.post('/system/scan', { modelDirectory, mode, scope }),
     getScanStatus: () => api.get('/system/scan/status'),
     getCategories: () => api.get('/system/categories'),
     getStats: () => api.get('/system/stats'),
@@ -271,7 +271,12 @@ export const ingestionApi = {
     getImportStatus: () => api.get('/ingestion/import/status'),
     getPreviewImageUrl: (filePath: string) =>
         `/api/ingestion/preview-image?path=${encodeURIComponent(filePath)}`,
-    getImportStats: () => api.get('/ingestion/stats')
+    getImportStats: () => api.get('/ingestion/stats'),
+    getPaidUncategorized: (page = 1, limit = 100, search = '') => api.get('/ingestion/paid-uncategorized', { params: { page, limit, search: search || undefined } }),
+    categorizePaid: () => api.post('/ingestion/categorize-paid', {}, { timeout: 300000 }),
+    getCategorizePaidStatus: () => api.get('/ingestion/categorize-paid/status'),
+    applyPaidCategories: (assignments: Array<{ model_id: number; category: string }>) =>
+        api.post('/ingestion/apply-paid-categories', { assignments })
 };
 
 // Designers API

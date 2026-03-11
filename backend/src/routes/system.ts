@@ -76,6 +76,15 @@ router.post('/scan', async (req, res) => {
             return res.status(400).json({ error: 'Invalid scan mode. Must be: full, full_sync, or add_only' });
         }
 
+        // Get scan scope (default to 'all')
+        const scope: 'all' | 'paid' = req.body.scope || 'all';
+        if (!['all', 'paid'].includes(scope)) {
+            return res.status(400).json({ error: 'Invalid scope. Must be: all or paid' });
+        }
+        if (scope === 'paid' && mode === 'full') {
+            return res.status(400).json({ error: 'Full rebuild is not supported with paid-only scope' });
+        }
+
         // Save model directory to config if provided
         if (req.body.modelDirectory) {
             db.prepare(`
@@ -86,7 +95,7 @@ router.post('/scan', async (req, res) => {
         }
 
         // Start scan (async)
-        scanner.scanDirectory(modelDirectory, mode).catch(error => {
+        scanner.scanDirectory(modelDirectory, mode, scope).catch(error => {
             console.error('Scan error:', error);
         });
 
@@ -97,7 +106,7 @@ router.post('/scan', async (req, res) => {
             });
         }
 
-        res.json({ success: true, message: `Scan started (mode: ${mode})` });
+        res.json({ success: true, message: `Scan started (mode: ${mode}, scope: ${scope})` });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

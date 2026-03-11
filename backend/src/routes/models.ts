@@ -734,13 +734,21 @@ router.post('/bulk-reassign-category', async (req, res) => {
         const results: Array<{ id: number; success: boolean; error?: string; newFilepath?: string }> = [];
 
         for (const modelId of model_ids) {
-            const model = db.prepare('SELECT * FROM models WHERE id = ? AND deleted_at IS NULL').get(modelId) as { id: number; filepath: string; category: string } | undefined;
+            const model = db.prepare('SELECT id, filepath, category, is_paid FROM models WHERE id = ? AND deleted_at IS NULL').get(modelId) as { id: number; filepath: string; category: string; is_paid: number } | undefined;
             if (!model) {
                 results.push({ id: modelId, success: false, error: 'Model not found' });
                 continue;
             }
 
             if (model.category === category) {
+                results.push({ id: modelId, success: true, newFilepath: model.filepath });
+                continue;
+            }
+
+            // Paid models stay in their Paid/ folder structure — DB-only category update
+            if (model.is_paid) {
+                db.prepare('UPDATE models SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+                    .run(category, modelId);
                 results.push({ id: modelId, success: true, newFilepath: model.filepath });
                 continue;
             }

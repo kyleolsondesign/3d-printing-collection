@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type MockInstance } from 'vitest';
+import fs from 'fs';
 
 // Create DB in hoisted scope so vi.mock factory can reference it
 const { testDb } = vi.hoisted(() => {
@@ -61,12 +62,49 @@ describe('Scanner.selectPrimaryImage', () => {
         expect(gif.is_primary).toBe(1);
     });
 
-    it('selects first image when no gif and no preference', () => {
+    it('falls back to first image when no gif, no preference, and files cannot be stat\'d', () => {
         testDb.prepare('DELETE FROM model_assets WHERE id = 3').run(); // remove gif
         callSelectPrimaryImage(1);
 
+        // All stat calls fail (paths don't exist on disk), so falls back to candidateImages[0]
         const img1 = testDb.prepare('SELECT is_primary FROM model_assets WHERE id = 1').get() as any;
         expect(img1.is_primary).toBe(1);
+    });
+
+    it('selects oldest image by birthtime when no gif and no preference', () => {
+        testDb.prepare('DELETE FROM model_assets WHERE id = 3').run(); // remove gif
+        const statSyncSpy = vi.spyOn(fs, 'statSync') as MockInstance;
+        statSyncSpy.mockImplementation((p: unknown) => {
+            if (p === '/test/models/a/image1.jpg') return { birthtimeMs: 2000 } as ReturnType<typeof fs.statSync>;
+            if (p === '/test/models/a/image2.jpg') return { birthtimeMs: 1000 } as ReturnType<typeof fs.statSync>;
+            throw new Error('ENOENT');
+        });
+
+        callSelectPrimaryImage(1);
+
+        statSyncSpy.mockRestore();
+        // image2.jpg has an older birthtime so it should be primary
+        const img2 = testDb.prepare('SELECT is_primary FROM model_assets WHERE id = 2').get() as any;
+        expect(img2.is_primary).toBe(1);
+    });
+
+    it('prefers real images over extracted images', () => {
+        testDb.prepare('DELETE FROM model_assets WHERE id = 3').run(); // remove gif
+        testDb.prepare(`INSERT INTO model_assets (id, model_id, filepath, asset_type, is_primary, is_hidden) VALUES (?, ?, ?, ?, ?, ?)`).run(4, 1, '/test/models/a/_extracted_archive.jpg', 'image', 0, 0);
+        callSelectPrimaryImage(1);
+
+        // extracted image should NOT be primary when real images exist
+        const extracted = testDb.prepare('SELECT is_primary FROM model_assets WHERE id = 4').get() as any;
+        expect(extracted.is_primary).toBe(0);
+    });
+
+    it('uses extracted image as fallback when no real images exist', () => {
+        testDb.prepare('DELETE FROM model_assets WHERE model_id = 1').run(); // remove all
+        testDb.prepare(`INSERT INTO model_assets (id, model_id, filepath, asset_type, is_primary, is_hidden) VALUES (?, ?, ?, ?, ?, ?)`).run(4, 1, '/test/models/a/_extracted_archive.jpg', 'image', 0, 0);
+        callSelectPrimaryImage(1);
+
+        const extracted = testDb.prepare('SELECT is_primary FROM model_assets WHERE id = 4').get() as any;
+        expect(extracted.is_primary).toBe(1);
     });
 
     it('does nothing when model has no images', () => {

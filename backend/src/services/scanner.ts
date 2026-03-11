@@ -50,6 +50,7 @@ interface FolderData {
 class Scanner {
     private scanning: boolean = false;
     private scanMode: ScanMode = 'full';
+    private scanScope: 'all' | 'paid' = 'all';
     private progress: ScanProgress = {
         totalFiles: 0,
         processedFiles: 0,
@@ -80,13 +81,14 @@ class Scanner {
      *                Preserves favorites, print history, and queue (orphans them if model deleted)
      * - 'add_only': Only adds new models that don't exist, never modifies or deletes
      */
-    async scanDirectory(modelDirectory: string, mode: ScanMode = 'full'): Promise<ScanProgress> {
+    async scanDirectory(modelDirectory: string, mode: ScanMode = 'full', scope: 'all' | 'paid' = 'all'): Promise<ScanProgress> {
         if (this.scanning) {
             throw new Error('Scan already in progress');
         }
 
         this.scanning = true;
         this.scanMode = mode;
+        this.scanScope = scope;
         this.progress = {
             totalFiles: 0,
             processedFiles: 0,
@@ -131,15 +133,21 @@ class Scanner {
             // Only clear data in 'full' mode (destructive)
             if (mode === 'full') {
                 this.clearExistingModels();
-            } else if (mode === 'full_sync') {
-                // Clear loose_files table - we'll rebuild it
+            } else if (mode === 'full_sync' && scope === 'all') {
+                // Clear loose_files table - we'll rebuild it (skip for paid-only scans)
                 db.prepare('DELETE FROM loose_files').run();
             }
 
             // Phase 1: Recursively scan and collect model files by folder
             // Discovery is very fast (~1% of total time)
             const discoveryStart = Date.now();
-            await this.scanDirectoryRecursive(modelDirectory, modelDirectory);
+            const discoveryRoot = scope === 'paid'
+                ? path.join(modelDirectory, 'Paid')
+                : modelDirectory;
+            if (scope === 'paid' && !fs.existsSync(discoveryRoot)) {
+                throw new Error(`Paid folder does not exist: ${discoveryRoot}`);
+            }
+            await this.scanDirectoryRecursive(discoveryRoot, modelDirectory);
 
             // Set totalFolders for progress tracking
             this.progress.totalFolders = this.foldersWithModels.size;
@@ -281,6 +289,7 @@ class Scanner {
             );
 
             const modelId = Number(result.lastInsertRowid);
+            if (isPaid) this.ensurePaidTag(modelId);
 
             // Insert model files
             const insertFile = db.prepare(`
@@ -647,8 +656,9 @@ class Scanner {
      * Preserves all data including favorites, print history, and queue.
      */
     private removeOrphanedModels(): void {
-        // Only check non-deleted models
-        const models = db.prepare('SELECT id, filepath FROM models WHERE deleted_at IS NULL').all() as Array<{ id: number; filepath: string }>;
+        // When scope is 'paid', only check paid models to avoid soft-deleting non-paid models
+        const scopeFilter = this.scanScope === 'paid' ? ' AND is_paid = 1' : '';
+        const models = db.prepare(`SELECT id, filepath FROM models WHERE deleted_at IS NULL${scopeFilter}`).all() as Array<{ id: number; filepath: string }>;
 
         for (const model of models) {
             // Check if the folder still exists
@@ -661,7 +671,7 @@ class Scanner {
         }
 
         // Also restore any previously deleted models whose folders now exist again
-        const deletedModels = db.prepare('SELECT id, filepath FROM models WHERE deleted_at IS NOT NULL').all() as Array<{ id: number; filepath: string }>;
+        const deletedModels = db.prepare(`SELECT id, filepath FROM models WHERE deleted_at IS NOT NULL${scopeFilter}`).all() as Array<{ id: number; filepath: string }>;
 
         for (const model of deletedModels) {
             if (fs.existsSync(model.filepath) && fs.statSync(model.filepath).isDirectory()) {
@@ -913,7 +923,7 @@ class Scanner {
                 let previousPrimaryFilepath: string | undefined;
 
                 // Check if model already exists (for non-full modes)
-                const existingModel = db.prepare('SELECT id FROM models WHERE filepath = ?').get(folderPath) as { id: number } | undefined;
+                const existingModel = db.prepare('SELECT id, category, is_paid FROM models WHERE filepath = ?').get(folderPath) as { id: number; category: string | null; is_paid: number } | undefined;
 
                 if (existingModel) {
                     // Model exists
@@ -925,6 +935,13 @@ class Scanner {
                     // full_sync mode: Update existing model
                     modelId = existingModel.id;
 
+                    // For paid models, preserve the user-assigned category.
+                    // Only migrate the legacy 'Paid' category → 'Uncategorized'.
+                    let effectiveCategory = category;
+                    if (isPaid && existingModel.category && existingModel.category !== 'Paid') {
+                        effectiveCategory = existingModel.category;
+                    }
+
                     // Update model record
                     db.prepare(`
                         UPDATE models SET
@@ -933,7 +950,7 @@ class Scanner {
                         WHERE id = ?
                     `).run(
                         cleanedName,
-                        category,
+                        effectiveCategory,
                         isPaid ? 1 : 0,
                         isOriginal ? 1 : 0,
                         folderData.files.length,
@@ -941,6 +958,8 @@ class Scanner {
                         dateCreated,
                         modelId
                     );
+
+                    if (isPaid) this.ensurePaidTag(modelId);
 
                     // Save manually-selected primary image before clearing assets
                     const existingPrimary = db.prepare(
@@ -972,6 +991,7 @@ class Scanner {
                     );
 
                     modelId = Number(result.lastInsertRowid);
+                    if (isPaid) this.ensurePaidTag(modelId);
                     this.newModelIds.add(modelId);
                     this.progress.modelsFound++;
                 }
@@ -1457,7 +1477,11 @@ class Scanner {
 
     /**
      * Select the best primary image for a model from its indexed assets.
-     * Prefers .gif images, then falls back to the first image found.
+     * Priority:
+     * 1. Previously manually-selected primary (preserved across rescans)
+     * 2. .gif images (preferred for animated previews)
+     * 3. Oldest non-extracted image by file birthtime (creation date on disk)
+     * 4. Extracted images (fallback when no real images exist)
      */
     private selectPrimaryImage(modelId: number, preferredFilepath?: string): void {
         const images = db.prepare(`
@@ -1477,11 +1501,33 @@ class Scanner {
             }
         }
 
-        // Prefer .gif images as primary
-        const gifImage = images.find(img => path.extname(img.filepath).toLowerCase() === '.gif');
-        const primaryId = gifImage ? gifImage.id : images[0].id;
+        const isExtracted = (filepath: string) => path.basename(filepath).includes('_extracted_');
+        const realImages = images.filter(img => !isExtracted(img.filepath));
+        const candidateImages = realImages.length > 0 ? realImages : images;
 
-        db.prepare('UPDATE model_assets SET is_primary = 1 WHERE id = ?').run(primaryId);
+        // Prefer .gif images as primary
+        const gifImage = candidateImages.find(img => path.extname(img.filepath).toLowerCase() === '.gif');
+        if (gifImage) {
+            db.prepare('UPDATE model_assets SET is_primary = 1 WHERE id = ?').run(gifImage.id);
+            return;
+        }
+
+        // Default to the oldest image by file birthtime (creation date on disk)
+        let oldestImage = candidateImages[0];
+        let oldestTime = Infinity;
+        for (const image of candidateImages) {
+            try {
+                const birthtime = fs.statSync(image.filepath).birthtimeMs;
+                if (birthtime < oldestTime) {
+                    oldestTime = birthtime;
+                    oldestImage = image;
+                }
+            } catch {
+                // Skip files that can't be stat'd
+            }
+        }
+
+        db.prepare('UPDATE model_assets SET is_primary = 1 WHERE id = ?').run(oldestImage.id);
     }
 
     private hasPrimaryImage(modelId: number): boolean {
@@ -1532,6 +1578,20 @@ class Scanner {
         } catch (error) {
             // Silently continue if tag reading fails
         }
+    }
+
+    /**
+     * Idempotently add the "Paid" tag to a model.
+     * Called for any model found under the Paid/ folder structure.
+     */
+    private ensurePaidTag(modelId: number): void {
+        try {
+            db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)').run('Paid');
+            const tagRow = db.prepare('SELECT id FROM tags WHERE name = ?').get('Paid') as { id: number } | undefined;
+            if (tagRow) {
+                db.prepare('INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)').run(modelId, tagRow.id);
+            }
+        } catch { /* ignore */ }
     }
 
     private async extractImageFromArchives(modelId: number, folderPath: string): Promise<void> {
@@ -1932,8 +1992,9 @@ class Scanner {
         }
 
         // Check for special categories
+        // Paid is a tag, not a category — paid models default to 'Uncategorized'
         if (parts.includes('Paid')) {
-            return 'Paid';
+            return 'Uncategorized';
         }
         if (parts.includes('Original Creations')) {
             return 'Original Creations';

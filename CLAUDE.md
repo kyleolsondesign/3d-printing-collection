@@ -329,6 +329,7 @@ For models without standalone images, the scanner automatically extracts images 
 - **Custom tags**: Users can create and assign tags to models; editable in the model details modal with autocomplete; bulk tag action in browse selection mode
 - **Designer browsing**: Dedicated `/designers` view showing designers grouped by model count; "Sync Designers" auto-extracts designer names from `Paid/{designer}/` folder structure and PDF metadata; CRUD with profile URL and notes fields
 - **Batch category reassignment**: "Move" action in browse selection mode moves selected model folders on disk to a new category and updates all database paths
+- **Bulk recategorization**: "Recategorize" action in browse selection mode opens a modal to reassign categories. For regular models, the folder is physically moved on disk and the DB path + category are updated. For **Paid models** (`is_paid = 1`), only the DB `category` field is updated — the folder is never moved, since Paid models must stay under their `Paid/{designer}/` structure
 
 ### Date Tracking & Sorting
 - **Date tracking**: Models track earliest file dates from all files in folder

@@ -108,22 +108,11 @@
                                                     type="text"
                                                     :value="row.chosen_category"
                                                     @input="onRowCategoryInput(row, ($event.target as HTMLInputElement).value)"
-                                                    @focus="activeDropdownRowId = row.model_id; rowDropdownTyped = false"
+                                                    @focus="onRowInputFocus(row, $event)"
                                                     @blur="onRowCategoryBlur"
                                                     @keydown.escape="activeDropdownRowId = null"
                                                     @keydown.enter="activeDropdownRowId = null"
                                                 />
-                                                <div v-if="activeDropdownRowId === row.model_id" class="category-dropdown">
-                                                    <button
-                                                        v-for="cat in getCategoryOptions(row)"
-                                                        :key="cat"
-                                                        class="category-option"
-                                                        @mousedown.prevent="selectRowCategory(row, cat)"
-                                                    >
-                                                        <span class="cat-name">{{ cat }}</span>
-                                                        <span v-if="getDebugScore(row, cat)" class="cat-score">{{ getDebugScore(row, cat) }}%</span>
-                                                    </button>
-                                                </div>
                                             </div>
                                             <button
                                                 class="debug-btn"
@@ -137,7 +126,6 @@
                                             <div class="debug-panel-title">Score breakdown</div>
                                             <div v-for="entry in row.debug_scores" :key="entry.category" class="debug-row">
                                                 <span class="debug-cat">{{ entry.category }}</span>
-                                                <span class="debug-source" :data-source="entry.source">{{ entry.source }}</span>
                                                 <div class="debug-bar-wrap">
                                                     <div class="debug-bar" :style="{ width: entry.score + '%' }"></div>
                                                 </div>
@@ -194,6 +182,29 @@
                 </div>
             </div>
         </div>
+
+        <!-- Row category dropdown — teleported to body to escape scroll container clipping -->
+        <Teleport to="body">
+            <div
+                v-if="activeRow && activeInputRect"
+                class="category-dropdown-fixed"
+                :style="{
+                    top: (activeInputRect.bottom + 2) + 'px',
+                    left: activeInputRect.left + 'px',
+                    minWidth: Math.max(activeInputRect.width, 200) + 'px',
+                }"
+            >
+                <button
+                    v-for="cat in getCategoryOptions(activeRow)"
+                    :key="cat"
+                    class="category-option"
+                    @mousedown.prevent="selectRowCategory(activeRow!, cat)"
+                >
+                    <span class="cat-name">{{ cat }}</span>
+                    <span v-if="getDebugScore(activeRow, cat)" class="cat-score">{{ getDebugScore(activeRow, cat) }}%</span>
+                </button>
+            </div>
+        </Teleport>
     </Teleport>
 </template>
 
@@ -238,7 +249,10 @@ const applyAllCategory = ref('');
 const showApplyAllDropdown = ref(false);
 const applyAllTyped = ref(false);
 const activeDropdownRowId = ref<number | null>(null);
+const activeInputRect = ref<DOMRect | null>(null);
 const rowDropdownTyped = ref(false);
+
+const activeRow = computed(() => rows.value.find(r => r.model_id === activeDropdownRowId.value) ?? null);
 
 const categories = computed(() => store.categories.map(c => c.category));
 
@@ -310,8 +324,14 @@ function onRowCategoryInput(row: RecategorizationRow, value: string) {
     activeDropdownRowId.value = row.model_id;
 }
 
+function onRowInputFocus(row: RecategorizationRow, event: FocusEvent) {
+    activeDropdownRowId.value = row.model_id;
+    rowDropdownTyped.value = false;
+    activeInputRect.value = (event.target as HTMLElement).getBoundingClientRect();
+}
+
 function onRowCategoryBlur() {
-    setTimeout(() => { activeDropdownRowId.value = null; }, 150);
+    setTimeout(() => { activeDropdownRowId.value = null; activeInputRect.value = null; }, 150);
 }
 
 function selectRowCategory(row: RecategorizationRow, cat: string) {
@@ -405,9 +425,9 @@ onMounted(() => {
 }
 
 .recategorize-modal {
-    background: var(--bg-primary);
+    background: var(--bg-surface);
     border-radius: 12px;
-    width: min(900px, 95vw);
+    width: 90vw;
     max-height: 85vh;
     display: flex;
     flex-direction: column;
@@ -432,8 +452,9 @@ onMounted(() => {
     align-items: center;
     justify-content: space-between;
     padding: 20px 24px 16px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-default);
     flex-shrink: 0;
+    background: var(--bg-surface);
 }
 
 .header-left {
@@ -450,7 +471,7 @@ onMounted(() => {
 }
 
 .count-badge {
-    background: var(--bg-tertiary);
+    background: var(--bg-elevated);
     color: var(--text-secondary);
     font-size: 0.75rem;
     padding: 2px 8px;
@@ -468,7 +489,7 @@ onMounted(() => {
     align-items: center;
 }
 
-.close-btn:hover { color: var(--text-primary); background: var(--bg-secondary); }
+.close-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
 
 /* Loading */
 .loading-state {
@@ -484,8 +505,8 @@ onMounted(() => {
 .spinner {
     width: 20px;
     height: 20px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
+    border: 2px solid var(--border-default);
+    border-top-color: var(--accent-primary);
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
 }
@@ -504,8 +525,8 @@ onMounted(() => {
     align-items: center;
     gap: 10px;
     padding: 12px 24px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
     flex-shrink: 0;
 }
 
@@ -516,8 +537,8 @@ onMounted(() => {
 }
 
 .apply-all-btn {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
     color: var(--text-primary);
     padding: 5px 12px;
     border-radius: 6px;
@@ -534,18 +555,20 @@ onMounted(() => {
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+    background: var(--bg-surface);
 }
 
 .rows-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
+    background: var(--bg-surface);
 }
 
 .rows-table thead {
     position: sticky;
     top: 0;
-    background: var(--bg-secondary);
+    background: var(--bg-elevated);
     z-index: 1;
 }
 
@@ -557,19 +580,19 @@ onMounted(() => {
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-default);
 }
 
 .rows-table td {
     padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-default);
     vertical-align: middle;
 }
 
-.col-check { width: 36px; }
-.col-model { width: 280px; }
-.col-current { width: 140px; }
-.col-new { width: auto; }
+.col-check { width: 40px; }
+.col-model { width: 50%; }
+.col-current { width: 18%; min-width: 120px; }
+.col-new { width: 32%; min-width: 200px; }
 
 .row-excluded td { opacity: 0.4; }
 .row-changed td { background: rgba(var(--accent-rgb, 99, 102, 241), 0.04); }
@@ -595,7 +618,7 @@ onMounted(() => {
     align-items: center;
     justify-content: center;
     font-size: 1.2rem;
-    background: var(--bg-tertiary);
+    background: var(--bg-elevated);
     border-radius: 4px;
     flex-shrink: 0;
 }
@@ -640,22 +663,22 @@ onMounted(() => {
 .category-input {
     width: 100%;
     padding: 5px 8px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-default);
     border-radius: 6px;
-    background: var(--bg-primary);
+    background: var(--bg-surface);
     color: var(--text-primary);
     font-size: 0.85rem;
 }
 
-.category-input:focus { outline: none; border-color: var(--accent); }
+.category-input:focus { outline: none; border-color: var(--accent-primary); }
 
 .category-dropdown {
     position: absolute;
     top: calc(100% + 2px);
     left: 0;
     right: 0;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
     border-radius: 6px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.2);
     z-index: 100;
@@ -667,6 +690,7 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     width: 100%;
     padding: 6px 10px;
     background: none;
@@ -678,15 +702,16 @@ onMounted(() => {
 }
 
 .category-option:hover { background: var(--bg-hover); }
-.cat-score { color: var(--text-tertiary); font-size: 0.75rem; }
+.cat-name { flex: 1; white-space: nowrap; }
+.cat-score { color: var(--text-tertiary); font-size: 0.75rem; flex-shrink: 0; }
 
 /* Debug button */
 .debug-btn {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    border: 1px solid var(--border);
-    background: var(--bg-tertiary);
+    border: 1px solid var(--border-default);
+    background: var(--bg-elevated);
     color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.7rem;
@@ -698,14 +723,14 @@ onMounted(() => {
     padding: 0;
 }
 
-.debug-btn:hover, .debug-btn.active { background: var(--bg-hover); color: var(--accent); border-color: var(--accent); }
+.debug-btn:hover, .debug-btn.active { background: var(--bg-hover); color: var(--accent-primary); border-color: var(--accent-primary); }
 
 /* Debug panel */
 .debug-panel {
     margin-top: 6px;
     padding: 8px 10px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
     border-radius: 6px;
     font-size: 0.75rem;
 }
@@ -714,7 +739,7 @@ onMounted(() => {
 
 .debug-row {
     display: grid;
-    grid-template-columns: 120px 50px 1fr 36px;
+    grid-template-columns: 140px 1fr 36px;
     align-items: center;
     gap: 6px;
     padding: 2px 0;
@@ -722,24 +747,8 @@ onMounted(() => {
 
 .debug-cat { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
 
-.debug-source {
-    font-size: 0.65rem;
-    font-weight: 600;
-    padding: 1px 5px;
-    border-radius: 3px;
-    text-transform: uppercase;
-    text-align: center;
-}
-
-.debug-source[data-source="exact"] { background: #d1fae5; color: #065f46; }
-.debug-source[data-source="name"] { background: #dbeafe; color: #1e40af; }
-.debug-source[data-source="files"] { background: #ede9fe; color: #5b21b6; }
-.debug-source[data-source="hint"] { background: #fed7aa; color: #92400e; }
-.debug-source[data-source="tags"] { background: #ccfbf1; color: #134e4a; }
-.debug-source[data-source="text"] { background: var(--bg-tertiary); color: var(--text-secondary); }
-
-.debug-bar-wrap { background: var(--border); border-radius: 2px; height: 4px; overflow: hidden; }
-.debug-bar { height: 100%; background: var(--accent); border-radius: 2px; }
+.debug-bar-wrap { background: var(--border-default); border-radius: 2px; height: 4px; overflow: hidden; }
+.debug-bar { height: 100%; background: var(--accent-primary); border-radius: 2px; }
 .debug-pct { text-align: right; color: var(--text-secondary); }
 
 /* Apply results */
@@ -750,6 +759,7 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    background: var(--bg-surface);
 }
 
 .result-row {
@@ -773,8 +783,9 @@ onMounted(() => {
     align-items: center;
     justify-content: space-between;
     padding: 16px 24px;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--border-default);
     flex-shrink: 0;
+    background: var(--bg-surface);
 }
 
 .footer-right {
@@ -788,12 +799,18 @@ onMounted(() => {
     align-items: center;
     gap: 6px;
     padding: 7px 14px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
     border-radius: 6px;
     color: var(--text-primary);
     cursor: pointer;
     font-size: 0.875rem;
+}
+
+.ai-btn :deep(svg) {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
 }
 
 .ai-btn:hover:not(:disabled) { background: var(--bg-hover); }
@@ -802,14 +819,14 @@ onMounted(() => {
 .btn-ghost {
     padding: 7px 16px;
     background: none;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-default);
     border-radius: 6px;
     color: var(--text-primary);
     cursor: pointer;
     font-size: 0.875rem;
 }
 
-.btn-ghost:hover:not(:disabled) { background: var(--bg-secondary); }
+.btn-ghost:hover:not(:disabled) { background: var(--bg-elevated); }
 .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
@@ -817,7 +834,7 @@ onMounted(() => {
     align-items: center;
     gap: 6px;
     padding: 7px 16px;
-    background: var(--accent);
+    background: var(--accent-primary);
     border: none;
     border-radius: 6px;
     color: white;
@@ -828,4 +845,18 @@ onMounted(() => {
 
 .btn-primary:hover:not(:disabled) { opacity: 0.9; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+
+<style>
+/* Teleported row dropdown — not scoped so it renders correctly at body level */
+.category-dropdown-fixed {
+    position: fixed;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    z-index: 9999;
+    max-height: 180px;
+    overflow-y: auto;
+}
 </style>

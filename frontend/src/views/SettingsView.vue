@@ -41,11 +41,31 @@
               <span class="radio-desc">Only adds new models. Never modifies or deletes existing records.</span>
             </div>
           </label>
-          <label class="radio-option" :class="{ selected: scanMode === 'full' }">
-            <input type="radio" v-model="scanMode" value="full" />
+          <label class="radio-option" :class="{ selected: scanMode === 'full', disabled: scanScope === 'paid' }">
+            <input type="radio" v-model="scanMode" value="full" :disabled="scanScope === 'paid'" />
             <div class="radio-content">
               <span class="radio-title">Full Rebuild</span>
               <span class="radio-desc">Clears all model data and rescans from scratch. Preserves favorites & history.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="scan-mode-section">
+        <label class="scan-mode-label">Scan Scope</label>
+        <div class="scan-mode-options">
+          <label class="radio-option" :class="{ selected: scanScope === 'all' }">
+            <input type="radio" v-model="scanScope" value="all" />
+            <div class="radio-content">
+              <span class="radio-title">All Folders</span>
+              <span class="radio-desc">Scan the entire model directory.</span>
+            </div>
+          </label>
+          <label class="radio-option" :class="{ selected: scanScope === 'paid' }">
+            <input type="radio" v-model="scanScope" value="paid" @change="scanMode === 'full' && (scanMode = 'full_sync')" />
+            <div class="radio-content">
+              <span class="radio-title">Paid Only</span>
+              <span class="radio-desc">Only scan the Paid folder. Faster when indexing new paid models.</span>
             </div>
           </label>
         </div>
@@ -324,6 +344,7 @@ import AppIcon from '../components/AppIcon.vue';
 const router = useRouter();
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');
 const scanMode = ref<ScanMode>('full_sync');
+const scanScope = ref<'all' | 'paid'>('all');
 const scanning = ref(false);
 const deduplicating = ref(false);
 const lastScan = ref<string | null>(null);
@@ -476,7 +497,7 @@ async function saveAndScan() {
   message.value = '';
 
   try {
-    await systemApi.scan(modelDirectory.value, scanMode.value);
+    await systemApi.scan(modelDirectory.value, scanMode.value, scanScope.value);
     showMessage(`Scan started (${scanMode.value} mode)`, 'success');
     lastScan.value = new Date().toISOString();
 
@@ -1002,6 +1023,11 @@ h2 {
 .radio-option.selected {
   border-color: var(--accent-primary);
   background: var(--accent-primary-dim);
+}
+
+.radio-option.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .radio-option input[type="radio"] {

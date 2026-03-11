@@ -464,4 +464,54 @@ describe('Models Routes', () => {
             expect(res.body.suggestions[0].model_id).toBe(2);
         });
     });
+
+    describe('POST /api/models/bulk-reassign-category', () => {
+        beforeEach(() => {
+            // Ensure config has a model_directory for the non-paid path
+            testDb.prepare(`INSERT OR REPLACE INTO config (key, value) VALUES ('model_directory', '/test/models')`).run();
+        });
+
+        it('returns 400 when model_ids is missing', async () => {
+            const res = await request(app).post('/api/models/bulk-reassign-category').send({ new_category: 'Tools' });
+            expect(res.status).toBe(400);
+        });
+
+        it('returns 400 when new_category is missing', async () => {
+            const res = await request(app).post('/api/models/bulk-reassign-category').send({ model_ids: [1] });
+            expect(res.status).toBe(400);
+        });
+
+        it('updates DB category for paid models without moving files', async () => {
+            // Insert a paid model with a filepath that doesn't exist on disk
+            testDb.prepare(`INSERT INTO models (id, filename, filepath, category, is_paid, file_count)
+                VALUES (10, 'Paid Model', '/Paid/DesignerX/Paid Model', 'Uncategorized', 1, 1)`).run();
+
+            const res = await request(app)
+                .post('/api/models/bulk-reassign-category')
+                .send({ model_ids: [10], new_category: 'Toys' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.results[0].success).toBe(true);
+
+            // DB category updated
+            const model = testDb.prepare('SELECT category FROM models WHERE id = 10').get() as { category: string };
+            expect(model.category).toBe('Toys');
+
+            // Filepath unchanged (folder not moved)
+            const fp = testDb.prepare('SELECT filepath FROM models WHERE id = 10').get() as { filepath: string };
+            expect(fp.filepath).toBe('/Paid/DesignerX/Paid Model');
+        });
+
+        it('returns no-op success when paid model already has the target category', async () => {
+            testDb.prepare(`INSERT INTO models (id, filename, filepath, category, is_paid, file_count)
+                VALUES (11, 'Already Categorized', '/Paid/DesignerX/Already Categorized', 'Toys', 1, 1)`).run();
+
+            const res = await request(app)
+                .post('/api/models/bulk-reassign-category')
+                .send({ model_ids: [11], new_category: 'Toys' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.results[0].success).toBe(true);
+        });
+    });
 });
