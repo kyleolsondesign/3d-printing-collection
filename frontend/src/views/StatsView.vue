@@ -930,7 +930,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-icon designer-linked-icon">
-              <AppIcon name="link" stroke-width="1.5" />
+              <AppIcon name="external-link" stroke-width="1.5" />
             </div>
             <div class="stat-info">
               <div class="stat-value">

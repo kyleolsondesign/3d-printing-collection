@@ -160,14 +160,14 @@
               @click.stop
               title="View profile"
             >
-              <AppIcon name="link" />
+              <AppIcon name="external-link" />
             </a>
             <button
               class="overlay-btn"
               @click.stop="startEditDesigner(designer)"
               title="Edit designer"
             >
-              <AppIcon name="pencil" />
+              <AppIcon name="edit" />
             </button>
           </div>
         </div>

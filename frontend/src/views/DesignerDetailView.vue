@@ -1,5 +1,15 @@
 <template>
   <div class="designer-detail-view">
+    <Teleport to="#topbar-view-actions">
+      <button
+        @click="toggleSelectionMode"
+        :class="['select-btn', { active: selectionMode }]"
+        title="Toggle selection mode"
+      >
+        <AppIcon :name="selectionMode ? 'checkbox-checked' : 'checkbox'" />
+        <span>{{ selectionMode ? 'Cancel' : 'Select' }}</span>
+      </button>
+    </Teleport>
     <div class="header">
       <div class="header-left">
         <router-link to="/designers" class="back-btn">
@@ -11,7 +21,7 @@
       </div>
       <div class="header-actions" v-if="designer">
         <a v-if="designer.profile_url" :href="designer.profile_url" target="_blank" rel="noopener" class="profile-link-btn">
-          <AppIcon name="link" />
+          <AppIcon name="external-link" />
           Profile
         </a>
         <button
@@ -23,7 +33,7 @@
           {{ designer.is_favorite ? 'Favorited' : 'Favorite' }}
         </button>
         <button @click="startEditDesigner" class="edit-btn">
-          <AppIcon name="pencil" />
+          <AppIcon name="edit" />
           Edit
         </button>
       </div>
@@ -99,15 +109,90 @@
       <p>No models matching "{{ searchQuery }}" for this designer.</p>
     </div>
 
+    <!-- Bulk actions bar -->
+    <div v-if="selectionMode" class="bulk-actions-bar">
+      <div class="bulk-left">
+        <span class="selected-count">{{ selectedCount }} selected</span>
+        <button @click="allSelected ? deselectAll() : selectAll()" class="select-all-btn">
+          {{ allSelected ? 'Deselect All' : 'Select All' }}
+        </button>
+      </div>
+      <div class="bulk-actions" :class="{ disabled: bulkLoading || selectedCount === 0 }">
+        <button @click="bulkAddToFavorites" class="bulk-btn" title="Add to Favorites" :disabled="bulkLoading || selectedCount === 0">
+          <AppIcon name="star" />
+          <span>Favorite</span>
+        </button>
+        <button @click="bulkAddToQueue" class="bulk-btn" title="Add to Queue" :disabled="bulkLoading || selectedCount === 0">
+          <AppIcon name="plus" />
+          <span>Queue</span>
+        </button>
+        <button @click="bulkRemoveFromQueue" class="bulk-btn" title="Remove from Queue" :disabled="bulkLoading || selectedCount === 0">
+          <AppIcon name="minus" />
+          <span>Unqueue</span>
+        </button>
+        <button @click="bulkMarkPrinted('good')" class="bulk-btn printed-good-btn" title="Mark as Printed (Good)" :disabled="bulkLoading || selectedCount === 0">
+          <AppIcon name="printer" />
+          <span>Printed</span>
+        </button>
+        <button
+          @click="showRecategorizeModal = true"
+          class="bulk-btn"
+          title="Recategorize with suggestions"
+          :disabled="bulkLoading || selectedCount === 0"
+        >
+          <AppIcon name="tag" />
+          <span>Recategorize</span>
+        </button>
+        <div class="bulk-tag-wrapper">
+          <button
+            @click="showBulkTagInput = !showBulkTagInput; bulkTagInput = ''"
+            class="bulk-btn"
+            title="Add Tag"
+            :disabled="bulkLoading || selectedCount === 0"
+          >
+            <AppIcon name="tag" />
+            <span>Tag</span>
+          </button>
+          <div v-if="showBulkTagInput" class="bulk-tag-input-row">
+            <input
+              v-model="bulkTagInput"
+              @keydown.enter="bulkAddTag"
+              @keydown.escape="showBulkTagInput = false; bulkTagInput = ''"
+              placeholder="Tag name..."
+              class="bulk-tag-input"
+              type="text"
+              autofocus
+            />
+            <button @click="bulkAddTag" class="bulk-tag-confirm" :disabled="!bulkTagInput.trim()">Apply</button>
+          </div>
+        </div>
+        <button @click="bulkRescan" class="bulk-btn" title="Rescan folders" :disabled="bulkLoading || selectedCount === 0">
+          <AppIcon name="refresh" />
+          <span>Rescan</span>
+        </button>
+        <button @click="bulkDelete" class="bulk-btn delete-btn" title="Delete" :disabled="bulkLoading || selectedCount === 0">
+          <AppIcon name="trash" />
+          <span>Delete</span>
+        </button>
+        <div v-if="bulkLoading" class="bulk-loading">
+          <div class="loading-spinner small"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Grid View -->
-    <div v-else-if="viewMode === 'grid'" class="models-grid">
+    <div v-if="viewMode === 'grid' && !loading && models.length > 0" class="models-grid">
       <div
         v-for="(model, index) in models"
         :key="model.id"
-        class="model-card"
+        :class="['model-card', { selected: selectedModels.has(model.id) }]"
         :style="{ animationDelay: `${Math.min(index * 30, 300)}ms` }"
+        @click="selectionMode ? toggleModelSelection(model.id) : null"
       >
-        <div class="model-image" @click="openModal(model.id)">
+        <div v-if="selectionMode" class="selection-checkbox" @click.stop="toggleModelSelection(model.id)">
+          <AppIcon :name="selectedModels.has(model.id) ? 'checkbox-checked' : 'checkbox'" />
+        </div>
+        <div class="model-image" @click.stop="selectionMode ? toggleModelSelection(model.id) : openModal(model.id)">
           <img
             v-if="model.primaryImage"
             :src="getFileUrl(model.primaryImage)"
@@ -123,23 +208,23 @@
           </div>
         </div>
         <div class="model-info">
-          <h3 :title="model.filename" @click="openModal(model.id)">{{ model.filename }}</h3>
+          <h3 :title="model.filename" @click.stop="selectionMode ? toggleModelSelection(model.id) : openModal(model.id)">{{ model.filename }}</h3>
           <div class="model-meta">
             <span class="category-tag">{{ model.category }}</span>
             <span v-if="model.file_count > 1" class="file-count">{{ model.file_count }} files</span>
             <span v-if="model.is_paid" class="badge-paid">Paid</span>
           </div>
-          <div class="model-actions">
-            <button @click="store.toggleFavorite(model.id)" :class="['action-btn', { active: model.isFavorite }]" title="Favorite">
+          <div v-if="!selectionMode" class="model-actions">
+            <button @click.stop="store.toggleFavorite(model.id)" :class="['action-btn', { active: model.isFavorite }]" title="Favorite">
               <AppIcon name="heart" :fill="model.isFavorite ? 'currentColor' : 'none'" />
             </button>
-            <button @click="store.toggleQueue(model.id)" :class="['action-btn', { active: model.isQueued }]" title="Queue">
+            <button @click.stop="store.toggleQueue(model.id)" :class="['action-btn', { active: model.isQueued }]" title="Queue">
               <AppIcon name="list" />
             </button>
-            <button @click="store.cyclePrinted(model.id)" :class="['action-btn', { active: model.printRating, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]" title="Printed">
+            <button @click.stop="store.cyclePrinted(model.id)" :class="['action-btn', { active: model.printRating, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]" title="Printed">
               <AppIcon name="check-circle" />
             </button>
-            <button @click="openInFinder(model)" class="action-btn" title="Show in Finder">
+            <button @click.stop="openInFinder(model)" class="action-btn" title="Show in Finder">
               <AppIcon name="folder" />
             </button>
           </div>
@@ -148,10 +233,11 @@
     </div>
 
     <!-- Table View -->
-    <div v-else class="models-table-container">
+    <div v-if="viewMode === 'table' && !loading && models.length > 0" class="models-table-container">
       <table class="models-table">
         <thead>
           <tr>
+            <th v-if="selectionMode" class="col-checkbox"></th>
             <th class="col-image"></th>
             <th class="col-name sortable-header" @click="handleHeaderSort('name')">
               <span>Name</span>
@@ -170,16 +256,22 @@
               <span>Date Created</span>
               <span v-if="sortField === 'date_created'" class="sort-indicator">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span>
             </th>
-            <th class="col-actions">Actions</th>
+            <th v-if="!selectionMode" class="col-actions">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr
             v-for="(model, index) in models"
             :key="model.id"
+            :class="{ selected: selectedModels.has(model.id) }"
             :style="{ animationDelay: `${Math.min(index * 20, 200)}ms` }"
-            @click="openModal(model.id)"
+            @click="selectionMode ? toggleModelSelection(model.id) : openModal(model.id)"
           >
+            <td v-if="selectionMode" class="col-checkbox" @click.stop="toggleModelSelection(model.id)">
+              <div class="table-checkbox">
+                <AppIcon :name="selectedModels.has(model.id) ? 'checkbox-checked' : 'checkbox'" />
+              </div>
+            </td>
             <td class="col-image">
               <div class="table-image">
                 <img v-if="model.primaryImage" :src="getFileUrl(model.primaryImage)" :alt="model.filename" @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'" />
@@ -198,7 +290,7 @@
             <td class="col-files">{{ model.file_count }}</td>
             <td class="col-date">{{ formatDate(model.date_added) }}</td>
             <td class="col-date">{{ formatDate(model.date_created) }}</td>
-            <td class="col-actions" @click.stop>
+            <td v-if="!selectionMode" class="col-actions" @click.stop>
               <div class="table-actions">
                 <button @click="store.toggleFavorite(model.id)" :class="['action-btn-small', { active: model.isFavorite }]" title="Favorite">
                   <AppIcon name="heart" :fill="model.isFavorite ? 'currentColor' : 'none'" />
@@ -216,14 +308,12 @@
       </table>
     </div>
 
-    <!-- Pagination -->
-    <div v-if="totalPages > 1" class="pagination">
-      <button
-        v-for="p in totalPages"
-        :key="p"
-        @click="loadPage(p)"
-        :class="['page-btn', { active: currentPage === p }]"
-      >{{ p }}</button>
+    <!-- Infinite scroll sentinel -->
+    <div ref="loadMoreSentinel" class="load-more-sentinel">
+      <div v-if="loadingMore" class="loading-more">
+        <div class="loading-spinner small"></div>
+        <span>Loading more...</span>
+      </div>
     </div>
 
     <!-- Edit Designer Modal -->
@@ -252,6 +342,14 @@
       </div>
     </div>
 
+    <!-- Recategorization Modal -->
+    <RecategorizationModal
+      v-if="showRecategorizeModal"
+      :model-ids="Array.from(selectedModels)"
+      @close="showRecategorizeModal = false"
+      @applied="onRecategorizeApplied"
+    />
+
     <!-- Model Details Modal -->
     <ModelDetailsModal
       v-if="selectedModelId"
@@ -264,11 +362,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { designersApi, modelsApi, systemApi, type Designer } from '../services/api';
+import { designersApi, modelsApi, systemApi, queueApi, printedApi, favoritesApi, tagsApi, type Designer } from '../services/api';
 import { useAppStore } from '../store';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
+import RecategorizationModal from '../components/RecategorizationModal.vue';
 import AppIcon from '../components/AppIcon.vue';
 
 const route = useRoute();
@@ -276,12 +375,26 @@ const router = useRouter();
 const store = useAppStore();
 
 const loading = ref(true);
+const loadingMore = ref(false);
 const designer = ref<Designer | null>(null);
 const models = ref<any[]>([]);
 const total = ref(0);
-const totalPages = ref(0);
 const currentPage = ref(1);
+const hasMore = computed(() => models.value.length < total.value);
 const selectedModelId = ref<number | null>(null);
+const loadMoreSentinel = ref<HTMLElement | null>(null);
+let observer: IntersectionObserver | null = null;
+
+// Selection mode state
+const selectionMode = ref(false);
+const selectedModels = ref<Set<number>>(new Set());
+const bulkLoading = ref(false);
+const showBulkTagInput = ref(false);
+const bulkTagInput = ref('');
+const showRecategorizeModal = ref(false);
+
+const selectedCount = computed(() => selectedModels.value.size);
+const allSelected = computed(() => models.value.length > 0 && selectedModels.value.size === models.value.length);
 
 // View & sort
 const viewMode = ref<'grid' | 'table'>('grid');
@@ -312,7 +425,7 @@ const editingDesigner = ref(false);
 const editForm = ref({ name: '', profile_url: '', notes: '' });
 
 function initFromQueryParams() {
-  const { sort, order, view, model, page, fp, fq, ff } = route.query;
+  const { sort, order, view, model, fp, fq, ff } = route.query;
   if (sort && typeof sort === 'string' && ['date_added', 'date_created', 'name', 'category'].includes(sort)) {
     sortField.value = sort;
   }
@@ -321,7 +434,6 @@ function initFromQueryParams() {
   }
   if (view === 'table') viewMode.value = 'table';
   if (model) selectedModelId.value = parseInt(model as string);
-  if (page) currentPage.value = parseInt(page as string) || 1;
   if (fp === 'only' || fp === 'hide') filterPrinted.value = fp;
   if (fq === 'only' || fq === 'hide') filterQueued.value = fq;
   if (ff === 'only' || ff === 'hide') filterFavorites.value = ff;
@@ -339,6 +451,12 @@ function updateQueryParams() {
   router.replace({ params: route.params, query });
 }
 
+function resetList() {
+  models.value = [];
+  currentPage.value = 1;
+  total.value = 0;
+}
+
 watch([sortField, sortOrder, viewMode, selectedModelId, filterPrinted, filterQueued, filterFavorites], () => {
   updateQueryParams();
 });
@@ -347,19 +465,23 @@ const searchQuery = computed(() => store.globalSearchQuery);
 
 // Reload models when sort, search, or filters change
 watch([sortField, sortOrder, filterPrinted, filterQueued, filterFavorites], () => {
-  currentPage.value = 1;
+  resetList();
   loadModels();
 });
 
 watch(searchQuery, () => {
-  currentPage.value = 1;
+  resetList();
   loadModels();
 });
 
-async function loadModels() {
+async function loadModels(append = false) {
   const id = parseInt(route.params.id as string);
   if (!id) return;
-  loading.value = true;
+  if (append) {
+    loadingMore.value = true;
+  } else {
+    loading.value = true;
+  }
   try {
     const res = await designersApi.getById(id, {
       page: currentPage.value,
@@ -371,23 +493,41 @@ async function loadModels() {
       filterFavorites: filterFavorites.value || undefined,
     });
     designer.value = res.data;
-    models.value = res.data.models;
+    if (append) {
+      models.value = [...models.value, ...res.data.models];
+    } else {
+      models.value = res.data.models;
+    }
     total.value = res.data.total;
-    totalPages.value = res.data.totalPages;
   } catch (error) {
     console.error('Failed to load designer:', error);
   } finally {
     loading.value = false;
+    loadingMore.value = false;
   }
 }
 
+async function loadMore() {
+  if (loadingMore.value || loading.value || !hasMore.value) return;
+  currentPage.value++;
+  await loadModels(true);
+}
+
 async function reloadModels() {
+  resetList();
   await loadModels();
 }
 
-function loadPage(page: number) {
-  currentPage.value = page;
-  loadModels();
+function setupObserver() {
+  if (observer) observer.disconnect();
+  observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && hasMore.value) {
+      loadMore();
+    }
+  }, { rootMargin: '200px' });
+  if (loadMoreSentinel.value) {
+    observer.observe(loadMoreSentinel.value);
+  }
 }
 
 function toggleSortOrder() {
@@ -478,12 +618,170 @@ async function deleteDesigner() {
   }
 }
 
+// Selection mode functions
+function toggleSelectionMode() {
+  selectionMode.value = !selectionMode.value;
+  if (!selectionMode.value) selectedModels.value = new Set();
+}
+
+function toggleModelSelection(modelId: number) {
+  const newSet = new Set(selectedModels.value);
+  if (newSet.has(modelId)) newSet.delete(modelId);
+  else newSet.add(modelId);
+  selectedModels.value = newSet;
+}
+
+function selectAll() {
+  selectedModels.value = new Set(models.value.map(m => m.id));
+}
+
+function deselectAll() {
+  selectedModels.value = new Set();
+}
+
+// Bulk action functions
+async function bulkAddToFavorites() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await favoritesApi.bulk(ids, 'add');
+    for (const id of ids) {
+      const model = models.value.find(m => m.id === id);
+      if (model) model.isFavorite = true;
+    }
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to add to favorites:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkAddToQueue() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await queueApi.bulk(ids, 'add');
+    for (const id of ids) {
+      const model = models.value.find(m => m.id === id);
+      if (model) model.isQueued = true;
+    }
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to add to queue:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkRemoveFromQueue() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await queueApi.bulk(ids, 'remove');
+    for (const id of ids) {
+      const model = models.value.find(m => m.id === id);
+      if (model) model.isQueued = false;
+    }
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to remove from queue:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkMarkPrinted(rating: 'good' | 'bad' = 'good') {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await printedApi.bulk(ids, 'add', rating);
+    for (const id of ids) {
+      const model = models.value.find(m => m.id === id);
+      if (model) { model.isPrinted = true; model.printRating = rating; }
+    }
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to mark as printed:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkDelete() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  if (!confirm(`Are you sure you want to delete ${selectedCount.value} model(s)? This is a soft delete and can be undone.`)) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await modelsApi.bulkDelete(ids);
+    models.value = models.value.filter(m => !ids.includes(m.id));
+    total.value -= ids.length;
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to delete models:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function bulkRescan() {
+  if (selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await modelsApi.bulkRescan(ids);
+    await reloadModels();
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to rescan models:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+
+async function bulkAddTag() {
+  const tagName = bulkTagInput.value.trim();
+  if (!tagName || selectedCount.value === 0 || bulkLoading.value) return;
+  bulkLoading.value = true;
+  try {
+    const ids = Array.from(selectedModels.value);
+    await tagsApi.bulkAddToModels(ids, tagName);
+    showBulkTagInput.value = false;
+    bulkTagInput.value = '';
+    deselectAll();
+    selectionMode.value = false;
+  } catch (error) {
+    console.error('Failed to add tag:', error);
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function onRecategorizeApplied() {
+  showRecategorizeModal.value = false;
+  toggleSelectionMode();
+  await reloadModels();
+}
+
 onMounted(() => {
   initFromQueryParams();
-  loadModels();
+  loadModels().then(() => nextTick(setupObserver));
 });
 
 onUnmounted(() => {
+  if (observer) observer.disconnect();
   if (store.globalSearchQuery) store.clearGlobalSearch();
 });
 </script>
@@ -1087,5 +1385,197 @@ onUnmounted(() => {
 .empty p {
   font-size: 0.875rem;
   color: var(--text-tertiary);
+}
+
+/* Select button (teleported to topbar) */
+.select-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+.select-btn svg { width: 16px; height: 16px; }
+.select-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.select-btn.active { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--bg-deepest); }
+
+/* Bulk actions bar */
+.bulk-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem 1.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-lg);
+  gap: 1rem;
+  position: sticky;
+  top: 52px;
+  z-index: 40;
+}
+
+.bulk-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.selected-count {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+}
+
+.select-all-btn {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+.select-all-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.bulk-actions.disabled { opacity: 0.5; pointer-events: none; }
+
+.bulk-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+.bulk-btn svg { width: 16px; height: 16px; }
+.bulk-btn:hover:not(:disabled) { border-color: var(--accent-primary); color: var(--accent-primary); background: var(--accent-primary-dim); }
+.bulk-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.bulk-btn.printed-good-btn:hover:not(:disabled) { border-color: var(--success); color: var(--success); background: rgba(74, 222, 128, 0.1); }
+.bulk-btn.delete-btn:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: rgba(248, 113, 113, 0.1); }
+
+.bulk-loading { display: flex; align-items: center; margin-left: 0.5rem; }
+
+.bulk-tag-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bulk-tag-input-row {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  display: flex;
+  gap: 0.5rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.5rem;
+  box-shadow: var(--shadow-lg);
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.bulk-tag-input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.625rem;
+  outline: none;
+  width: 140px;
+  transition: border-color var(--transition-base);
+}
+.bulk-tag-input:focus { border-color: var(--accent-primary); }
+
+.bulk-tag-confirm {
+  background: var(--accent-primary-dim);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--accent-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+.bulk-tag-confirm:hover:not(:disabled) { background: var(--accent-primary); color: var(--bg-deepest); }
+.bulk-tag-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Selection checkboxes */
+.selection-checkbox {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 10;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md);
+}
+.selection-checkbox svg { width: 20px; height: 20px; color: var(--text-tertiary); }
+.selection-checkbox:hover svg { color: var(--accent-primary); }
+
+.model-card {
+  position: relative;
+}
+.model-card.selected {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
+}
+
+/* Table checkbox */
+.col-checkbox { width: 48px; text-align: center; }
+.table-checkbox { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.table-checkbox svg { width: 20px; height: 20px; color: var(--text-tertiary); }
+.table-checkbox:hover svg { color: var(--accent-primary); }
+.models-table tr.selected { background: var(--accent-primary-dim); }
+.models-table tr.selected:hover { background: var(--accent-primary-dim); }
+
+/* Infinite scroll */
+.load-more-sentinel { height: 1px; }
+
+.loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+}
+
+.loading-spinner.small {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
 }
 </style>

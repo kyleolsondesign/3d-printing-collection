@@ -46,11 +46,6 @@
                                 </button>
                             </div>
                         </div>
-                        <button
-                            class="apply-all-btn"
-                            :disabled="!applyAllCategory.trim()"
-                            @click="applyAll"
-                        >Apply to All</button>
                     </div>
 
                     <!-- Table -->
@@ -352,13 +347,9 @@ function onApplyAllBlur() {
 function selectApplyAll(cat: string) {
     applyAllCategory.value = cat;
     showApplyAllDropdown.value = false;
-}
-
-function applyAll() {
-    const cat = applyAllCategory.value.trim();
-    if (!cat) return;
     rows.value.forEach(r => { r.chosen_category = cat; });
 }
+
 
 async function applyChanges() {
     const toMove = rows.value.filter(r => r.included && r.chosen_category.trim() && r.chosen_category !== r.current_category);
@@ -536,19 +527,6 @@ onMounted(() => {
     white-space: nowrap;
 }
 
-.apply-all-btn {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-default);
-    color: var(--text-primary);
-    padding: 5px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    white-space: nowrap;
-}
-
-.apply-all-btn:hover:not(:disabled) { background: var(--bg-hover); }
-.apply-all-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Table */
 .rows-container {

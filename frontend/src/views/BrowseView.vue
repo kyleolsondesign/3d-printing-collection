@@ -146,42 +146,15 @@
           <AppIcon name="printer" />
           <span>Printed</span>
         </button>
-        <div class="bulk-tag-wrapper">
-          <button
-            @click="showBulkCategoryPicker = !showBulkCategoryPicker; bulkCategoryTarget = ''"
-            class="bulk-btn"
-            title="Move to Category"
-            :disabled="bulkLoading || selectedCount === 0"
-          >
-            <AppIcon name="folder-download" />
-            <span>Move</span>
-          </button>
-          <button
-            @click="showRecategorizeModal = true"
-            class="bulk-btn"
-            title="Recategorize with suggestions"
-            :disabled="bulkLoading || selectedCount === 0"
-          >
-            <AppIcon name="tag" />
-            <span>Recategorize</span>
-          </button>
-          <div v-if="showBulkCategoryPicker" class="bulk-tag-input-row">
-            <input
-              v-model="bulkCategoryTarget"
-              list="bulk-category-list"
-              @keydown.enter="bulkReassignCategory"
-              @keydown.escape="showBulkCategoryPicker = false; bulkCategoryTarget = ''"
-              placeholder="Category name..."
-              class="bulk-tag-input"
-              type="text"
-              autofocus
-            />
-            <datalist id="bulk-category-list">
-              <option v-for="cat in store.categories" :key="cat.category" :value="cat.category" />
-            </datalist>
-            <button @click="bulkReassignCategory" class="bulk-tag-confirm" :disabled="!bulkCategoryTarget.trim()">Move</button>
-          </div>
-        </div>
+        <button
+          @click="showRecategorizeModal = true"
+          class="bulk-btn"
+          title="Recategorize with suggestions"
+          :disabled="bulkLoading || selectedCount === 0"
+        >
+          <AppIcon name="tag" />
+          <span>Recategorize</span>
+        </button>
         <div class="bulk-tag-wrapper">
           <button
             @click="showBulkTagInput = !showBulkTagInput; bulkTagInput = ''"
@@ -550,8 +523,6 @@ const showBulkTagInput = ref(false);
 const bulkTagInput = ref('');
 
 // Bulk category reassignment state
-const showBulkCategoryPicker = ref(false);
-const bulkCategoryTarget = ref('');
 const showRecategorizeModal = ref(false);
 
 // Currently printing items loaded globally from queue API (not paginated)
@@ -1079,33 +1050,6 @@ async function onRecategorizeApplied() {
   await store.loadCategories();
 }
 
-async function bulkReassignCategory() {
-  const category = bulkCategoryTarget.value.trim();
-  if (!category || selectedCount.value === 0 || bulkLoading.value) return;
-  bulkLoading.value = true;
-  try {
-    const ids = Array.from(selectedModels.value);
-    const res = await modelsApi.bulkReassignCategory(ids, category);
-    const data = res.data;
-    // Update local state for successfully moved models
-    for (const result of data.results) {
-      if (result.success) {
-        const model = store.models.find(m => m.id === result.id);
-        if (model) model.category = category;
-      }
-    }
-    showBulkCategoryPicker.value = false;
-    bulkCategoryTarget.value = '';
-    deselectAll();
-    selectionMode.value = false;
-    // Reload categories count
-    await store.loadCategories();
-  } catch (error) {
-    console.error('Failed to reassign category:', error);
-  } finally {
-    bulkLoading.value = false;
-  }
-}
 
 async function bulkAddTag() {
   const tagName = bulkTagInput.value.trim();
