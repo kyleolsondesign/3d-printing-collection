@@ -578,8 +578,14 @@ function onModelLinkClick(event: MouseEvent) {
   event.preventDefault();
 }
 
-function handleModelUpdated() {
-  loadQueue();
+function handleModelUpdated(updatedModel: any) {
+  if (!updatedModel) { loadQueue(); return; }
+  const index = queue.value.findIndex(q => q.model_id === updatedModel.id || q.id === updatedModel.id);
+  if (index !== -1) {
+    queue.value[index] = { ...queue.value[index], ...updatedModel };
+  } else {
+    loadQueue();
+  }
 }
 
 function onImageError(e: Event) {

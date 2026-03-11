@@ -283,8 +283,14 @@ function openModal(model: any) {
   selectedModelId.value = model.id;
 }
 
-function handleModelUpdated() {
-  loadRecentModels();
+function handleModelUpdated(updatedModel: any) {
+  if (!updatedModel) { loadRecentModels(); return; }
+  const index = recentModels.value.findIndex(m => m.id === updatedModel.id);
+  if (index !== -1) {
+    recentModels.value[index] = { ...recentModels.value[index], ...updatedModel };
+  } else {
+    loadRecentModels();
+  }
 }
 
 function onImageError(e: Event) {

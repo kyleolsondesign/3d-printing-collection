@@ -410,8 +410,14 @@ function onModelLinkClick(event: MouseEvent) {
   event.preventDefault();
 }
 
-function handleModelUpdated() {
-  loadFavorites();
+function handleModelUpdated(updatedModel: any) {
+  if (!updatedModel) { loadFavorites(); return; }
+  const index = favorites.value.findIndex(f => f.model_id === updatedModel.id || f.id === updatedModel.id);
+  if (index !== -1) {
+    favorites.value[index] = { ...favorites.value[index], ...updatedModel };
+  } else {
+    loadFavorites();
+  }
 }
 
 function onImageError(e: Event) {

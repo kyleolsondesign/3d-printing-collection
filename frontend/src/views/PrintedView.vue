@@ -463,8 +463,14 @@ function onModelLinkClick(event: MouseEvent) {
   event.preventDefault();
 }
 
-function handleModelUpdated() {
-  resetAndLoad();
+function handleModelUpdated(updatedModel: any) {
+  if (!updatedModel) { resetAndLoad(); return; }
+  const index = printed.value.findIndex(p => p.model_id === updatedModel.id || p.id === updatedModel.id);
+  if (index !== -1) {
+    printed.value[index] = { ...printed.value[index], ...updatedModel };
+  } else {
+    resetAndLoad();
+  }
 }
 
 function onImageError(e: Event) {

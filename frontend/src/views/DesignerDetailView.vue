@@ -182,54 +182,34 @@
 
     <!-- Grid View -->
     <div v-if="viewMode === 'grid' && !loading && models.length > 0" class="models-grid">
-      <div
+      <ModelCard
         v-for="(model, index) in models"
         :key="model.id"
-        :class="['model-card', { selected: selectedModels.has(model.id) }]"
-        :style="{ animationDelay: `${Math.min(index * 30, 300)}ms` }"
-        @click="selectionMode ? toggleModelSelection(model.id) : null"
+        :model="model"
+        :selectionMode="selectionMode"
+        :isSelected="selectedModels.has(model.id)"
+        :animationDelay="Math.min(index * 30, 300)"
+        @open="openModal(model.id)"
+        @select="toggleModelSelection(model.id)"
       >
-        <div v-if="selectionMode" class="selection-checkbox" @click.stop="toggleModelSelection(model.id)">
-          <AppIcon :name="selectedModels.has(model.id) ? 'checkbox-checked' : 'checkbox'" />
-        </div>
-        <div class="model-image" @click.stop="selectionMode ? toggleModelSelection(model.id) : openModal(model.id)">
-          <img
-            v-if="model.primaryImage"
-            :src="getFileUrl(model.primaryImage)"
-            :alt="model.filename"
-            @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'"
-            loading="lazy"
-          />
-          <div v-else class="no-image">
-            <AppIcon name="package" stroke-width="1.5" style="width: 48px; height: 48px;" />
-          </div>
-          <div class="image-overlay">
-            <span class="open-hint">View details</span>
-          </div>
-        </div>
-        <div class="model-info">
-          <h3 :title="model.filename" @click.stop="selectionMode ? toggleModelSelection(model.id) : openModal(model.id)">{{ model.filename }}</h3>
-          <div class="model-meta">
-            <span class="category-tag">{{ model.category }}</span>
-            <span v-if="model.file_count > 1" class="file-count">{{ model.file_count }} files</span>
-            <span v-if="model.is_paid" class="badge-paid">Paid</span>
-          </div>
-          <div v-if="!selectionMode" class="model-actions">
-            <button @click.stop="store.toggleFavorite(model.id)" :class="['action-btn', { active: model.isFavorite }]" title="Favorite">
-              <AppIcon name="heart" :fill="model.isFavorite ? 'currentColor' : 'none'" />
-            </button>
-            <button @click.stop="store.toggleQueue(model.id)" :class="['action-btn', { active: model.isQueued }]" title="Queue">
-              <AppIcon name="list" />
-            </button>
-            <button @click.stop="store.cyclePrinted(model.id)" :class="['action-btn', { active: model.printRating, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]" title="Printed">
-              <AppIcon name="check-circle" />
-            </button>
-            <button @click.stop="openInFinder(model)" class="action-btn" title="Show in Finder">
-              <AppIcon name="folder" />
-            </button>
-          </div>
-        </div>
-      </div>
+        <template #meta-badges>
+          <span v-if="model.is_paid" class="badge-paid">Paid</span>
+        </template>
+        <template v-if="!selectionMode" #actions>
+          <button @click.stop="store.toggleFavorite(model.id)" :class="['action-btn', { active: model.isFavorite }]" title="Favorite">
+            <AppIcon name="heart" :fill="model.isFavorite ? 'currentColor' : 'none'" />
+          </button>
+          <button @click.stop="store.toggleQueue(model.id)" :class="['action-btn', { active: model.isQueued }]" title="Queue">
+            <AppIcon name="list" />
+          </button>
+          <button @click.stop="store.cyclePrinted(model.id)" :class="['action-btn', { active: model.printRating, 'printed-good': model.printRating === 'good', 'printed-bad': model.printRating === 'bad' }]" title="Printed">
+            <AppIcon name="check-circle" />
+          </button>
+          <button @click.stop="openInFinder(model)" class="action-btn" title="Show in Finder">
+            <AppIcon name="folder" />
+          </button>
+        </template>
+      </ModelCard>
     </div>
 
     <!-- Table View -->
@@ -370,6 +350,7 @@ import { useAppStore } from '../store';
 import ModelDetailsModal from '../components/ModelDetailsModal.vue';
 import RecategorizationModal from '../components/RecategorizationModal.vue';
 import AppIcon from '../components/AppIcon.vue';
+import ModelCard from '../components/ModelCard.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -1025,72 +1006,8 @@ onUnmounted(() => {
   gap: 1.25rem;
 }
 
-.model-card {
-  background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  transition: all var(--transition-base);
-  animation: fadeIn 0.4s ease-out backwards;
-}
-.model-card:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.model-image {
-  width: 100%;
-  aspect-ratio: 4/3;
-  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-deep) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
-}
-.model-image img { width: 100%; height: 100%; object-fit: cover; transition: transform var(--transition-slow); }
-.model-card:hover .model-image img { transform: scale(1.05); }
-
-.no-image { color: var(--text-muted); }
-.no-image svg { width: 48px; height: 48px; }
-
-.image-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity var(--transition-base);
-}
-.model-image:hover .image-overlay { opacity: 1; }
-
-.open-hint {
-  color: white;
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 0.5rem 1rem;
-  background: var(--accent-primary);
-  border-radius: var(--radius-md);
-}
-
-.model-info { padding: 1rem; }
-.model-info h3 {
-  font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  color: var(--text-primary); cursor: pointer;
-}
-.model-info h3:hover { color: var(--accent-primary); }
-
-.model-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-size: 0.8rem; }
-.category-tag { padding: 0.25rem 0.5rem; background: var(--bg-hover); border-radius: var(--radius-sm); color: var(--text-secondary); font-weight: 500; }
-.file-count { color: var(--text-tertiary); }
-
 .badge-paid {
-  padding: 0.125rem 0.375rem;
+  padding: 0.25rem 0.5rem;
   background: rgba(251, 191, 36, 0.15);
   color: var(--warning);
   border-radius: var(--radius-sm);
@@ -1098,28 +1015,6 @@ onUnmounted(() => {
   font-size: 0.75rem;
 }
 .badge-small { font-size: 0.7rem; }
-
-.model-actions {
-  display: flex;
-  gap: 0.375rem;
-}
-
-.action-btn {
-  flex: 1;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0.5rem;
-  border: 1px solid var(--border-default);
-  background: var(--bg-elevated);
-  border-radius: var(--radius-md);
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-.action-btn svg { width: 18px; height: 18px; }
-.action-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); background: var(--accent-primary-dim); }
-.action-btn.active { background: var(--accent-primary); color: var(--bg-deepest); border-color: var(--accent-primary); }
-.action-btn.printed-good { background: var(--success); color: var(--bg-deepest); border-color: var(--success); }
-.action-btn.printed-bad { background: var(--danger); color: var(--bg-deepest); border-color: var(--danger); }
 
 /* Table View */
 .models-table-container {

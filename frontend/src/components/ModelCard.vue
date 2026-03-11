@@ -33,9 +33,9 @@
     <div class="model-info">
       <h3 :title="model.filename" @click="emit('open')">{{ model.filename }}</h3>
       <div class="model-meta">
+        <slot name="meta-badges" />
         <span class="category-tag">{{ model.category }}</span>
         <span v-if="model.file_count > 1" class="file-count">{{ model.file_count }} files</span>
-        <slot name="meta-badges" />
       </div>
       <div class="model-actions">
         <slot name="actions" />
@@ -244,6 +244,7 @@ function getFileUrl(path: string) {
 
 .model-meta {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
   margin-bottom: 0.75rem;

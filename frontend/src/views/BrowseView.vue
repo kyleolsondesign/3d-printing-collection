@@ -292,10 +292,10 @@
         <div class="model-info">
           <h3 :title="model.filename" @click="openModal(model)">{{ model.filename }}</h3>
           <div class="model-meta">
-            <span class="category-tag clickable" @click.stop="filterByCategory(model.category)">{{ model.category }}</span>
-            <span v-if="model.file_count > 1" class="file-count">{{ model.file_count }} files</span>
             <span v-if="model.is_paid" class="badge-paid">Paid</span>
             <span v-if="model.is_original" class="badge-original">Original</span>
+            <span class="category-tag clickable" @click.stop="filterByCategory(model.category)">{{ model.category }}</span>
+            <span v-if="model.file_count > 1" class="file-count">{{ model.file_count }} files</span>
           </div>
           <div class="model-actions">
             <button
@@ -1514,6 +1514,7 @@ async function bulkAddTag() {
 
 .model-meta {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
   margin-bottom: 0.75rem;
@@ -1546,7 +1547,7 @@ async function bulkAddTag() {
 }
 
 .badge-paid {
-  padding: 0.2rem 0.5rem;
+  padding: 0.25rem 0.5rem;
   background: var(--paid-bg);
   color: var(--paid-text);
   border: 1px solid var(--paid-border);
