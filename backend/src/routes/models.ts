@@ -1016,34 +1016,20 @@ router.post('/:id/save-preview-image', async (req, res) => {
             return res.status(403).json({ error: 'Access denied' });
         }
 
-        const outputPath = path.join(modelFolder, '_preview_captured.png');
+        const timestamp = Date.now();
+        const outputPath = path.join(modelFolder, `_preview_captured_${timestamp}.png`);
         fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
 
-        // Upsert: update existing captured preview row rather than inserting duplicates
-        const existing = db.prepare(
-            `SELECT id, is_primary FROM model_assets WHERE model_id = ? AND filepath LIKE '%_preview_captured.png'`
-        ).get(modelId) as { id: number; is_primary: number } | undefined;
+        // Only set as primary if no other non-hidden primary image exists
+        const hasPrimary = db.prepare(
+            `SELECT id FROM model_assets WHERE model_id = ? AND asset_type = 'image' AND is_primary = 1 AND (is_hidden = 0 OR is_hidden IS NULL)`
+        ).get(modelId);
+        const isPrimary = hasPrimary ? 0 : 1;
 
-        let assetId: number;
-        let isPrimary: number;
-
-        if (existing) {
-            assetId = existing.id;
-            isPrimary = existing.is_primary;
-            // Update filepath in case folder moved, ensure not hidden
-            db.prepare('UPDATE model_assets SET filepath = ?, is_hidden = 0 WHERE id = ?').run(outputPath, assetId);
-        } else {
-            // Only set as primary if no other non-hidden primary image exists
-            const hasPrimary = db.prepare(
-                `SELECT id FROM model_assets WHERE model_id = ? AND asset_type = 'image' AND is_primary = 1 AND (is_hidden = 0 OR is_hidden IS NULL)`
-            ).get(modelId);
-            isPrimary = hasPrimary ? 0 : 1;
-
-            const result = db.prepare(
-                `INSERT INTO model_assets (model_id, filepath, asset_type, is_primary, is_hidden) VALUES (?, ?, 'image', ?, 0)`
-            ).run(modelId, outputPath, isPrimary);
-            assetId = result.lastInsertRowid as number;
-        }
+        const result = db.prepare(
+            `INSERT INTO model_assets (model_id, filepath, asset_type, is_primary, is_hidden) VALUES (?, ?, 'image', ?, 0)`
+        ).run(modelId, outputPath, isPrimary);
+        const assetId = result.lastInsertRowid as number;
 
         const asset = db.prepare('SELECT * FROM model_assets WHERE id = ?').get(assetId);
         res.json({ success: true, asset, isPrimary: isPrimary === 1 });

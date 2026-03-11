@@ -64,7 +64,14 @@
                   @error="handleImageError"
                 />
                 <div v-else class="no-image">
-                  <span class="emoji">📦</span>
+                  <button v-if="previewableFiles.length > 0" class="no-image-preview-btn" @click.stop="showingPreview = true; previewFileId = null">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 1 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+                    </svg>
+                    Preview 3D Model
+                  </button>
+                  <span v-else class="emoji">📦</span>
                 </div>
               </div>
               <!-- Thumbnail strip: visible when multiple images, or when previewable 3D files exist -->
@@ -1188,6 +1195,28 @@ async function extractZipFile(zipFile: ZipFile) {
 .no-image .emoji {
   font-size: 4rem;
   opacity: 0.5;
+}
+
+.no-image-preview-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem 2rem;
+  background: transparent;
+  border: 2px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all var(--transition-base);
+}
+
+.no-image-preview-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
 }
 
 .image-thumbnails {

@@ -559,14 +559,14 @@ describe('Models Routes', () => {
             expect(res.body.asset.is_primary).toBe(0);
         });
 
-        it('updates existing _preview_captured asset row instead of inserting duplicate', async () => {
+        it('creates a new asset row for each capture (timestamped filenames)', async () => {
             // First capture
             await request(app)
                 .post('/api/models/3/save-preview-image')
                 .send({ imageData: validDataUrl });
 
-            const countBefore = (testDb.prepare(
-                `SELECT COUNT(*) as n FROM model_assets WHERE model_id = 3 AND filepath LIKE '%_preview_captured.png'`
+            const countAfterFirst = (testDb.prepare(
+                `SELECT COUNT(*) as n FROM model_assets WHERE model_id = 3 AND filepath LIKE '%_preview_captured_%'`
             ).get() as { n: number }).n;
 
             // Second capture
@@ -574,12 +574,12 @@ describe('Models Routes', () => {
                 .post('/api/models/3/save-preview-image')
                 .send({ imageData: validDataUrl });
 
-            const countAfter = (testDb.prepare(
-                `SELECT COUNT(*) as n FROM model_assets WHERE model_id = 3 AND filepath LIKE '%_preview_captured.png'`
+            const countAfterSecond = (testDb.prepare(
+                `SELECT COUNT(*) as n FROM model_assets WHERE model_id = 3 AND filepath LIKE '%_preview_captured_%'`
             ).get() as { n: number }).n;
 
-            expect(countBefore).toBe(1);
-            expect(countAfter).toBe(1);  // no duplicate row
+            expect(countAfterFirst).toBe(1);
+            expect(countAfterSecond).toBe(2);  // each capture is a new file
         });
 
         it('returns 404 for unknown model', async () => {

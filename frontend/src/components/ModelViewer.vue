@@ -268,7 +268,8 @@ async function initScene(
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const geo = geometry as any
-    const material = new THREE.MeshPhongMaterial({ color: 0x6ea8fe, specular: 0x333333, shininess: 30 })
+    geo.computeVertexNormals()
+    const material = new THREE.MeshPhongMaterial({ color: 0xcccccc, specular: 0x222222, shininess: 30 })
     loadedObject = new THREE.Mesh(geo, material)
     scene.add(loadedObject)
 
@@ -280,20 +281,13 @@ async function initScene(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     loadedObject = object as any
 
-    // Fix up loaded meshes: smooth normals + enable vertex colors where present
+    // Replace all loaded materials with a consistent default material
+    const defaultMat = new THREE.MeshPhongMaterial({ color: 0xcccccc, specular: 0x222222, shininess: 30 })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     loadedObject.traverse((child: any) => {
       if (!child.isMesh) return
-      // Compute smooth normals (loader leaves geometry without normals when flatShading)
       child.geometry.computeVertexNormals()
-      const mats: any[] = Array.isArray(child.material) ? child.material : [child.material]
-      for (const mat of mats) {
-        // Enable vertex colors if the geometry carries color data
-        if (child.geometry.attributes.color) mat.vertexColors = true
-        // Switch to smooth shading for a cleaner look
-        mat.flatShading = false
-        mat.needsUpdate = true
-      }
+      child.material = defaultMat
     })
 
     scene.add(loadedObject)
@@ -351,7 +345,7 @@ function fitCameraToObject(object: any) {
 
   // Compute distance needed to frame the sphere in the vertical FOV
   const fovRad = (camera.fov * Math.PI) / 180
-  const distance = (radius / Math.sin(fovRad / 2)) * 1.5  // 50% padding
+  const distance = (radius / Math.sin(fovRad / 2)) * 1.0  // tight fit
 
   // Isometric-ish angle relative to sphere center
   const dir = new THREE.Vector3(1, 0.75, 1).normalize()
