@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npx vitest run)",
+      "Bash(npx vitest run --reporter=dot)"
+    ]
+  }
+}
