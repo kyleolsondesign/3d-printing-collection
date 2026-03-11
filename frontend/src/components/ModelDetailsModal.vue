@@ -562,11 +562,13 @@ function handleKeydown(event: KeyboardEvent) {
     }
     return;
   }
+  const tag = (event.target as HTMLElement)?.tagName;
+  const isInputFocused = tag === 'INPUT' || tag === 'TEXTAREA' || (event.target as HTMLElement)?.isContentEditable;
   if (event.key === 'Escape') {
     emit('close');
-  } else if (event.key === 'ArrowLeft') {
+  } else if (!isInputFocused && event.key === 'ArrowLeft') {
     navigatePrev();
-  } else if (event.key === 'ArrowRight') {
+  } else if (!isInputFocused && event.key === 'ArrowRight') {
     navigateNext();
   }
 }

@@ -354,6 +354,7 @@
     <ModelDetailsModal
       v-if="selectedModelId"
       :modelId="selectedModelId"
+      :modelIds="models.map((m: any) => m.id)"
       @close="selectedModelId = null"
       @updated="reloadModels"
       @navigate="selectedModelId = $event"
