@@ -888,11 +888,11 @@
         </div> -->
 
         <!-- Tag Stats -->
-        <div class="chart-card" v-if="detailedStats?.tagStats?.length">
+        <div class="chart-card" v-if="filteredTagStats.length">
           <h3 class="chart-title">Top Tags</h3>
           <div class="tag-stats">
             <div
-              v-for="tag in detailedStats.tagStats"
+              v-for="tag in filteredTagStats"
               :key="tag.name"
               class="tag-stat-row"
             >
@@ -1363,8 +1363,11 @@ const maxPrintedCount = computed(() =>
 );
 
 // --- Tag stats ---
+const filteredTagStats = computed(() =>
+  detailedStats.value?.tagStats.filter((t) => t.name !== 'Paid') ?? []
+);
 const maxTagCount = computed(() =>
-  Math.max(...(detailedStats.value?.tagStats.map((x) => x.model_count) || [1]))
+  Math.max(...(filteredTagStats.value.map((x) => x.model_count) || [1]))
 );
 
 // --- Designer stats ---

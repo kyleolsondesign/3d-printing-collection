@@ -382,8 +382,9 @@ router.get('/stats/designers', (req, res) => {
         `).all() as Array<{ id: number; name: string; model_count: number }>;
 
         // Top designers by how many of their models have been printed (top 10)
+        // Use DISTINCT model_id to count each model once, even if printed multiple times
         const topByPrintCount = db.prepare(`
-            SELECT d.id, d.name, COUNT(pm.id) as print_count
+            SELECT d.id, d.name, COUNT(DISTINCT pm.model_id) as print_count
             FROM designers d
             JOIN models m ON m.designer_id = d.id AND m.deleted_at IS NULL
             JOIN printed_models pm ON pm.model_id = m.id
@@ -393,14 +394,21 @@ router.get('/stats/designers', (req, res) => {
         `).all() as Array<{ id: number; name: string; print_count: number }>;
 
         // Print quality by designer (designers with at least 1 print, top 10 by total)
+        // Use latest print record per model (most recent printed_at) to determine rating
         const printQuality = db.prepare(`
             SELECT d.id, d.name,
-                SUM(CASE WHEN pm.rating = 'good' THEN 1 ELSE 0 END) as good_count,
-                SUM(CASE WHEN pm.rating = 'bad' THEN 1 ELSE 0 END) as bad_count,
-                COUNT(pm.id) as total_prints
+                SUM(CASE WHEN latest_pm.rating = 'good' THEN 1 ELSE 0 END) as good_count,
+                SUM(CASE WHEN latest_pm.rating = 'bad' THEN 1 ELSE 0 END) as bad_count,
+                COUNT(latest_pm.model_id) as total_prints
             FROM designers d
             JOIN models m ON m.designer_id = d.id AND m.deleted_at IS NULL
-            JOIN printed_models pm ON pm.model_id = m.id
+            JOIN (
+                SELECT model_id, rating
+                FROM printed_models
+                WHERE (model_id, printed_at) IN (
+                    SELECT model_id, MAX(printed_at) FROM printed_models GROUP BY model_id
+                )
+            ) latest_pm ON latest_pm.model_id = m.id
             GROUP BY d.id
             HAVING total_prints >= 1
             ORDER BY total_prints DESC
