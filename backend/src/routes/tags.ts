@@ -490,20 +490,32 @@ function acDetectReasons(loserName: string, winnerName: string): AutoReason[] {
     // 2. Leading dash
     if (/^[-_]/.test(ln)) reasons.add('leading-dash');
 
-    // 3. Separator: loser uses dashes/underscores (after stripping leading punctuation)
     const lNoLead = ln.replace(/^[''`\u2018\u2019\-_]+/, '');
+
+    // 3. Concatenated word: loser has no separators but winner has spaces/dashes (or vice versa)
+    const lHasNoSep = !lNoLead.includes(' ') && !/[-_]/.test(lNoLead);
+    const wNorm = winnerName.toLowerCase().replace(/^[''`\u2018\u2019\-_]+/, '');
+    const wHasSep = wNorm.includes(' ') || /[-_]/.test(wNorm);
+    if (lHasNoSep && wHasSep && lNoLead.length > 4) {
+        reasons.add('separator');
+    }
+
+    // 4. Separator: loser uses dashes/underscores (after stripping leading punctuation)
     if (/[-_]/.test(lNoLead)) reasons.add('separator');
 
-    // 4. British spelling: any word in loser maps to a different US word
+    // 5. British spelling: any word in loser maps to a different US word
     const lWords = lNoLead.replace(/[-_]+/g, ' ').trim().split(' ');
     if (lWords.some(w => acBritToUs(w) !== w)) reasons.add('spelling');
 
-    // 5. Plural: loser words depluralize differently (i.e. loser IS plural form)
-    const lUS = lWords.map(acBritToUs).join(' ');
-    const lDepl = lUS.split(' ').map(acDepluralize).join(' ');
-    if (lDepl !== lUS) reasons.add('plural');
+    // 6. Plural: loser words depluralize differently
+    // Skip when already flagged as concatenated (whole-word depluralize is unreliable there)
+    if (!lHasNoSep || !wHasSep) {
+        const lUS = lWords.map(acBritToUs).join(' ');
+        const lDepl = lUS.split(' ').map(acDepluralize).join(' ');
+        if (lDepl !== lUS) reasons.add('plural');
+    }
 
-    // Fallback: concatenated or otherwise matched
+    // Fallback
     if (reasons.size === 0) reasons.add('separator');
     return Array.from(reasons);
 }
@@ -520,19 +532,49 @@ router.get('/auto-consolidate-suggestions', (req, res) => {
             ORDER BY t.name ASC
         `).all() as Array<{ id: number; name: string; source: string; model_count: number }>;
 
-        // Group tags by their space-stripped canonical form
-        // Using no-space key lets "custom planter" and "customplanter" group together
-        const groupMap = new Map<string, typeof tags>();
+        // Build groups using union-find across two keys:
+        // 1. canonKey: canonical form (handles plural/spelling/separator variants)
+        // 2. rawKey: raw no-separator form (handles concatenated variants like "dungeonsanddragons")
+        const canonKey = (name: string) => acCanonical(name).replace(/\s+/g, '');
+        const rawKey = (name: string) => name.toLowerCase()
+            .replace(/^[''\u2018\u2019\-_]+/, '')
+            .replace(/[\s\-_]+/g, '');
+
+        const parent = new Map<number, number>();
+        for (const tag of tags) parent.set(tag.id, tag.id);
+
+        function find(id: number): number {
+            if (parent.get(id) !== id) parent.set(id, find(parent.get(id)!));
+            return parent.get(id)!;
+        }
+        function union(a: number, b: number) {
+            const ra = find(a), rb = find(b);
+            if (ra !== rb) parent.set(ra, rb);
+        }
+
+        for (const keyFn of [canonKey, rawKey]) {
+            const bucket = new Map<string, number[]>();
+            for (const tag of tags) {
+                const k = keyFn(tag.name);
+                if (!bucket.has(k)) bucket.set(k, []);
+                bucket.get(k)!.push(tag.id);
+            }
+            for (const ids of bucket.values()) {
+                for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+            }
+        }
+
+        const byRoot = new Map<number, typeof tags>();
         for (const tag of tags) {
-            const key = acCanonical(tag.name).replace(/\s+/g, '');
-            if (!groupMap.has(key)) groupMap.set(key, []);
-            groupMap.get(key)!.push(tag);
+            const root = find(tag.id);
+            if (!byRoot.has(root)) byRoot.set(root, []);
+            byRoot.get(root)!.push(tag);
         }
 
         const groups: AutoGroup[] = [];
         const renames: Array<{ id: number; from: string; to: string; model_count: number }> = [];
 
-        for (const members of groupMap.values()) {
+        for (const members of byRoot.values()) {
             // Single-member: check if it's a leading-apostrophe tag that should be renamed
             if (members.length === 1) {
                 const tag = members[0];
