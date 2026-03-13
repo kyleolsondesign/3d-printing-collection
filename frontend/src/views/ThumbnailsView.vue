@@ -18,42 +18,47 @@
       <span>Loading models without images…</span>
     </div>
 
-    <div v-else-if="jobs.length === 0" class="empty-state success">
+    <div v-else-if="jobs.length === 0" class="empty-state">
       <div class="empty-icon">
-        <AppIcon name="check-circle" />
+        <AppIcon name="check-circle" stroke-width="1.5" />
       </div>
       <h3>All caught up!</h3>
       <p>All models with STL or 3MF files already have thumbnails.</p>
     </div>
 
     <template v-else>
-      <!-- Controls -->
-      <div class="controls-bar">
-        <div class="stats-row">
-          <label class="select-all-label" @click.stop>
-            <input type="checkbox" :checked="allSelected" :indeterminate.prop="someSelected && !allSelected" @change="toggleSelectAll" />
-            <span>{{ selectedIds.size > 0 ? `${selectedIds.size} selected` : `${jobs.length} models` }}</span>
+      <!-- Sticky Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <label class="select-all-wrap">
+            <input
+              type="checkbox"
+              class="select-all-check"
+              :checked="allSelected"
+              :indeterminate="someSelected && !allSelected"
+              @change="toggleSelectAll"
+            />
           </label>
-          <span class="stat-pill">{{ doneCount }} / {{ jobs.length }} done</span>
-          <span class="stat-pill skipped" v-if="skippedCount > 0">{{ skippedCount }} skipped</span>
-          <span class="stat-pill error" v-if="errorCount > 0">{{ errorCount }} failed</span>
+          <span class="selection-count">
+            <template v-if="selectedIds.size > 0">{{ selectedIds.size }} selected</template>
+            <template v-else>{{ jobs.length }} models</template>
+          </span>
+          <span class="stat-pill">{{ doneCount }} done</span>
+          <span class="stat-pill warn" v-if="skippedCount > 0">{{ skippedCount }} skipped</span>
+          <span class="stat-pill err" v-if="errorCount > 0">{{ errorCount }} failed</span>
         </div>
-        <div class="actions-row">
+        <div class="toolbar-right">
+          <button class="btn-refresh" :disabled="isProcessing" @click="loadJobs">
+            <AppIcon name="refresh" />
+            Refresh
+          </button>
           <button
-            class="btn-primary"
+            class="btn-generate-bulk"
             :disabled="isProcessing || selectedIds.size === 0"
             @click="processSelected"
           >
             <div v-if="isProcessing" class="btn-spinner"></div>
             {{ isProcessing ? 'Processing…' : `Generate${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}` }}
-          </button>
-          <button
-            class="btn-secondary"
-            :disabled="isProcessing"
-            @click="loadJobs"
-          >
-            <AppIcon name="refresh" />
-            Refresh
           </button>
         </div>
       </div>
@@ -64,47 +69,58 @@
         <span class="progress-label">{{ progressPct }}%</span>
       </div>
 
-      <!-- Job list -->
-      <div class="job-list">
+      <!-- Table card -->
+      <div class="job-table">
+        <div class="job-table-header">
+          <div class="col-check"></div>
+          <div class="col-thumb"></div>
+          <div class="col-name">Model</div>
+          <div class="col-status">Status</div>
+          <div class="col-action"></div>
+        </div>
+
         <div
           v-for="job in jobs"
           :key="job.model.id"
           :class="['job-row', job.status, { selected: selectedIds.has(job.model.id) }]"
           @click="openModal(job.model.id)"
         >
-          <input
-            type="checkbox"
-            class="job-checkbox"
-            :checked="selectedIds.has(job.model.id)"
-            @click.stop
-            @change="toggleSelect(job.model.id)"
-          />
-          <div class="job-thumb">
-            <img
-              v-if="job.model.primaryImage"
-              :src="getImageUrl(job.model.primaryImage)"
-              alt=""
+          <div class="col-check" @click.stop>
+            <input
+              type="checkbox"
+              class="row-check"
+              :checked="selectedIds.has(job.model.id)"
+              @change="toggleSelect(job.model.id)"
             />
-            <div v-else class="thumb-placeholder">
-              <AppIcon name="package" />
+          </div>
+          <div class="col-thumb">
+            <div class="job-thumb">
+              <img
+                v-if="job.model.primaryImage"
+                :src="getImageUrl(job.model.primaryImage)"
+                alt=""
+              />
+              <span v-else class="thumb-placeholder">
+                <AppIcon name="package" stroke-width="1.5" />
+              </span>
             </div>
           </div>
-          <div class="job-info">
-            <div class="job-name">{{ job.model.filename }}</div>
-            <div class="job-meta">{{ job.model.category }} · {{ job.model.file_count }} file{{ job.model.file_count !== 1 ? 's' : '' }}</div>
+          <div class="col-name">
+            <span class="job-name">{{ job.model.filename }}</span>
+            <span class="job-meta">{{ job.model.category }} · {{ job.model.file_count }} file{{ job.model.file_count !== 1 ? 's' : '' }}</span>
           </div>
-          <div class="job-status">
+          <div class="col-status">
             <span :class="['status-badge', job.status]">
               <div v-if="['fetching-files','rendering','saving'].includes(job.status)" class="status-spinner"></div>
-              <span>{{ statusLabel(job.status) }}</span>
+              {{ statusLabel(job.status) }}
             </span>
             <span v-if="job.error" class="error-detail">{{ job.error }}</span>
           </div>
-          <div class="job-actions" @click.stop>
+          <div class="col-action" @click.stop>
             <button
               v-if="job.status === 'idle' || job.status === 'error'"
               :disabled="isProcessing"
-              class="btn-generate"
+              class="btn-row-generate"
               @click="processSingle(job)"
             >
               Generate
@@ -175,10 +191,6 @@ let pendingReject: ((e: unknown) => void) | null = null
 const doneCount = computed(() => jobs.value.filter(j => j.status === 'done').length)
 const skippedCount = computed(() => jobs.value.filter(j => j.status === 'skipped').length)
 const errorCount = computed(() => jobs.value.filter(j => j.status === 'error').length)
-const allDone = computed(() =>
-  jobs.value.length > 0 &&
-  jobs.value.every(j => ['done', 'skipped', 'error'].includes(j.status))
-)
 const allSelected = computed(() => jobs.value.length > 0 && selectedIds.value.size === jobs.value.length)
 const someSelected = computed(() => selectedIds.value.size > 0)
 const progressPct = computed(() => {
@@ -190,7 +202,7 @@ const progressPct = computed(() => {
 function statusLabel(status: JobStatus): string {
   switch (status) {
     case 'idle': return 'Pending'
-    case 'fetching-files': return 'Loading files…'
+    case 'fetching-files': return 'Loading…'
     case 'rendering': return 'Rendering…'
     case 'saving': return 'Saving…'
     case 'done': return 'Done'
@@ -265,7 +277,6 @@ async function processSingle(job: ThumbnailJob) {
 }
 
 async function processJob(job: ThumbnailJob) {
-  // Fetch model files if not yet loaded
   if (job.files.length === 0) {
     job.status = 'fetching-files'
     try {
@@ -290,7 +301,6 @@ async function processJob(job: ThumbnailJob) {
   job.status = 'rendering'
   activeJob.value = job
 
-  // Wait for headless viewer to emit imageCaptured or error
   await new Promise<void>((resolve, reject) => {
     pendingResolve = resolve
     pendingReject = reject
@@ -340,15 +350,16 @@ onMounted(loadJobs)
   margin: 0 auto;
 }
 
+/* ── Header ── */
 .header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .header-left h2 {
@@ -363,22 +374,22 @@ onMounted(loadJobs)
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  background: var(--bg-secondary);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s;
 }
-.back-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.back-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
 
 .count-badge {
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 0.75rem;
   font-weight: 600;
-  background: rgba(110, 168, 254, 0.15);
-  color: #6ea8fe;
+  background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+  color: var(--accent-primary);
 }
 
 .subtitle {
@@ -387,6 +398,7 @@ onMounted(loadJobs)
   margin: 0;
 }
 
+/* ── States ── */
 .loading-state {
   display: flex;
   align-items: center;
@@ -399,232 +411,291 @@ onMounted(loadJobs)
 .empty-state {
   text-align: center;
   padding: 4rem 2rem;
-  color: var(--text-secondary);
+  color: var(--success);
 }
-.empty-state.success { color: #4ade80; }
-.empty-icon { font-size: 2.5rem; margin-bottom: 1rem; }
-.empty-state h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary); }
-.empty-state p { font-size: 0.875rem; }
+.empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+.empty-icon svg { width: 48px; height: 48px; }
+.empty-state h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+.empty-state p { font-size: 0.875rem; color: var(--text-secondary); }
 
-.controls-bar {
+/* ── Sticky Toolbar ── */
+.toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
-  gap: 1rem;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  margin-bottom: 0.75rem;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
   flex-wrap: wrap;
 }
 
-.stats-row {
+.toolbar-right {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.select-all-wrap {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.select-all-check {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.selection-count {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .stat-pill {
-  padding: 3px 10px;
-  border-radius: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--bg-elevated);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-subtle);
+}
+.stat-pill.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 30%, transparent); background: color-mix(in srgb, var(--warning) 8%, transparent); }
+.stat-pill.err { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, transparent); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+
+.btn-refresh {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.45rem 0.875rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
   font-size: 0.8rem;
   font-weight: 500;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
+  transition: background 0.15s;
 }
-.stat-pill.skipped { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.08); }
-.stat-pill.error { color: #f87171; border-color: rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.08); }
+.btn-refresh:hover:not(:disabled) { background: var(--bg-hover); }
+.btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-refresh svg { width: 14px; height: 14px; }
 
-.actions-row {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.btn-primary {
+.btn-generate-bulk {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: #6ea8fe;
-  color: #fff;
+  gap: 0.375rem;
+  padding: 0.45rem 1rem;
+  background: var(--accent-primary);
+  color: var(--bg-deepest);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: background 0.15s;
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition: all 0.15s;
+  white-space: nowrap;
 }
-.btn-primary:hover:not(:disabled) { background: #5a95f0; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-generate-bulk:hover:not(:disabled) { background: var(--accent-secondary); transform: translateY(-1px); }
+.btn-generate-bulk:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
-.btn-secondary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: background 0.15s;
-}
-.btn-secondary:hover:not(:disabled) { background: var(--bg-tertiary); }
-.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
-
+/* ── Progress bar ── */
 .progress-bar-wrapper {
-  height: 6px;
-  background: var(--bg-tertiary);
-  border-radius: 3px;
-  margin-bottom: 1.25rem;
+  height: 3px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+  margin-bottom: 0.875rem;
   position: relative;
   overflow: hidden;
 }
 .progress-bar {
   height: 100%;
-  background: #6ea8fe;
-  border-radius: 3px;
+  background: var(--accent-primary);
+  border-radius: 2px;
   transition: width 0.3s ease;
 }
 .progress-label {
   position: absolute;
   right: 0;
-  top: -18px;
+  top: 6px;
   font-size: 11px;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
-.job-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+/* ── Table card ── */
+.job-table {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.job-table-header {
+  display: grid;
+  grid-template-columns: 36px 48px 1fr 120px 88px;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
 }
 
 .job-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 36px 48px 1fr 120px 88px;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  transition: border-color 0.15s;
-}
-.job-row { cursor: pointer; }
-.job-row:hover { border-color: rgba(110, 168, 254, 0.3); }
-.job-row.done { border-color: rgba(74, 222, 128, 0.25); background: rgba(74, 222, 128, 0.04); }
-.job-row.error { border-color: rgba(248, 113, 113, 0.25); background: rgba(248, 113, 113, 0.04); }
-.job-row.skipped { opacity: 0.6; }
-.job-row.selected { border-color: rgba(110, 168, 254, 0.5); background: rgba(110, 168, 254, 0.06); }
-
-.job-checkbox {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
-  accent-color: #6ea8fe;
+  transition: background var(--transition-base);
 }
+.job-row:last-child { border-bottom: none; }
+.job-row:hover { background: var(--bg-elevated); }
+.job-row.selected { background: color-mix(in srgb, var(--accent-primary) 8%, transparent); }
+.job-row.done { border-left: 2px solid color-mix(in srgb, var(--success) 60%, transparent); padding-left: calc(1rem - 2px); }
+.job-row.error { border-left: 2px solid color-mix(in srgb, var(--danger) 60%, transparent); padding-left: calc(1rem - 2px); }
+.job-row.skipped { opacity: 0.55; }
 
-.select-all-label {
+/* Grid columns */
+.col-check {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
+  justify-content: center;
 }
-.select-all-label input[type="checkbox"] {
+.row-check {
   width: 15px;
   height: 15px;
-  accent-color: #6ea8fe;
+  accent-color: var(--accent-primary);
   cursor: pointer;
 }
 
+.col-thumb { }
 .job-thumb {
-  width: 48px;
-  height: 48px;
-  border-radius: 6px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
+  background: var(--bg-elevated);
   flex-shrink: 0;
-  background: var(--bg-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .job-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.thumb-placeholder { color: var(--text-secondary); opacity: 0.5; }
+.thumb-placeholder { color: var(--text-tertiary); }
+.thumb-placeholder svg { width: 18px; height: 18px; }
 
-.job-info {
-  flex: 1;
+.col-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
   min-width: 0;
 }
 .job-name {
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .job-meta {
   font-size: 0.75rem;
-  color: var(--text-secondary);
-  margin-top: 2px;
+  color: var(--text-tertiary);
 }
 
-.job-status {
+.col-status {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .status-badge {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 8px;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--bg-elevated);
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
-.status-badge.done { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
-.status-badge.error { background: rgba(248, 113, 113, 0.12); color: #f87171; }
-.status-badge.skipped { background: var(--bg-tertiary); color: var(--text-secondary); }
+.status-badge.done { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success); }
+.status-badge.error { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+.status-badge.skipped { background: var(--bg-elevated); color: var(--text-tertiary); }
 .status-badge.fetching-files,
 .status-badge.rendering,
-.status-badge.saving { background: rgba(110, 168, 254, 0.12); color: #6ea8fe; }
+.status-badge.saving { background: color-mix(in srgb, var(--accent-primary) 12%, transparent); color: var(--accent-primary); }
 
 .error-detail {
-  font-size: 0.7rem;
-  color: #f87171;
-  max-width: 150px;
-  text-align: right;
+  font-size: 0.68rem;
+  color: var(--danger);
+  max-width: 120px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.job-actions {
-  flex-shrink: 0;
+.col-action {
+  display: flex;
+  justify-content: flex-end;
 }
-.btn-generate {
-  padding: 5px 12px;
-  font-size: 12px;
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-generate:hover:not(:disabled) { background: rgba(110, 168, 254, 0.15); color: #6ea8fe; border-color: rgba(110, 168, 254, 0.3); }
-.btn-generate:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Off-screen headless renderer */
+.btn-row-generate {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-row-generate:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--accent-primary);
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+}
+.btn-row-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Off-screen headless renderer ── */
 .headless-viewer-host {
   position: fixed;
   left: -9999px;
@@ -636,16 +707,22 @@ onMounted(loadJobs)
   opacity: 0;
 }
 
+/* ── Spinners ── */
 .loading-spinner,
 .btn-spinner,
 .status-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(110, 168, 254, 0.2);
-  border-top-color: #6ea8fe;
+  width: 13px;
+  height: 13px;
+  border: 2px solid color-mix(in srgb, var(--accent-primary) 25%, transparent);
+  border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
 }
 
 @keyframes spin {
