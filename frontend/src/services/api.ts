@@ -95,7 +95,7 @@ export interface CategorySuggestion {
 
 // Models API
 export const modelsApi = {
-    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string; noImage?: boolean; tag?: string; tags?: string; tagMode?: 'and' | 'or' }) =>
+    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string; noImage?: boolean; hasPreviewFiles?: boolean; tag?: string; tags?: string; tagMode?: 'and' | 'or' }) =>
         api.get('/models', { params }),
 
     getById: (id: number) =>
@@ -150,7 +150,13 @@ export const modelsApi = {
         api.post('/models/suggest-categories', { model_ids: modelIds, use_ai: useAi ?? false }, { timeout: 60000 }),
 
     savePreviewImage: (modelId: number, imageData: string) =>
-        api.post(`/models/${modelId}/save-preview-image`, { imageData }, { timeout: 30000 })
+        api.post(`/models/${modelId}/save-preview-image`, { imageData }, { timeout: 30000 }),
+
+    extractTempModel: (modelId: number) =>
+        api.post(`/models/${modelId}/extract-temp-model`, {}, { timeout: 30000 }),
+
+    cleanupTempModel: (tempPath: string) =>
+        api.post('/models/cleanup-temp-model', { tempPath })
 };
 
 // Favorites API

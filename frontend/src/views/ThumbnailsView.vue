@@ -48,6 +48,14 @@
           <span class="stat-pill err" v-if="errorCount > 0">{{ errorCount }} failed</span>
         </div>
         <div class="toolbar-right">
+          <label class="zip-toggle" :class="{ active: includeZipOnly }">
+            <input
+              type="checkbox"
+              v-model="includeZipOnly"
+              :disabled="isProcessing"
+            />
+            Include zip-only models
+          </label>
           <button class="btn-refresh" :disabled="isProcessing" @click="loadJobs">
             <AppIcon name="refresh" />
             Refresh
@@ -111,7 +119,7 @@
           </div>
           <div class="col-status">
             <span :class="['status-badge', job.status]">
-              <div v-if="['fetching-files','rendering','saving'].includes(job.status)" class="status-spinner"></div>
+              <div v-if="['fetching-files','extracting','rendering','saving'].includes(job.status)" class="status-spinner"></div>
               {{ statusLabel(job.status) }}
             </span>
             <span v-if="job.error" class="error-detail">{{ job.error }}</span>
@@ -153,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { modelsApi, type Model } from '../services/api'
 import AppIcon from '../components/AppIcon.vue'
@@ -169,13 +177,14 @@ interface ModelFile {
   file_type: string
 }
 
-type JobStatus = 'idle' | 'fetching-files' | 'rendering' | 'saving' | 'done' | 'error' | 'skipped'
+type JobStatus = 'idle' | 'fetching-files' | 'extracting' | 'rendering' | 'saving' | 'done' | 'error' | 'skipped'
 
 interface ThumbnailJob {
   model: Model & { primaryImage?: string | null }
   files: ModelFile[]
   status: JobStatus
   error?: string
+  tempFilePath?: string
 }
 
 const router = useRouter()
@@ -185,6 +194,7 @@ const jobs = ref<ThumbnailJob[]>([])
 const activeJob = ref<ThumbnailJob | null>(null)
 const selectedIds = ref<Set<number>>(new Set())
 const selectedModelId = ref<number | null>(null)
+const includeZipOnly = ref(false)
 let pendingResolve: (() => void) | null = null
 let pendingReject: ((e: unknown) => void) | null = null
 
@@ -203,6 +213,7 @@ function statusLabel(status: JobStatus): string {
   switch (status) {
     case 'idle': return 'Pending'
     case 'fetching-files': return 'Loading…'
+    case 'extracting': return 'Extracting…'
     case 'rendering': return 'Rendering…'
     case 'saving': return 'Saving…'
     case 'done': return 'Done'
@@ -219,7 +230,10 @@ function getImageUrl(filepath: string): string {
 async function loadJobs() {
   loading.value = true
   try {
-    const resp = await modelsApi.getAll({ noImage: true, limit: 500 })
+    const params = includeZipOnly.value
+      ? { noImage: true, limit: 500 }
+      : { noImage: true, hasPreviewFiles: true, limit: 500 }
+    const resp = await modelsApi.getAll(params)
     const models = resp.data.models as Array<Model & { primaryImage?: string | null }>
     jobs.value = models.map(m => ({
       model: m,
@@ -294,8 +308,22 @@ async function processJob(job: ThumbnailJob) {
   )
 
   if (previewable.length === 0) {
-    job.status = 'skipped'
-    return
+    if (!includeZipOnly.value) {
+      job.status = 'skipped'
+      return
+    }
+    // Try to extract a temp STL/3MF from the model's zip archives
+    job.status = 'extracting'
+    try {
+      const extractResp = await modelsApi.extractTempModel(job.model.id)
+      const tempFile: ModelFile = extractResp.data.tempFile
+      job.tempFilePath = tempFile.filepath
+      job.files = [tempFile]
+    } catch (err) {
+      job.status = 'error'
+      job.error = 'No previewable file in archives'
+      return
+    }
   }
 
   job.status = 'rendering'
@@ -321,12 +349,15 @@ async function onHeadlessCapture(dataUrl: string) {
     pendingReject = null
     pendingResolve = null
     activeJob.value = null
+    cleanupTempFile(job)
     return
   }
-  activeJob.value = null
-  pendingResolve?.()
+  const resolve = pendingResolve
   pendingResolve = null
   pendingReject = null
+  activeJob.value = null
+  cleanupTempFile(job)
+  resolve?.()
 }
 
 function onHeadlessError(message: string) {
@@ -334,11 +365,26 @@ function onHeadlessError(message: string) {
   if (!job) return
   job.status = 'error'
   job.error = message
-  activeJob.value = null
-  pendingReject?.(new Error(message))
+  const reject = pendingReject
   pendingReject = null
   pendingResolve = null
+  activeJob.value = null
+  cleanupTempFile(job)
+  reject?.(new Error(message))
 }
+
+function cleanupTempFile(job: ThumbnailJob) {
+  if (job.tempFilePath) {
+    modelsApi.cleanupTempModel(job.tempFilePath).catch(() => {/* ignore */})
+    job.tempFilePath = undefined
+    // Reset files so the job doesn't re-use the (now deleted) temp path on retry
+    job.files = []
+  }
+}
+
+watch(includeZipOnly, () => {
+  if (!isProcessing.value) loadJobs()
+})
 
 onMounted(loadJobs)
 </script>
@@ -488,6 +534,27 @@ onMounted(loadJobs)
 }
 .stat-pill.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 30%, transparent); background: color-mix(in srgb, var(--warning) 8%, transparent); }
 .stat-pill.err { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, transparent); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+
+.zip-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.zip-toggle input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+.zip-toggle.active {
+  color: var(--accent-primary);
+}
+.zip-toggle input:disabled { cursor: not-allowed; }
 
 .btn-refresh {
   display: flex;
@@ -659,6 +726,7 @@ onMounted(loadJobs)
 .status-badge.error { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
 .status-badge.skipped { background: var(--bg-elevated); color: var(--text-tertiary); }
 .status-badge.fetching-files,
+.status-badge.extracting,
 .status-badge.rendering,
 .status-badge.saving { background: color-mix(in srgb, var(--accent-primary) 12%, transparent); color: var(--accent-primary); }
 

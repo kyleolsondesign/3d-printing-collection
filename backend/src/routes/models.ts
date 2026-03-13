@@ -1,10 +1,12 @@
 import express from 'express';
 import db from '../config/database.js';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import mime from 'mime-types';
 import scanner from '../services/scanner.js';
 import extractZip from 'extract-zip';
+import yauzl from 'yauzl';
 import { exec } from 'child_process';
 import {
     suggestCategoryFuzzy,
@@ -72,6 +74,14 @@ router.get('/', (req, res) => {
 
         if (noImage) {
             conditions.push('NOT EXISTS (SELECT 1 FROM model_assets WHERE model_assets.model_id = models.id AND model_assets.asset_type = \'image\' AND (model_assets.is_hidden = 0 OR model_assets.is_hidden IS NULL))');
+        }
+
+        const hasPreviewFiles = req.query.hasPreviewFiles as string | undefined;
+        if (hasPreviewFiles === 'true') {
+            conditions.push("EXISTS (SELECT 1 FROM model_files mf WHERE mf.model_id = models.id AND LOWER(mf.file_type) IN ('stl', '3mf'))");
+        } else if (hasPreviewFiles === 'false') {
+            conditions.push("NOT EXISTS (SELECT 1 FROM model_files mf WHERE mf.model_id = models.id AND LOWER(mf.file_type) IN ('stl', '3mf'))");
+            conditions.push("EXISTS (SELECT 1 FROM model_files mf WHERE mf.model_id = models.id AND LOWER(mf.file_type) = 'zip')");
         }
 
         // Multi-tag filter: accept ?tags=a,b,c or legacy ?tag=a
@@ -173,6 +183,12 @@ router.get('/', (req, res) => {
         }
         if (noImage) {
             countConditions.push('NOT EXISTS (SELECT 1 FROM model_assets WHERE model_assets.model_id = models.id AND model_assets.asset_type = \'image\' AND (model_assets.is_hidden = 0 OR model_assets.is_hidden IS NULL))');
+        }
+        if (hasPreviewFiles === 'true') {
+            countConditions.push("EXISTS (SELECT 1 FROM model_files mf WHERE mf.model_id = models.id AND LOWER(mf.file_type) IN ('stl', '3mf'))");
+        } else if (hasPreviewFiles === 'false') {
+            countConditions.push("NOT EXISTS (SELECT 1 FROM model_files mf WHERE mf.model_id = models.id AND LOWER(mf.file_type) IN ('stl', '3mf'))");
+            countConditions.push("EXISTS (SELECT 1 FROM model_files mf WHERE mf.model_id = models.id AND LOWER(mf.file_type) = 'zip')");
         }
         if (activeTags.length > 0) {
             if (tagMode === 'or') {
@@ -1000,6 +1016,132 @@ router.post('/:id/toggle-purge-mark', (req, res) => {
             const updated = db.prepare('SELECT purge_marked_at FROM models WHERE id = ?').get(id) as { purge_marked_at: string };
             res.json({ success: true, purge_marked_at: updated.purge_marked_at });
         }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Extract a single STL or 3MF from a model's zip archive into a temp directory for preview generation
+router.post('/:id/extract-temp-model', async (req, res) => {
+    try {
+        const modelId = parseInt(req.params.id);
+        if (isNaN(modelId)) {
+            return res.status(400).json({ error: 'Invalid model ID' });
+        }
+
+        const model = db.prepare('SELECT id FROM models WHERE id = ? AND deleted_at IS NULL').get(modelId);
+        if (!model) {
+            return res.status(404).json({ error: 'Model not found' });
+        }
+
+        // Find zip archives in model_files
+        const archives = db.prepare(
+            "SELECT filepath FROM model_files WHERE model_id = ? AND LOWER(file_type) = 'zip'"
+        ).all(modelId) as Array<{ filepath: string }>;
+
+        if (archives.length === 0) {
+            return res.status(404).json({ error: 'No zip archives found for this model' });
+        }
+
+        // Scan each zip for the first STL or 3MF entry
+        const MODEL_EXTS = ['.stl', '.3mf'];
+
+        const extractEntry = (zipPath: string, entryName: string): Promise<string> =>
+            new Promise((resolve, reject) => {
+                yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+                    if (err || !zipfile) return reject(err || new Error('Cannot open zip'));
+
+                    zipfile.on('error', reject);
+                    zipfile.on('entry', (entry: yauzl.Entry) => {
+                        if (entry.fileName !== entryName) {
+                            zipfile.readEntry();
+                            return;
+                        }
+                        zipfile.openReadStream(entry, (streamErr, readStream) => {
+                            if (streamErr || !readStream) {
+                                return reject(streamErr || new Error('Cannot open stream'));
+                            }
+                            const tmpDir = path.join(os.tmpdir(), `3dpc-temp-${modelId}-${Date.now()}`);
+                            fs.mkdirSync(tmpDir, { recursive: true });
+                            const outPath = path.join(tmpDir, path.basename(entryName));
+                            const writeStream = fs.createWriteStream(outPath);
+                            readStream.pipe(writeStream);
+                            writeStream.on('finish', () => { zipfile.close(); resolve(outPath); });
+                            writeStream.on('error', (e) => { zipfile.close(); reject(e); });
+                        });
+                    });
+                    zipfile.on('end', () => reject(new Error('Entry not found in zip')));
+                    zipfile.readEntry();
+                });
+            });
+
+        const findEntry = (zipPath: string): Promise<{ entryName: string } | null> =>
+            new Promise((resolve) => {
+                yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+                    if (err || !zipfile) return resolve(null);
+                    let found: string | null = null;
+                    zipfile.on('error', () => resolve(null));
+                    zipfile.on('entry', (entry: yauzl.Entry) => {
+                        if (found) { zipfile.readEntry(); return; }
+                        const ext = path.extname(entry.fileName).toLowerCase();
+                        if (MODEL_EXTS.includes(ext) && !entry.fileName.startsWith('__MACOSX')) {
+                            found = entry.fileName;
+                        }
+                        zipfile.readEntry();
+                    });
+                    zipfile.on('end', () => { zipfile.close(); resolve(found ? { entryName: found } : null); });
+                });
+            });
+
+        for (const archive of archives) {
+            if (!fs.existsSync(archive.filepath)) continue;
+            const entry = await findEntry(archive.filepath);
+            if (!entry) continue;
+            const tempPath = await extractEntry(archive.filepath, entry.entryName);
+            const ext = path.extname(tempPath).toLowerCase().replace('.', '');
+            const filename = path.basename(tempPath);
+            const size = fs.statSync(tempPath).size;
+            return res.json({
+                tempFile: {
+                    id: -1,
+                    model_id: modelId,
+                    filename,
+                    filepath: tempPath,
+                    file_size: size,
+                    file_type: ext,
+                },
+            });
+        }
+
+        res.status(404).json({ error: 'No STL or 3MF found inside zip archives' });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Clean up a previously extracted temp model file
+router.post('/cleanup-temp-model', (req, res) => {
+    try {
+        const { tempPath } = req.body;
+        if (!tempPath || typeof tempPath !== 'string') {
+            return res.status(400).json({ error: 'tempPath is required' });
+        }
+
+        const resolved = path.resolve(tempPath);
+        const tmpBase = os.tmpdir();
+
+        // Security: only allow deleting files inside our named temp folders
+        if (!resolved.startsWith(tmpBase) || !path.dirname(resolved).includes('3dpc-temp-')) {
+            return res.status(403).json({ error: 'Path not allowed' });
+        }
+
+        if (fs.existsSync(resolved)) {
+            fs.rmSync(path.dirname(resolved), { recursive: true, force: true });
+        }
+
+        res.json({ success: true });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

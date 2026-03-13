@@ -515,8 +515,19 @@ function acDetectReasons(loserName: string, winnerName: string): AutoReason[] {
         if (lDepl !== lUS) reasons.add('plural');
     }
 
-    // Fallback
-    if (reasons.size === 0) reasons.add('separator');
+    // Spelling fallback: if no other reason and the canonical forms differ by edit distance,
+    // it's a spelling error (covers misspellings not in the brit-to-US dictionary)
+    if (reasons.size === 0) {
+        const lc = acCanonical(loserName);
+        const wc = acCanonical(winnerName);
+        const maxLen = Math.max(lc.length, wc.length);
+        const dist = levenshtein(lc, wc);
+        if (maxLen >= 6 && dist <= (maxLen <= 10 ? 1 : 2)) {
+            reasons.add('spelling');
+        } else {
+            reasons.add('separator');
+        }
+    }
     return Array.from(reasons);
 }
 
@@ -561,6 +572,30 @@ router.get('/auto-consolidate-suggestions', (req, res) => {
             }
             for (const ids of bucket.values()) {
                 for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+            }
+        }
+
+        // Fuzzy spelling pass: compare still-ungrouped tags with same canonical word count.
+        // Catches real misspellings like "suculent" vs "succulent" that exact keys miss.
+        const tagCanons = new Map(tags.map(t => [t.id, acCanonical(t.name)]));
+        const singletons = tags.filter(t => find(t.id) === t.id);
+        const byWordCount = new Map<number, typeof singletons>();
+        for (const tag of singletons) {
+            const wc = tagCanons.get(tag.id)!.split(' ').length;
+            if (!byWordCount.has(wc)) byWordCount.set(wc, []);
+            byWordCount.get(wc)!.push(tag);
+        }
+        for (const group of byWordCount.values()) {
+            for (let i = 0; i < group.length; i++) {
+                const ca = tagCanons.get(group[i].id)!;
+                if (ca.length < 6) continue; // skip very short tags to avoid false positives
+                for (let j = i + 1; j < group.length; j++) {
+                    const cb = tagCanons.get(group[j].id)!;
+                    if (cb.length < 6) continue;
+                    const maxLen = Math.max(ca.length, cb.length);
+                    const threshold = maxLen <= 10 ? 1 : 2;
+                    if (levenshtein(ca, cb) <= threshold) union(group[i].id, group[j].id);
+                }
             }
         }
 

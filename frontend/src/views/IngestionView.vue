@@ -1650,7 +1650,7 @@ function formatFileSize(bytes: number): string {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .paid-table-header {
@@ -1661,6 +1661,7 @@ function formatFileSize(bytes: number): string {
   padding: 0.5rem 1rem;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-default);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -1679,7 +1680,7 @@ function formatFileSize(bytes: number): string {
   transition: background var(--transition-base);
 }
 
-.paid-row:last-child { border-bottom: none; }
+.paid-row:last-child { border-bottom: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
 .paid-row:hover { background: var(--bg-elevated); }
 .paid-row.selected { background: color-mix(in srgb, var(--accent-primary) 8%, transparent); }
 .paid-row.changed { border-left: 2px solid var(--accent-primary); padding-left: calc(1rem - 2px); }
