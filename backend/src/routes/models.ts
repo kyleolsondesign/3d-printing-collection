@@ -303,7 +303,12 @@ router.get('/:id', (req, res) => {
     try {
         const { id } = req.params;
 
-        const model = db.prepare('SELECT * FROM models WHERE id = ?').get(id) as { filepath: string } | undefined;
+        const model = db.prepare(`
+            SELECT models.*, d.name as designer_name
+            FROM models
+            LEFT JOIN designers d ON d.id = models.designer_id
+            WHERE models.id = ?
+        `).get(id) as { filepath: string } | undefined;
 
         if (!model) {
             return res.status(404).json({ error: 'Model not found' });

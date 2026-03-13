@@ -173,6 +173,14 @@
                 </div>
               </div>
 
+              <!-- Designer link (when linked via folder structure, no PDF metadata) -->
+              <div class="metadata-section" v-if="modelDetails.designer_id && modelDetails.designer_name && !(modelDetails.metadata && modelDetails.metadata.designer)">
+                <div class="metadata-row">
+                  <span class="metadata-label">Designer</span>
+                  <a @click.prevent="goToDesigner" href="#" class="metadata-link">{{ modelDetails.designer_name }}</a>
+                </div>
+              </div>
+
               <!-- Metadata from PDF -->
               <div class="metadata-section" v-if="modelDetails.metadata && hasMetadata">
                 <div class="metadata-row" v-if="modelDetails.metadata.designer">

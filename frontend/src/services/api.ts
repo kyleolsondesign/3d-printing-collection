@@ -25,6 +25,7 @@ export interface Model {
     printRating?: 'good' | 'bad' | null;
     isPrinting?: boolean;
     designer_id?: number | null;
+    designer_name?: string | null;
     designer?: string | null;
     source_platform?: string | null;
     source_url?: string | null;
@@ -340,7 +341,7 @@ export interface TagSimilarPair {
     similarity: number;
 }
 
-export type AutoConsolidateReason = 'leading-dash' | 'leading-apostrophe' | 'separator' | 'plural' | 'spelling';
+export type AutoConsolidateReason = 'leading-dash' | 'leading-apostrophe' | 'separator' | 'plural' | 'spelling' | 'year';
 
 export interface AutoConsolidateLoser extends Tag {
     reasons: AutoConsolidateReason[];
