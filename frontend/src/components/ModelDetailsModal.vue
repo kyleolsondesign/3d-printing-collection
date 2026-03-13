@@ -941,7 +941,7 @@ async function deleteMakeImage(imageId: number) {
 }
 
 function navigateToTag(tagName: string) {
-  router.push({ path: '/', query: { tag: tagName } }).then(() => emit('close'));
+  router.push({ path: '/', query: { tags: tagName } }).then(() => emit('close'));
 }
 
 async function addTag() {

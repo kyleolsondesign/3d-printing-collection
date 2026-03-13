@@ -12,6 +12,7 @@ import StatsView from '../views/StatsView.vue';
 import SettingsView from '../views/SettingsView.vue';
 import PurgeView from '../views/PurgeView.vue';
 import ThumbnailsView from '../views/ThumbnailsView.vue';
+import TagsView from '../views/TagsView.vue';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -50,6 +51,11 @@ const router = createRouter({
             path: '/ingestion',
             name: 'ingestion',
             component: IngestionView
+        },
+        {
+            path: '/tags',
+            name: 'tags',
+            component: TagsView
         },
         {
             path: '/designers',

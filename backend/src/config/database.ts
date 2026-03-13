@@ -230,9 +230,25 @@ function initializeDatabase(): void {
         CREATE TABLE IF NOT EXISTS tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
+            source TEXT DEFAULT 'pdf',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    // Blocklist for intentionally-deleted tags — prevents PDF/autotag re-ingestion
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS tag_blocklist (
+            name TEXT PRIMARY KEY
+        )
+    `);
+
+    // Add source column to existing tags tables (migration)
+    // DEFAULT 'pdf' is correct — all pre-existing tags were extracted from PDFs
+    try {
+        db.exec(`ALTER TABLE tags ADD COLUMN source TEXT DEFAULT 'pdf'`);
+    } catch (e) {
+        // Column already exists, ignore
+    }
 
     // Model tags - many-to-many relationship
     db.exec(`
@@ -313,6 +329,8 @@ function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_metadata_platform ON model_metadata(source_platform);
         CREATE INDEX IF NOT EXISTS idx_metadata_designer ON model_metadata(designer);
         CREATE INDEX IF NOT EXISTS idx_model_assets_lookup ON model_assets(model_id, asset_type, is_primary, is_hidden);
+        CREATE INDEX IF NOT EXISTS idx_model_tags_tag ON model_tags(tag_id);
+        CREATE INDEX IF NOT EXISTS idx_tags_source ON tags(source);
     `);
 
     // Create full-text search virtual table

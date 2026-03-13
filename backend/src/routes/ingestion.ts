@@ -64,6 +64,7 @@ interface IngestionItem {
     imageFile: string | null;
     debugScores: ScoreDebugEntry[];
     designer: string | null;
+    suggestedTags: string[];
 }
 
 interface ScannedItem {
@@ -362,7 +363,8 @@ router.get('/scan', async (req, res) => {
                 suggestedCategory: fuzzy.category,
                 confidence: fuzzy.confidence,
                 debugScores: fuzzy.debugScores,
-                designer: item.designer
+                designer: item.designer,
+                suggestedTags: item.pdfTags || []
             };
         });
 
@@ -527,7 +529,8 @@ router.post('/categorize', async (req, res) => {
                     fileSize: item.fileSize,
                     imageFile: item.imageFile,
                     suggestedCategory: aiSuggestion.category,
-                    confidence: aiSuggestion.confidence
+                    confidence: aiSuggestion.confidence,
+                    suggestedTags: item.pdfTags || []
                 };
             } else {
                 const fuzzy = suggestCategoryFuzzy({
@@ -547,7 +550,8 @@ router.post('/categorize', async (req, res) => {
                     fileSize: item.fileSize,
                     imageFile: item.imageFile,
                     suggestedCategory: fuzzy.category,
-                    confidence: fuzzy.confidence
+                    confidence: fuzzy.confidence,
+                    suggestedTags: item.pdfTags || []
                 };
             }
         });
@@ -681,7 +685,7 @@ router.post('/import', async (req, res) => {
     setImmediate(async () => {
         try {
             for (const item of items) {
-                const { filepath, category, isFolder, suggestedCategory, confidence } = item;
+                const { filepath, category, isFolder, suggestedCategory, confidence, tags } = item;
                 const displayName = path.basename(filepath || 'unknown');
                 importJobProgress.currentItem = displayName;
                 importJobProgress.status = `Importing ${displayName} (${importJobProgress.processedItems + 1}/${importJobProgress.totalItems})`;
@@ -739,6 +743,22 @@ router.post('/import', async (req, res) => {
                     }
 
                     const model = await scanner.scanSingleFolder(targetFolderPath, modelDir);
+
+                    // Apply tags if provided (skip blocklisted names)
+                    if (model?.modelId && Array.isArray(tags) && tags.length > 0) {
+                        for (const tagName of tags) {
+                            const trimmed = String(tagName).trim().toLowerCase();
+                            if (!trimmed) continue;
+                            const blocked = db.prepare('SELECT 1 FROM tag_blocklist WHERE name = ?').get(trimmed);
+                            if (blocked) continue;
+                            let tag = db.prepare('SELECT id FROM tags WHERE LOWER(name) = ?').get(trimmed) as { id: number } | undefined;
+                            if (!tag) {
+                                const result = db.prepare('INSERT INTO tags (name, source) VALUES (?, ?)').run(trimmed, 'pdf');
+                                tag = { id: Number(result.lastInsertRowid) };
+                            }
+                            db.prepare('INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)').run(model.modelId, tag.id);
+                        }
+                    }
 
                     // Assign designer if detected
                     if (model?.modelId) {

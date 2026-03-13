@@ -3,11 +3,55 @@ import db from '../config/database.js';
 
 const router = express.Router();
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function levenshtein(a: string, b: string): number {
+    const m = a.length;
+    const n = b.length;
+    const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            dp[i][j] = a[i - 1] === b[j - 1]
+                ? dp[i - 1][j - 1]
+                : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+        }
+    }
+    return dp[m][n];
+}
+
+/** Strip separators and trailing 's' for comparison */
+function normalizeTag(s: string): string {
+    return s.replace(/[-_ ]+/g, '').replace(/s$/, '');
+}
+
+function tagSimilarity(a: string, b: string): number {
+    if (a === b) return 100;
+    // Same after stripping separators (kitchen-tool == kitchen tool == kitchentool)
+    const aN = normalizeTag(a);
+    const bN = normalizeTag(b);
+    if (aN === bN) return 98;
+    // Plural/singular (toys == toy)
+    if (a.replace(/s$/, '') === b.replace(/s$/, '')) return 95;
+    if (aN.replace(/s$/, '') === bN.replace(/s$/, '')) return 95;
+    // Prefix containment (kitchen < kitchen tool)
+    if (a.startsWith(b) || b.startsWith(a)) return 88;
+    // Levenshtein on normalised forms — only for longer tags to avoid false positives
+    // (e.g. "women" vs "woven" would score 80 on a 5-char pair but are unrelated)
+    const maxLen = Math.max(aN.length, bN.length);
+    if (maxLen === 0) return 100;
+    if (maxLen < 6) return 0;
+    const dist = levenshtein(aN, bN);
+    return Math.round((1 - dist / maxLen) * 100);
+}
+
+// ── Existing endpoints ────────────────────────────────────────────────────────
+
 // List all tags with usage counts
 router.get('/', (req, res) => {
     try {
         const tags = db.prepare(`
-            SELECT t.id, t.name, t.created_at,
+            SELECT t.id, t.name, t.source, t.created_at,
                    COUNT(CASE WHEN m.deleted_at IS NULL THEN 1 END) as model_count
             FROM tags t
             LEFT JOIN model_tags mt ON mt.tag_id = t.id
@@ -36,7 +80,7 @@ router.post('/', (req, res) => {
             return res.json(existing);
         }
 
-        const result = db.prepare('INSERT INTO tags (name) VALUES (?)').run(trimmed);
+        const result = db.prepare('INSERT INTO tags (name, source) VALUES (?, ?)').run(trimmed, 'user');
         const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(result.lastInsertRowid);
         res.status(201).json(tag);
     } catch (error) {
@@ -45,11 +89,26 @@ router.post('/', (req, res) => {
     }
 });
 
-// Delete a tag (cascades via model_tags FK)
+// Delete a tag (cascades via model_tags FK) and add to blocklist to prevent re-ingestion
 router.delete('/:id', (req, res) => {
     try {
         const { id } = req.params;
+        const tag = db.prepare('SELECT name FROM tags WHERE id = ?').get(id) as { name: string } | undefined;
+        if (tag) {
+            db.prepare('INSERT OR IGNORE INTO tag_blocklist (name) VALUES (?)').run(tag.name.toLowerCase());
+        }
         db.prepare('DELETE FROM tags WHERE id = ?').run(id);
+        res.json({ success: true });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Remove a name from the tag blocklist (re-allow PDF ingestion of that name)
+router.delete('/blocklist/:name', (req, res) => {
+    try {
+        db.prepare('DELETE FROM tag_blocklist WHERE name = ?').run(req.params.name.toLowerCase());
         res.json({ success: true });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -67,10 +126,10 @@ router.post('/model/:modelId', (req, res) => {
         }
         const trimmed = name.trim().toLowerCase();
 
-        // Upsert tag
+        // Upsert tag with source = 'user'
         let tag = db.prepare('SELECT * FROM tags WHERE LOWER(name) = ?').get(trimmed) as { id: number; name: string } | undefined;
         if (!tag) {
-            const result = db.prepare('INSERT INTO tags (name) VALUES (?)').run(trimmed);
+            const result = db.prepare('INSERT INTO tags (name, source) VALUES (?, ?)').run(trimmed, 'user');
             tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(result.lastInsertRowid) as { id: number; name: string };
         }
 
@@ -108,10 +167,10 @@ router.post('/bulk', (req, res) => {
         }
         const trimmed = tagName.trim().toLowerCase();
 
-        // Upsert tag
+        // Upsert tag with source = 'user'
         let tag = db.prepare('SELECT * FROM tags WHERE LOWER(name) = ?').get(trimmed) as { id: number } | undefined;
         if (!tag) {
-            const result = db.prepare('INSERT INTO tags (name) VALUES (?)').run(trimmed);
+            const result = db.prepare('INSERT INTO tags (name, source) VALUES (?, ?)').run(trimmed, 'user');
             tag = { id: Number(result.lastInsertRowid) };
         }
 
@@ -124,6 +183,329 @@ router.post('/bulk', (req, res) => {
         insertMany(modelIds);
 
         res.json({ success: true, tagId: tag.id });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// ── New tag management endpoints ──────────────────────────────────────────────
+
+// Find similar tags (for consolidation)
+router.get('/similar', (req, res) => {
+    try {
+        const threshold = parseInt(req.query.threshold as string) || 80;
+
+        const tags = db.prepare(`
+            SELECT t.id, t.name, t.source,
+                   COUNT(CASE WHEN m.deleted_at IS NULL THEN 1 END) as model_count
+            FROM tags t
+            LEFT JOIN model_tags mt ON mt.tag_id = t.id
+            LEFT JOIN models m ON m.id = mt.model_id
+            GROUP BY t.id
+            HAVING COUNT(mt.tag_id) >= 1
+            ORDER BY t.name ASC
+        `).all() as Array<{ id: number; name: string; source: string; model_count: number }>;
+
+        const pairs: Array<{
+            tag1: { id: number; name: string; source: string; model_count: number };
+            tag2: { id: number; name: string; source: string; model_count: number };
+            similarity: number;
+        }> = [];
+
+        for (let i = 0; i < tags.length; i++) {
+            for (let j = i + 1; j < tags.length; j++) {
+                const sim = tagSimilarity(tags[i].name, tags[j].name);
+                if (sim >= threshold) {
+                    pairs.push({ tag1: tags[i], tag2: tags[j], similarity: sim });
+                }
+            }
+        }
+
+        pairs.sort((a, b) => b.similarity - a.similarity);
+        res.json(pairs);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Merge tags: move all sourceIds associations to targetId and delete source tags
+router.post('/merge', (req, res) => {
+    try {
+        const { sourceIds, targetId } = req.body;
+        if (!Array.isArray(sourceIds) || sourceIds.length === 0 || !targetId) {
+            return res.status(400).json({ error: 'sourceIds (array) and targetId required' });
+        }
+
+        const merge = db.transaction(() => {
+            let mergedCount = 0;
+            for (const srcId of sourceIds) {
+                // Move associations to target (ignore conflicts — model already has target tag)
+                db.prepare(`
+                    INSERT OR IGNORE INTO model_tags (model_id, tag_id)
+                    SELECT model_id, ? FROM model_tags WHERE tag_id = ?
+                `).run(targetId, srcId);
+                // Remove source associations and tag
+                db.prepare('DELETE FROM model_tags WHERE tag_id = ?').run(srcId);
+                db.prepare('DELETE FROM tags WHERE id = ?').run(srcId);
+                mergedCount++;
+            }
+            return mergedCount;
+        });
+
+        const mergedCount = merge();
+        res.json({ success: true, mergedCount });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Batch merge: merge multiple pairs in a single transaction
+router.post('/merge-batch', (req, res) => {
+    try {
+        const { merges } = req.body; // Array<{ sourceId: number, targetId: number }>
+        if (!Array.isArray(merges) || merges.length === 0) {
+            return res.status(400).json({ error: 'merges array required' });
+        }
+
+        const batchMerge = db.transaction(() => {
+            for (const { sourceId, targetId } of merges) {
+                db.prepare(`INSERT OR IGNORE INTO model_tags (model_id, tag_id) SELECT model_id, ? FROM model_tags WHERE tag_id = ?`).run(targetId, sourceId);
+                db.prepare('DELETE FROM model_tags WHERE tag_id = ?').run(sourceId);
+                // Add deleted source to blocklist so it won't be re-ingested
+                const tag = db.prepare('SELECT name FROM tags WHERE id = ?').get(sourceId) as { name: string } | undefined;
+                if (tag) {
+                    db.prepare('INSERT OR IGNORE INTO tag_blocklist (name) VALUES (?)').run(tag.name.toLowerCase());
+                }
+                db.prepare('DELETE FROM tags WHERE id = ?').run(sourceId);
+            }
+            return merges.length;
+        });
+
+        const mergedCount = batchMerge();
+        res.json({ success: true, mergedCount });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Cleanup tags: delete tags matching usage count and/or source criteria
+// Returns preview count when dryRun=true
+router.post('/cleanup', (req, res) => {
+    try {
+        const { maxCount, source, dryRun } = req.body;
+
+        const conditions: string[] = [];
+        const params: any[] = [];
+
+        if (maxCount !== undefined) {
+            conditions.push(`id IN (
+                SELECT t.id FROM tags t
+                LEFT JOIN model_tags mt ON mt.tag_id = t.id
+                LEFT JOIN models m ON m.id = mt.model_id AND m.deleted_at IS NULL
+                GROUP BY t.id
+                HAVING COUNT(m.id) <= ?
+            )`);
+            params.push(maxCount);
+        }
+
+        if (Array.isArray(source) && source.length > 0) {
+            const placeholders = source.map(() => '?').join(', ');
+            conditions.push(`source IN (${placeholders})`);
+            params.push(...source);
+        }
+
+        if (conditions.length === 0) {
+            return res.status(400).json({ error: 'At least one filter (maxCount or source) required' });
+        }
+
+        const whereClause = conditions.join(' AND ');
+
+        if (dryRun) {
+            const { count } = db.prepare(`SELECT COUNT(*) as count FROM tags WHERE ${whereClause}`).get(...params) as { count: number };
+            return res.json({ dryRun: true, wouldDelete: count });
+        }
+
+        const result = db.prepare(`DELETE FROM tags WHERE ${whereClause}`).run(...params);
+        res.json({ success: true, deleted: result.changes });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// Auto-tag models with few/no tags
+router.post('/autotag', async (req, res) => {
+    try {
+        const { modelIds, minTagCount = 2, useAi = false, dryRun = false } = req.body;
+
+        const { autotagModels } = await import('../services/tagging.js');
+        const result = await autotagModels({ modelIds, minTagCount, useAi, dryRun });
+
+        res.json(result);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// AI-powered consolidation: evaluate similar pairs and recommend which to merge
+router.post('/ai-consolidate', async (req, res) => {
+    try {
+        const { pairs } = req.body;
+        if (!Array.isArray(pairs) || pairs.length === 0) {
+            return res.status(400).json({ error: 'pairs array required' });
+        }
+
+        const apiKeyRow = db.prepare("SELECT value FROM config WHERE key = 'anthropic_api_key'").get() as { value: string } | undefined;
+        if (!apiKeyRow?.value) {
+            return res.status(400).json({ error: 'Anthropic API key not configured' });
+        }
+
+        const { analyzeTagPairsWithClaude } = await import('../services/tagging.js');
+        const recommendations = await analyzeTagPairsWithClaude(pairs, apiKeyRow.value);
+
+        res.json({ recommendations });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+// ── Auto-consolidate suggestions ─────────────────────────────────────────────
+
+type AutoReason = 'leading-dash' | 'separator' | 'plural' | 'spelling';
+
+interface AutoGroup {
+    winner: { id: number; name: string; source: string; model_count: number };
+    losers: Array<{ id: number; name: string; source: string; model_count: number; reasons: AutoReason[] }>;
+    reasons: AutoReason[];
+    totalModels: number;
+}
+
+const BRIT_TO_US: Record<string, string> = {
+    colour: 'color', favourite: 'favorite', behaviour: 'behavior',
+    centre: 'center', fibre: 'fiber', metre: 'meter', centimetre: 'centimeter',
+    millimetre: 'millimeter', neighbour: 'neighbor', honour: 'honor', armour: 'armor',
+    grey: 'gray', mould: 'mold', moulding: 'molding', modelling: 'modeling',
+    travelling: 'traveling', jewellery: 'jewelry', aluminium: 'aluminum',
+    licence: 'license', practise: 'practice', organise: 'organize',
+    recognise: 'recognize', realise: 'realize', customise: 'customize',
+    tyre: 'tire', defence: 'defense', offence: 'offense',
+    analyse: 'analyze', specialise: 'specialize', utilise: 'utilize',
+    calibre: 'caliber', sabre: 'saber', manoeuvre: 'maneuver',
+    theatre: 'theater', fulfil: 'fulfill', plough: 'plow',
+};
+
+function acBritToUs(word: string): string {
+    return BRIT_TO_US[word] ?? word;
+}
+
+function acDepluralize(word: string): string {
+    if (word.length < 4) return word;
+    // -ss, -us, -is endings are not regular plurals
+    if (/ss$/.test(word) || /us$/.test(word) || /is$/.test(word)) return word;
+    if (word.length >= 5 && /ies$/.test(word)) return word.slice(0, -3) + 'y'; // butterflies → butterfly
+    if (/s$/.test(word)) return word.slice(0, -1); // cats → cat, toys → toy
+    return word;
+}
+
+function acCanonical(name: string): string {
+    let s = name.toLowerCase().trim();
+    s = s.replace(/^[-_]+/, '');       // strip leading dash/underscore
+    s = s.replace(/[-_]+/g, ' ');      // separators → spaces
+    s = s.replace(/\s+/g, ' ').trim();
+    s = s.split(' ').map(w => acDepluralize(acBritToUs(w))).join(' ');
+    return s;
+}
+
+function acWinnerScore(name: string): number {
+    let score = 0;
+    if (/^[-_]/.test(name))             score += 1000; // leading dash — worst
+    if (/[-_]/.test(name))              score += 100;  // uses dashes instead of spaces
+    const words = name.toLowerCase().split(/\s+/);
+    if (words.some(w => acBritToUs(w) !== w)) score += 10; // British spelling
+    const canon = name.toLowerCase().replace(/[-_]+/g, ' ').trim();
+    if (canon.split(' ').some(w => acDepluralize(w) !== w)) score += 1; // plural
+    return score;
+}
+
+function acDetectReasons(loserName: string, winnerName: string): AutoReason[] {
+    const reasons = new Set<AutoReason>();
+    const ln = loserName.toLowerCase();
+
+    // 1. Leading dash
+    if (/^[-_]/.test(ln)) reasons.add('leading-dash');
+
+    // 2. Separator: loser uses dashes/underscores (after stripping leading ones)
+    const lNoLead = ln.replace(/^[-_]+/, '');
+    if (/[-_]/.test(lNoLead)) reasons.add('separator');
+
+    // 3. British spelling: any word in loser maps to a different US word
+    const lWords = lNoLead.replace(/[-_]+/g, ' ').trim().split(' ');
+    if (lWords.some(w => acBritToUs(w) !== w)) reasons.add('spelling');
+
+    // 4. Plural: loser words depluralize differently than loser (i.e. loser IS plural form)
+    const lUS = lWords.map(acBritToUs).join(' ');
+    const lDepl = lUS.split(' ').map(acDepluralize).join(' ');
+    if (lDepl !== lUS) reasons.add('plural');
+
+    // Fallback: they normalized to the same key somehow
+    if (reasons.size === 0) reasons.add('separator');
+    return Array.from(reasons);
+}
+
+router.get('/auto-consolidate-suggestions', (req, res) => {
+    try {
+        const tags = db.prepare(`
+            SELECT t.id, t.name, COALESCE(t.source, 'pdf') as source,
+                   COUNT(CASE WHEN m.deleted_at IS NULL THEN 1 END) as model_count
+            FROM tags t
+            LEFT JOIN model_tags mt ON mt.tag_id = t.id
+            LEFT JOIN models m ON m.id = mt.model_id
+            GROUP BY t.id
+            ORDER BY t.name ASC
+        `).all() as Array<{ id: number; name: string; source: string; model_count: number }>;
+
+        // Group tags by their canonical form
+        const groupMap = new Map<string, typeof tags>();
+        for (const tag of tags) {
+            const key = acCanonical(tag.name);
+            if (!groupMap.has(key)) groupMap.set(key, []);
+            groupMap.get(key)!.push(tag);
+        }
+
+        const groups: AutoGroup[] = [];
+        for (const members of groupMap.values()) {
+            if (members.length < 2) continue;
+
+            // Pick winner: lowest score, then highest model_count, then alphabetical
+            const sorted = [...members].sort((a, b) => {
+                const sd = acWinnerScore(a.name) - acWinnerScore(b.name);
+                if (sd !== 0) return sd;
+                const cd = (b.model_count ?? 0) - (a.model_count ?? 0);
+                if (cd !== 0) return cd;
+                return a.name.localeCompare(b.name);
+            });
+            const [winner, ...losers] = sorted;
+
+            const losersWithReasons = losers.map(l => ({
+                ...l,
+                reasons: acDetectReasons(l.name, winner.name),
+            }));
+            const allReasons = new Set<AutoReason>();
+            losersWithReasons.forEach(l => l.reasons.forEach(r => allReasons.add(r)));
+            const totalModels = members.reduce((s, t) => s + (t.model_count ?? 0), 0);
+
+            groups.push({ winner, losers: losersWithReasons, reasons: Array.from(allReasons), totalModels });
+        }
+
+        // Sort by most models affected first
+        groups.sort((a, b) => b.totalModels - a.totalModels);
+        res.json({ groups });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

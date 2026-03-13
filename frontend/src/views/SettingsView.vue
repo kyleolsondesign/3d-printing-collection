@@ -193,6 +193,73 @@
       </div>
     </div>
 
+    <!-- AI Settings -->
+    <div class="settings-section">
+      <div class="section-header">
+        <div class="section-icon">
+          <AppIcon name="brain" />
+        </div>
+        <div>
+          <h3>AI Settings</h3>
+          <p class="section-description">Claude API key and categorization prompt used by Import and Tags features</p>
+        </div>
+      </div>
+      <div class="ai-settings-rows">
+        <div class="ai-setting-row">
+          <label class="ai-setting-label">Claude API key</label>
+          <div class="ai-setting-control">
+            <template v-if="editingApiKey">
+              <input
+                v-model="editApiKeyValue"
+                class="text-input"
+                type="password"
+                placeholder="sk-ant-..."
+                @keydown.enter="saveApiKey"
+                @keydown.escape="editingApiKey = false"
+                style="flex: 1;"
+              />
+              <button @click="saveApiKey" class="btn-primary btn-sm" :disabled="aiKeySaving">
+                {{ aiKeySaving ? 'Saving...' : 'Save' }}
+              </button>
+              <button @click="editingApiKey = false" class="btn-secondary btn-sm">Cancel</button>
+            </template>
+            <template v-else>
+              <span :class="['ai-key-status', hasApiKey ? 'configured' : 'unconfigured']">
+                {{ hasApiKey ? 'Configured' : 'Not set' }}
+              </span>
+              <button @click="editingApiKey = true; editApiKeyValue = ''" class="btn-secondary btn-sm">
+                {{ hasApiKey ? 'Change' : 'Set key' }}
+              </button>
+              <button v-if="hasApiKey" @click="clearApiKey" class="btn-secondary btn-sm">Remove</button>
+            </template>
+          </div>
+        </div>
+        <div class="ai-setting-row ai-setting-row--prompt">
+          <div class="ai-prompt-header">
+            <label class="ai-setting-label">Categorization prompt</label>
+            <button @click="showPromptEditor = !showPromptEditor" class="btn-secondary btn-sm">
+              {{ showPromptEditor ? 'Hide' : 'Edit prompt' }}
+            </button>
+          </div>
+          <div v-if="showPromptEditor" class="ai-prompt-editor">
+            <textarea
+              v-model="promptValue"
+              class="prompt-textarea"
+              rows="12"
+              placeholder="Enter categorization prompt..."
+            ></textarea>
+            <div class="prompt-help">
+              Placeholders: <code>{categories}</code> = category list, <code>{items}</code> = items to categorize, <code>{category_definitions}</code> = contents of <code>backend/data/categories.md</code>
+            </div>
+            <div class="prompt-actions">
+              <button @click="savePrompt" class="btn-primary btn-sm" :disabled="!promptDirty || aiKeySaving">Save Prompt</button>
+              <button @click="resetPrompt" class="btn-secondary btn-sm">Reset to Default</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="settings-section">
       <div class="section-header">
         <div class="section-icon">
@@ -352,10 +419,63 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { systemApi, modelsApi, designersApi, type ScanMode, type WatcherStatus } from '../services/api';
+import { systemApi, modelsApi, designersApi, ingestionApi, type ScanMode, type WatcherStatus } from '../services/api';
 import AppIcon from '../components/AppIcon.vue';
 
 const router = useRouter();
+
+// AI Settings state
+const hasApiKey = ref(false);
+const editingApiKey = ref(false);
+const editApiKeyValue = ref('');
+const aiKeySaving = ref(false);
+const showPromptEditor = ref(false);
+const promptValue = ref('');
+const savedPromptValue = ref('');
+const promptDirty = computed(() => promptValue.value !== savedPromptValue.value);
+
+async function loadAiConfig() {
+  try {
+    const res = await ingestionApi.getConfig();
+    hasApiKey.value = res.data.hasApiKey;
+    promptValue.value = res.data.prompt || '';
+    savedPromptValue.value = res.data.prompt || '';
+  } catch { /* ignore */ }
+}
+
+async function saveApiKey() {
+  aiKeySaving.value = true;
+  try {
+    await ingestionApi.setConfig({ apiKey: editApiKeyValue.value });
+    hasApiKey.value = true;
+    editingApiKey.value = false;
+    editApiKeyValue.value = '';
+  } finally {
+    aiKeySaving.value = false;
+  }
+}
+
+async function clearApiKey() {
+  await ingestionApi.setConfig({ apiKey: '' });
+  hasApiKey.value = false;
+}
+
+async function savePrompt() {
+  aiKeySaving.value = true;
+  try {
+    const res = await ingestionApi.setConfig({ prompt: promptValue.value });
+    savedPromptValue.value = res.data.prompt || '';
+    promptValue.value = savedPromptValue.value;
+  } finally {
+    aiKeySaving.value = false;
+  }
+}
+
+async function resetPrompt() {
+  const res = await ingestionApi.setConfig({ prompt: '' });
+  savedPromptValue.value = res.data.prompt || '';
+  promptValue.value = savedPromptValue.value;
+}
 const modelDirectory = ref('/Users/kyle/Library/Mobile Documents/com~apple~CloudDocs/Documents/3D Printing');
 const scanMode = ref<ScanMode>('full_sync');
 const scanScope = ref<'all' | 'paid'>('all');
@@ -436,6 +556,7 @@ onMounted(async () => {
   await loadStats();
   await checkScanStatus();
   await loadWatcherStatus();
+  loadAiConfig();
 });
 
 onUnmounted(() => {
@@ -1430,5 +1551,99 @@ h2 {
 .tool-arrow {
   color: var(--text-secondary);
   flex-shrink: 0;
+}
+
+/* AI Settings */
+.ai-settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ai-setting-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ai-setting-row--prompt {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.ai-setting-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.ai-setting-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.ai-key-status {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.ai-key-status.configured { color: var(--success); }
+.ai-key-status.unconfigured { color: var(--text-tertiary); }
+
+.ai-prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai-prompt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.prompt-textarea {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-family: monospace;
+  padding: 0.625rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.prompt-help {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.prompt-help code {
+  background: var(--bg-hover);
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
 }
 </style>

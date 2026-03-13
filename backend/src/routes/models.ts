@@ -74,10 +74,22 @@ router.get('/', (req, res) => {
             conditions.push('NOT EXISTS (SELECT 1 FROM model_assets WHERE model_assets.model_id = models.id AND model_assets.asset_type = \'image\' AND (model_assets.is_hidden = 0 OR model_assets.is_hidden IS NULL))');
         }
 
-        const tag = req.query.tag as string;
-        if (tag) {
-            conditions.push('EXISTS (SELECT 1 FROM model_tags mt JOIN tags t ON mt.tag_id = t.id WHERE mt.model_id = models.id AND LOWER(t.name) = LOWER(?))');
-            params.push(tag);
+        // Multi-tag filter: accept ?tags=a,b,c or legacy ?tag=a
+        const tagParam = (req.query.tags as string) || (req.query.tag as string);
+        const tagMode = (req.query.tagMode as string) === 'or' ? 'or' : 'and';
+        const activeTags = tagParam ? tagParam.split(',').map(t => t.trim().toLowerCase()).filter(Boolean) : [];
+        if (activeTags.length > 0) {
+            if (tagMode === 'or') {
+                const placeholders = activeTags.map(() => '?').join(', ');
+                conditions.push(`EXISTS (SELECT 1 FROM model_tags mt JOIN tags t ON mt.tag_id = t.id WHERE mt.model_id = models.id AND LOWER(t.name) IN (${placeholders}))`);
+                params.push(...activeTags);
+            } else {
+                // AND mode: one EXISTS per tag
+                for (const t of activeTags) {
+                    conditions.push('EXISTS (SELECT 1 FROM model_tags mt JOIN tags t ON mt.tag_id = t.id WHERE mt.model_id = models.id AND LOWER(t.name) = ?)');
+                    params.push(t);
+                }
+            }
         }
 
         if (conditions.length > 0) {
@@ -161,6 +173,18 @@ router.get('/', (req, res) => {
         }
         if (noImage) {
             countConditions.push('NOT EXISTS (SELECT 1 FROM model_assets WHERE model_assets.model_id = models.id AND model_assets.asset_type = \'image\' AND (model_assets.is_hidden = 0 OR model_assets.is_hidden IS NULL))');
+        }
+        if (activeTags.length > 0) {
+            if (tagMode === 'or') {
+                const placeholders = activeTags.map(() => '?').join(', ');
+                countConditions.push(`EXISTS (SELECT 1 FROM model_tags mt JOIN tags t ON mt.tag_id = t.id WHERE mt.model_id = models.id AND LOWER(t.name) IN (${placeholders}))`);
+                countParams.push(...activeTags);
+            } else {
+                for (const t of activeTags) {
+                    countConditions.push('EXISTS (SELECT 1 FROM model_tags mt JOIN tags t ON mt.tag_id = t.id WHERE mt.model_id = models.id AND LOWER(t.name) = ?)');
+                    countParams.push(t);
+                }
+            }
         }
         if (countConditions.length > 0) {
             countQuery += ' WHERE ' + countConditions.join(' AND ');

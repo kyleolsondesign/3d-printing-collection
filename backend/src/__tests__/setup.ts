@@ -14,7 +14,7 @@ export function initSchema(db: InstanceType<typeof Database>): void {
     db.exec(`DROP TABLE IF EXISTS models_fts`);
 
     // Drop tables in dependency order
-    const tables = ['recently_viewed', 'make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'currently_printing', 'print_queue', 'tags', 'config', 'loose_files', 'models', 'designer_favorites', 'designers', 'categorization_hints', 'ingestion_events'];
+    const tables = ['recently_viewed', 'make_images', 'model_metadata', 'model_tags', 'model_files', 'model_assets', 'favorites', 'printed_models', 'currently_printing', 'print_queue', 'tag_blocklist', 'tags', 'config', 'loose_files', 'models', 'designer_favorites', 'designers', 'categorization_hints', 'ingestion_events', 'purge_events'];
     for (const table of tables) {
         db.exec(`DROP TABLE IF EXISTS ${table}`);
     }
@@ -140,7 +140,14 @@ export function initSchema(db: InstanceType<typeof Database>): void {
         CREATE TABLE tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
+            source TEXT DEFAULT 'pdf',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE tag_blocklist (
+            name TEXT PRIMARY KEY
         )
     `);
 

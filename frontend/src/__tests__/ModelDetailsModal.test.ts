@@ -86,7 +86,7 @@ describe('ModelDetailsModal', () => {
         const wrapper = mountModal();
         await flushPromises();
 
-        const thumbnails = wrapper.findAll('.thumbnail');
+        const thumbnails = wrapper.findAll('.thumbnail:not(.thumbnail--3d)');
         expect(thumbnails).toHaveLength(2);
     });
 
@@ -326,12 +326,12 @@ describe('ModelDetailsModal', () => {
         expect(wrapper.emitted('updated')).toBeTruthy();
     });
 
-    it('shows 3D preview section only when STL or 3MF files are present', async () => {
+    it('shows 3D preview trigger only when STL or 3MF files are present', async () => {
         setupMocks();
         const wrapper = mountModal();
         await flushPromises();
 
-        // mockFiles has an STL file so the section should exist
-        expect(wrapper.find('.preview-3d-section').exists()).toBe(true);
+        // mockFiles has an STL file so the 3D preview trigger thumbnail should exist
+        expect(wrapper.find('.thumbnail--3d').exists()).toBe(true);
     });
 });

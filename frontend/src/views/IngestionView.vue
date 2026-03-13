@@ -81,54 +81,12 @@
       </div>
       <div class="ai-config-rows">
         <div class="config-row">
-          <label class="config-label">Claude API key</label>
+          <span class="config-label">Claude API key</span>
           <div class="config-path-row">
-            <template v-if="editingApiKey">
-              <input
-                v-model="editApiKeyValue"
-                class="path-input"
-                type="password"
-                @keydown.enter="saveApiKey"
-                @keydown.escape="editingApiKey = false"
-                placeholder="sk-ant-..."
-              />
-              <button @click="saveApiKey" class="btn-sm btn-primary">Save</button>
-              <button @click="editingApiKey = false" class="btn-sm btn-ghost">Cancel</button>
-            </template>
-            <template v-else>
-              <span class="config-path" :class="{ configured: hasApiKey, unconfigured: !hasApiKey }">
-                {{ hasApiKey ? 'Configured' : 'Not set' }}
-              </span>
-              <button @click="editingApiKey = true; editApiKeyValue = ''" class="btn-sm btn-ghost" :title="hasApiKey ? 'Change API key' : 'Set API key'">
-                <AppIcon name="edit" />
-              </button>
-              <button v-if="hasApiKey" @click="clearApiKey" class="btn-sm btn-ghost" title="Remove API key">
-                <AppIcon name="x" />
-              </button>
-            </template>
-          </div>
-        </div>
-        <div class="config-row">
-          <button @click="showPromptEditor = !showPromptEditor" class="prompt-toggle" :class="{ active: showPromptEditor }">
-            <AppIcon name="chevron-right" />
-            <label class="config-label" style="margin-bottom: 0; cursor: pointer;">
-              Categorization prompt
-            </label>
-          </button>
-          <div v-if="showPromptEditor" class="prompt-editor-wrapper">
-            <textarea
-              v-model="promptValue"
-              class="prompt-textarea"
-              rows="12"
-              placeholder="Enter categorization prompt..."
-            ></textarea>
-            <div class="prompt-help">
-              Placeholders: <code>{categories}</code> = category list, <code>{items}</code> = items to categorize, <code>{category_definitions}</code> = contents of <code>backend/data/categories.md</code>
-            </div>
-            <div class="prompt-actions">
-              <button @click="savePrompt" class="btn-sm btn-primary" :disabled="!promptDirty">Save Prompt</button>
-              <button @click="resetPrompt" class="btn-sm btn-ghost">Reset to Default</button>
-            </div>
+            <span class="config-path" :class="{ configured: hasApiKey, unconfigured: !hasApiKey }">
+              {{ hasApiKey ? 'Configured' : 'Not set' }}
+            </span>
+            <router-link to="/settings" class="btn-sm btn-ghost">Configure in Settings →</router-link>
           </div>
         </div>
       </div>
@@ -332,6 +290,22 @@
             </div>
           </div>
         </div>
+
+        <!-- Tags row -->
+        <div v-if="item.selectedTags.length > 0 || item.suggestedTags.length > 0" class="item-tags" @click.stop>
+          <span class="item-tags-label">Tags:</span>
+          <span
+            v-for="tag in item.selectedTags"
+            :key="tag"
+            class="ingestion-tag-chip"
+          >{{ tag }}<button class="ingestion-tag-remove" @click.stop="item.selectedTags = item.selectedTags.filter(t => t !== tag)">×</button></span>
+          <input
+            class="ingestion-tag-input"
+            placeholder="add tag..."
+            @keydown.enter.prevent="(e) => { const v = (e.target as HTMLInputElement).value.trim().toLowerCase(); if (v && !item.selectedTags.includes(v)) item.selectedTags.push(v); (e.target as HTMLInputElement).value = ''; }"
+          />
+        </div>
+
         <div v-if="activeDebugPath === item.filepath" class="debug-panel">
           <div class="debug-panel-title">Score breakdown — {{ item.filename }}</div>
           <div v-for="entry in item.debugScores" :key="entry.category" class="debug-row">
@@ -586,6 +560,8 @@ interface IngestionItem {
   selectedCategory: string;
   debugScores: ScoreDebugEntry[];
   designer: string | null;
+  suggestedTags: string[];
+  selectedTags: string[];
 }
 
 interface ImportDetail {
@@ -897,11 +873,6 @@ const hasApiKey = ref(false);
 const batchCategory = ref('');
 const editingPath = ref(false);
 const editPathValue = ref('');
-const editingApiKey = ref(false);
-const editApiKeyValue = ref('');
-const showPromptEditor = ref(false);
-const promptValue = ref('');
-const savedPromptValue = ref('');
 const pathInputRef = ref<HTMLInputElement | null>(null);
 const items = ref<IngestionItem[]>([]);
 const categories = ref<string[]>([]);
@@ -944,9 +915,6 @@ function toggleDebug(item: IngestionItem) {
   activeDebugPath.value = activeDebugPath.value === item.filepath ? null : item.filepath;
 }
 
-const promptDirty = computed(() =>
-  promptValue.value !== savedPromptValue.value
-);
 
 const isAllSelected = computed(() =>
   filteredItems.value.length > 0 && filteredItems.value.every(i => selectedIds.value.has(i.filepath))
@@ -996,8 +964,6 @@ async function loadConfig() {
     const response = await ingestionApi.getConfig();
     ingestionDir.value = response.data.directory || '';
     hasApiKey.value = response.data.hasApiKey || false;
-    promptValue.value = response.data.prompt || '';
-    savedPromptValue.value = response.data.prompt || '';
   } catch (error) {
     console.error('Failed to load ingestion config:', error);
   }
@@ -1038,51 +1004,6 @@ async function savePath() {
   }
 }
 
-async function saveApiKey() {
-  const key = editApiKeyValue.value.trim();
-  if (!key) return;
-
-  try {
-    const response = await ingestionApi.setConfig({ apiKey: key });
-    hasApiKey.value = response.data.hasApiKey;
-    editingApiKey.value = false;
-    editApiKeyValue.value = '';
-  } catch (error: any) {
-    console.error('Failed to save API key:', error);
-    alert(error.response?.data?.error || 'Failed to save API key');
-  }
-}
-
-async function clearApiKey() {
-  try {
-    const response = await ingestionApi.setConfig({ apiKey: '' });
-    hasApiKey.value = response.data.hasApiKey;
-  } catch (error) {
-    console.error('Failed to clear API key:', error);
-  }
-}
-
-async function savePrompt() {
-  try {
-    const response = await ingestionApi.setConfig({ prompt: promptValue.value });
-    savedPromptValue.value = response.data.prompt || '';
-    promptValue.value = savedPromptValue.value;
-  } catch (error: any) {
-    console.error('Failed to save prompt:', error);
-    alert(error.response?.data?.error || 'Failed to save prompt');
-  }
-}
-
-async function resetPrompt() {
-  try {
-    const response = await ingestionApi.setConfig({ prompt: '' });
-    savedPromptValue.value = response.data.prompt || '';
-    promptValue.value = savedPromptValue.value;
-  } catch (error: any) {
-    console.error('Failed to reset prompt:', error);
-  }
-}
-
 async function scanFolder() {
   scanning.value = true;
   hasScanned.value = false;
@@ -1095,7 +1016,9 @@ async function scanFolder() {
     items.value = (response.data.items || []).map((item: any) => ({
       ...item,
       selectedCategory: item.suggestedCategory,
-      debugScores: item.debugScores || []
+      debugScores: item.debugScores || [],
+      suggestedTags: item.suggestedTags || [],
+      selectedTags: [...(item.suggestedTags || [])]
     }));
     activeDebugPath.value = null;
     hasScanned.value = true;
@@ -1135,6 +1058,10 @@ async function categorizeWithAI() {
         existing.confidence = aiItem.confidence;
         existing.selectedCategory = aiItem.suggestedCategory;
         existing.debugScores = aiItem.debugScores || [];
+        if (aiItem.suggestedTags) {
+          existing.suggestedTags = aiItem.suggestedTags;
+          existing.selectedTags = [...aiItem.suggestedTags];
+        }
       }
     }
 
@@ -1304,7 +1231,8 @@ async function importSelected() {
       isFolder: i.isFolder,
       suggestedCategory: i.suggestedCategory,
       confidence: i.confidence,
-      designer: i.designer
+      designer: i.designer,
+      tags: i.selectedTags.length > 0 ? i.selectedTags : undefined
     }));
 
     // Kick off the import (returns 202 immediately)
@@ -2134,75 +2062,6 @@ h2 {
   height: 18px;
 }
 
-/* Prompt Editor */
-.prompt-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  color: var(--text-secondary);
-}
-
-.prompt-toggle svg {
-  width: 16px;
-  height: 16px;
-  transition: transform var(--transition-base);
-  flex-shrink: 0;
-}
-
-.prompt-toggle.active svg {
-  transform: rotate(90deg);
-}
-
-.prompt-editor-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-}
-
-.prompt-textarea {
-  width: 100%;
-  padding: 0.75rem;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  line-height: 1.5;
-  resize: vertical;
-  min-height: 100px;
-}
-
-.prompt-textarea:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-primary-dim);
-}
-
-.prompt-help {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-}
-
-.prompt-help code {
-  background: var(--bg-hover);
-  padding: 0.1rem 0.3rem;
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--accent-primary);
-}
-
-.prompt-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
 /* AI Categorize Section */
 .ai-categorize-bar {
   padding: 0.875rem 1rem;
@@ -2883,6 +2742,66 @@ h2 {
   color: var(--text-tertiary);
   font-style: italic;
   font-size: 0.8rem;
+}
+
+/* Tags row on import items */
+.item-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
+}
+
+.item-tags-label {
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.ingestion-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  background: var(--accent-primary-dim);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+}
+
+.ingestion-tag-remove {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.9rem;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.ingestion-tag-remove:hover {
+  opacity: 1;
+}
+
+.ingestion-tag-input {
+  background: transparent;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75rem;
+  width: 80px;
+}
+
+.ingestion-tag-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .category-select-wrapper {

@@ -116,9 +116,20 @@
     </div>
 
     <!-- Tag filter indicator -->
-    <div v-if="filterTag && !isSearchActive" class="search-results-bar">
-      <span>Filtering by tag: <strong>#{{ filterTag }}</strong></span>
-      <button @click="filterTag = ''" class="clear-search-btn">Clear filter</button>
+    <div v-if="activeTags.length > 0 && !isSearchActive" class="search-results-bar tag-filter-bar">
+      <span>Filtering by {{ tagMode === 'and' ? 'all' : 'any' }} tag:</span>
+      <span
+        v-for="tag in activeTags"
+        :key="tag"
+        class="tag-chip-active"
+      >#{{ tag }}<button class="tag-chip-remove" @click="removeActiveTag(tag)">×</button></span>
+      <button
+        v-if="activeTags.length > 1"
+        class="tag-mode-toggle"
+        @click="tagMode = tagMode === 'and' ? 'or' : 'and'"
+        :title="tagMode === 'and' ? 'Switch to: match any tag' : 'Switch to: match all tags'"
+      >{{ tagMode === 'and' ? 'All tags' : 'Any tag' }}</button>
+      <button @click="activeTags = []" class="clear-search-btn">Clear filter</button>
     </div>
 
     <!-- Bulk actions bar -->
@@ -493,7 +504,8 @@ const filterPrinted = ref<FilterState>('hide');
 const filterQueued = ref<FilterState>('');
 const filterFavorites = ref<FilterState>('');
 const filterNoImage = ref(false);
-const filterTag = ref('');
+const activeTags = ref<string[]>([]);
+const tagMode = ref<'and' | 'or'>('and');
 
 function cycleFilter(current: FilterState): FilterState {
   if (current === '') return 'only';
@@ -582,9 +594,10 @@ function initFromQueryParams() {
   if (ff === 'only' || ff === 'hide') filterFavorites.value = ff;
   else if (ff === '') filterFavorites.value = '';
   if (route.query.noImage === 'true') filterNoImage.value = true;
-  const { tag } = route.query;
-  if (tag && typeof tag === 'string') filterTag.value = tag;
-  else filterTag.value = '';
+  const tagsParam = (route.query.tags as string) || (route.query.tag as string);
+  activeTags.value = tagsParam ? tagsParam.split(',').map(t => t.trim()).filter(Boolean) : [];
+  const tagModeParam = route.query.tagMode as string;
+  tagMode.value = tagModeParam === 'or' ? 'or' : 'and';
 }
 
 // Update URL query params when state changes
@@ -620,8 +633,9 @@ function updateQueryParams() {
   if (filterNoImage.value) {
     query.noImage = 'true';
   }
-  if (filterTag.value) {
-    query.tag = filterTag.value;
+  if (activeTags.value.length > 0) {
+    query.tags = activeTags.value.join(',');
+    if (tagMode.value === 'or') query.tagMode = 'or';
   }
   if (selectedModelId.value) {
     query.model = String(selectedModelId.value);
@@ -656,7 +670,7 @@ onUnmounted(() => {
 });
 
 // Watch for changes that require reloading
-watch([sortField, sortOrder, filterPrinted, filterQueued, filterFavorites, filterNoImage, filterTag], () => {
+watch([sortField, sortOrder, filterPrinted, filterQueued, filterFavorites, filterNoImage, activeTags, tagMode], () => {
   if (isSearchActive.value) {
     handleSearch(store.globalSearchQuery);
   } else {
@@ -703,7 +717,8 @@ async function loadInitialModels() {
     filterQueued: filterQueued.value || undefined,
     filterFavorites: filterFavorites.value || undefined,
     noImage: filterNoImage.value || undefined,
-    tag: filterTag.value || undefined
+    tags: activeTags.value.length > 0 ? activeTags.value.join(',') : undefined,
+    tagMode: activeTags.value.length > 1 ? tagMode.value : undefined
   });
   store.models = response.data.models;
   store.currentPage = 1;
@@ -754,7 +769,8 @@ async function loadMoreModels() {
       filterQueued: filterQueued.value || undefined,
       filterFavorites: filterFavorites.value || undefined,
       noImage: filterNoImage.value || undefined,
-      tag: filterTag.value || undefined
+      tags: activeTags.value.length > 0 ? activeTags.value.join(',') : undefined,
+      tagMode: activeTags.value.length > 1 ? tagMode.value : undefined
     });
 
     store.models = [...store.models, ...response.data.models];
@@ -774,7 +790,7 @@ async function filterByCategory(category: string) {
     store.clearGlobalSearch();
     isSearchActive.value = false;
   }
-  filterTag.value = '';
+  activeTags.value = [];
 
   store.loading = true;
   store.selectedCategory = category;
@@ -825,6 +841,10 @@ function clearSearch() {
   store.clearGlobalSearch();
   isSearchActive.value = false;
   resetAndLoad();
+}
+
+function removeActiveTag(tag: string) {
+  activeTags.value = activeTags.value.filter(t => t !== tag);
 }
 
 function handleSortChange() {
@@ -1132,6 +1152,54 @@ async function bulkAddTag() {
 .clear-search-btn:hover {
   background: var(--accent-primary);
   color: var(--bg-deepest);
+}
+
+.tag-filter-bar {
+  justify-content: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tag-chip-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  background: rgba(34, 211, 238, 0.15);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.tag-chip-remove {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.tag-chip-remove:hover {
+  opacity: 1;
+}
+
+.tag-mode-toggle {
+  padding: 0.15rem 0.5rem;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.tag-mode-toggle:hover {
+  opacity: 1;
+  background: rgba(34, 211, 238, 0.1);
 }
 
 .filters {

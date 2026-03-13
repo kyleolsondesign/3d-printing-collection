@@ -69,6 +69,12 @@
             </span>
             <span class="nav-text">Designers</span>
           </router-link>
+          <router-link to="/tags" :class="{ active: $route.name === 'tags' }" data-label="Tags" class="nav-item">
+            <span class="nav-icon">
+              <AppIcon name="tag" />
+            </span>
+            <span class="nav-text">Tags</span>
+          </router-link>
         </div>
 
         <!-- Push System to bottom -->
@@ -227,6 +233,7 @@ const searchPlaceholder = computed(() => {
     'loose-files': 'Search loose files...',
     ingestion: 'Search imports...',
     designers: 'Search designers...',
+    tags: 'Search tags...',
     stats: 'Statistics',
   };
   return placeholders[route.name as string] || 'Search models...';
@@ -241,6 +248,7 @@ const pageTitle = computed(() => {
     printed: 'Printed',
     'loose-files': 'Loose Files',
     designers: 'Designers',
+    tags: 'Tags',
     stats: 'Statistics',
     ingestion: 'Import',
     settings: 'Settings',

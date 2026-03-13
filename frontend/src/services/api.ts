@@ -95,7 +95,7 @@ export interface CategorySuggestion {
 
 // Models API
 export const modelsApi = {
-    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string; noImage?: boolean; tag?: string }) =>
+    getAll: (params?: { page?: number; limit?: number; category?: string; sort?: string; order?: string; hidePrinted?: boolean; hideQueued?: boolean; filterPrinted?: string; filterQueued?: string; filterFavorites?: string; noImage?: boolean; tag?: string; tags?: string; tagMode?: 'and' | 'or' }) =>
         api.get('/models', { params }),
 
     getById: (id: number) =>
@@ -269,7 +269,7 @@ export const ingestionApi = {
     scan: () => api.get('/ingestion/scan', { timeout: 300000 }),
     categorize: () => api.post('/ingestion/categorize'),
     categorizeStatus: () => api.get('/ingestion/categorize/status'),
-    importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean; suggestedCategory?: string; confidence?: string; designer?: string | null }>) =>
+    importItems: (items: Array<{ filepath: string; category: string; isFolder: boolean; suggestedCategory?: string; confidence?: string; designer?: string | null; tags?: string[] }>) =>
         api.post('/ingestion/import', { items }),
     getImportStatus: () => api.get('/ingestion/import/status'),
     getPreviewImageUrl: (filePath: string) =>
@@ -323,8 +323,28 @@ export const designersApi = {
 export interface Tag {
     id: number;
     name: string;
+    source?: 'pdf' | 'user' | 'autotag';
     model_count?: number;
     created_at?: string;
+}
+
+export interface TagSimilarPair {
+    tag1: Tag;
+    tag2: Tag;
+    similarity: number;
+}
+
+export type AutoConsolidateReason = 'leading-dash' | 'separator' | 'plural' | 'spelling';
+
+export interface AutoConsolidateLoser extends Tag {
+    reasons: AutoConsolidateReason[];
+}
+
+export interface AutoConsolidateGroup {
+    winner: Tag;
+    losers: AutoConsolidateLoser[];
+    reasons: AutoConsolidateReason[];
+    totalModels: number;
 }
 
 export const tagsApi = {
@@ -333,7 +353,18 @@ export const tagsApi = {
     delete: (id: number) => api.delete(`/tags/${id}`),
     addToModel: (modelId: number, name: string) => api.post(`/tags/model/${modelId}`, { name }),
     removeFromModel: (modelId: number, tagId: number) => api.delete(`/tags/model/${modelId}/${tagId}`),
-    bulkAddToModels: (modelIds: number[], tagName: string) => api.post('/tags/bulk', { modelIds, tagName })
+    bulkAddToModels: (modelIds: number[], tagName: string) => api.post('/tags/bulk', { modelIds, tagName }),
+    getSimilar: (threshold?: number) => api.get('/tags/similar', { params: { threshold } }),
+    merge: (sourceIds: number[], targetId: number) => api.post('/tags/merge', { sourceIds, targetId }),
+    mergeBatch: (merges: Array<{ sourceId: number; targetId: number }>) =>
+        api.post('/tags/merge-batch', { merges }),
+    cleanup: (opts: { maxCount?: number; source?: string[]; dryRun?: boolean }) => api.post('/tags/cleanup', opts),
+    autotag: (opts: { modelIds?: number[]; minTagCount?: number; useAi?: boolean; dryRun?: boolean }) =>
+        api.post('/tags/autotag', opts, { timeout: 120000 }),
+    aiConsolidate: (pairs: TagSimilarPair[]) =>
+        api.post('/tags/ai-consolidate', { pairs }, { timeout: 120000 }),
+    getAutoConsolidateSuggestions: () =>
+        api.get<{ groups: AutoConsolidateGroup[] }>('/tags/auto-consolidate-suggestions')
 };
 
 export default api;

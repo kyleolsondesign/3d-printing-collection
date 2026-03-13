@@ -236,6 +236,29 @@ Pinia store (frontend/src/store/index.ts) manages:
 - Frontend tests mock the API module with `vi.mock('../services/api')`
 - Each `beforeEach` reinitializes schema + seeds fresh test data for isolation
 
+## CSS Design System
+
+All CSS variables are defined in `frontend/src/style.css` under `:root`. When writing styles in any `.vue` file, **only use variables that exist in style.css**. Do NOT invent variable names — this causes invisible/broken UI.
+
+**Background variables** (dark theme, darkest → lightest):
+- `--bg-deepest: #0a0a0b` — page background
+- `--bg-deep: #101113` — sidebar / nav
+- `--bg-surface: #16181c` — main content area
+- `--bg-elevated: #1c1f25` — cards, dialogs, dropdowns, input fields
+- `--bg-hover: #23272f` — hover states
+
+**Border variables:**
+- `--border-subtle: rgba(255,255,255,0.06)` — faint dividers
+- `--border-default: rgba(255,255,255,0.1)` — card borders
+- `--border-strong: rgba(255,255,255,0.15)` — emphasized borders
+
+**Radius variables:** `--radius-sm: 4px`, `--radius-md: 8px`, `--radius-lg: 12px`, `--radius-xl: 16px`
+
+**Common patterns:**
+- Cards / dialogs / confirm overlays: `background: var(--bg-elevated); border: 1px solid var(--border-default);`
+- Inputs: `background: var(--bg-elevated); border: 1px solid var(--border-subtle);`
+- `--bg-card` does **NOT** exist — use `--bg-elevated` instead
+
 ## TypeScript Configuration
 
 Both backend and frontend use strict TypeScript:

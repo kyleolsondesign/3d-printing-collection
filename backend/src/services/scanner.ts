@@ -358,13 +358,13 @@ class Scanner {
                 new Date().toISOString()
             );
 
-            // Insert tags from PDF
+            // Insert tags from PDF (skip blocklisted names)
             if (metadata.tags.length > 0) {
-                const insertTag = db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+                const insertTag = db.prepare('INSERT OR IGNORE INTO tags (name) SELECT ? WHERE LOWER(?) NOT IN (SELECT name FROM tag_blocklist)');
                 const getTagId = db.prepare('SELECT id FROM tags WHERE name = ?');
                 const insertModelTag = db.prepare('INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)');
                 for (const tag of metadata.tags) {
-                    insertTag.run(tag);
+                    insertTag.run(tag, tag);
                     const tagRow = getTagId.get(tag) as { id: number } | undefined;
                     if (tagRow) {
                         insertModelTag.run(modelId, tagRow.id);
@@ -1152,7 +1152,7 @@ class Scanner {
             INSERT OR REPLACE INTO model_metadata (model_id, source_platform, source_url, designer, designer_url, description, license, license_url, extracted_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        const insertTag = db.prepare(`INSERT OR IGNORE INTO tags (name) VALUES (?)`);
+        const insertTag = db.prepare(`INSERT OR IGNORE INTO tags (name) SELECT ? WHERE LOWER(?) NOT IN (SELECT name FROM tag_blocklist)`);
         const getTagId = db.prepare(`SELECT id FROM tags WHERE name = ?`);
         const insertModelTag = db.prepare(`INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)`);
 
@@ -1172,9 +1172,9 @@ class Scanner {
                     new Date().toISOString()
                 );
 
-                // Insert tags
+                // Insert tags (blocklist applied via prepared statement)
                 for (const tag of metadata.tags) {
-                    insertTag.run(tag);
+                    insertTag.run(tag, tag);
                     const tagRow = getTagId.get(tag) as { id: number } | undefined;
                     if (tagRow) {
                         insertModelTag.run(model_id, tagRow.id);
