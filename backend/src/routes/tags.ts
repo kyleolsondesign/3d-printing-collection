@@ -90,6 +90,50 @@ router.post('/', (req, res) => {
 });
 
 // Delete a tag (cascades via model_tags FK) and add to blocklist to prevent re-ingestion
+router.patch('/:id', (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name required' });
+        const normalized = name.toLowerCase().trim();
+        const existing = db.prepare('SELECT id FROM tags WHERE name = ? AND id != ?').get(normalized, Number(req.params.id));
+        if (existing) return res.status(409).json({ error: 'Tag name already exists' });
+        db.prepare('UPDATE tags SET name = ? WHERE id = ?').run(normalized, Number(req.params.id));
+        res.json({ success: true });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
+router.post('/bulk-rename', (req, res) => {
+    try {
+        const { renames } = req.body as { renames: Array<{ id: number; name: string }> };
+        if (!Array.isArray(renames) || renames.length === 0) return res.status(400).json({ error: 'renames array required' });
+        const doRename = db.transaction(() => {
+            for (const { id, name } of renames) {
+                const normalized = name.toLowerCase().trim();
+                const existing = db.prepare('SELECT id FROM tags WHERE name = ? AND id != ?').get(normalized, id);
+                if (!existing) {
+                    db.prepare('UPDATE tags SET name = ? WHERE id = ?').run(normalized, id);
+                }
+                // If the target name already exists, merge instead
+                else {
+                    const target = existing as { id: number };
+                    db.prepare('INSERT OR IGNORE INTO model_tags (model_id, tag_id) SELECT model_id, ? FROM model_tags WHERE tag_id = ?').run(target.id, id);
+                    db.prepare('DELETE FROM model_tags WHERE tag_id = ?').run(id);
+                    db.prepare('INSERT OR IGNORE INTO tag_blocklist (name) SELECT name FROM tags WHERE id = ?').run(id);
+                    db.prepare('DELETE FROM tags WHERE id = ?').run(id);
+                }
+            }
+        });
+        doRename();
+        res.json({ success: true, count: renames.length });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: message });
+    }
+});
+
 router.delete('/:id', (req, res) => {
     try {
         const { id } = req.params;
@@ -377,7 +421,7 @@ router.post('/ai-consolidate', async (req, res) => {
 
 // ── Auto-consolidate suggestions ─────────────────────────────────────────────
 
-type AutoReason = 'leading-dash' | 'separator' | 'plural' | 'spelling';
+type AutoReason = 'leading-dash' | 'leading-apostrophe' | 'separator' | 'plural' | 'spelling';
 
 interface AutoGroup {
     winner: { id: number; name: string; source: string; model_count: number };
@@ -415,17 +459,20 @@ function acDepluralize(word: string): string {
 
 function acCanonical(name: string): string {
     let s = name.toLowerCase().trim();
-    s = s.replace(/^[-_]+/, '');       // strip leading dash/underscore
-    s = s.replace(/[-_]+/g, ' ');      // separators → spaces
+    s = s.replace(/^['\u2018\u2019\-_]+/, ''); // strip leading apostrophes, dashes, underscores
+    s = s.replace(/[-_]+/g, ' ');              // separators → spaces
     s = s.replace(/\s+/g, ' ').trim();
     s = s.split(' ').map(w => acDepluralize(acBritToUs(w))).join(' ');
     return s;
 }
 
-function acWinnerScore(name: string): number {
+function acWinnerScore(name: string, groupHasSpaced = false): number {
     let score = 0;
     if (/^[-_]/.test(name))             score += 1000; // leading dash — worst
-    if (/[-_]/.test(name))              score += 100;  // uses dashes instead of spaces
+    if (/^[''\u2018\u2019]/.test(name)) score += 900;  // leading apostrophe
+    if (/[-_]/.test(name.replace(/^[-_]+/, ''))) score += 100; // dashes instead of spaces
+    // Concatenated word (no separators) when the group has space-separated versions
+    if (groupHasSpaced && !name.includes(' ') && !/[-_''\u2018\u2019]/.test(name)) score += 50;
     const words = name.toLowerCase().split(/\s+/);
     if (words.some(w => acBritToUs(w) !== w)) score += 10; // British spelling
     const canon = name.toLowerCase().replace(/[-_]+/g, ' ').trim();
@@ -437,23 +484,26 @@ function acDetectReasons(loserName: string, winnerName: string): AutoReason[] {
     const reasons = new Set<AutoReason>();
     const ln = loserName.toLowerCase();
 
-    // 1. Leading dash
+    // 1. Leading apostrophe
+    if (/^[''\u2018\u2019]/.test(ln)) reasons.add('leading-apostrophe');
+
+    // 2. Leading dash
     if (/^[-_]/.test(ln)) reasons.add('leading-dash');
 
-    // 2. Separator: loser uses dashes/underscores (after stripping leading ones)
-    const lNoLead = ln.replace(/^[-_]+/, '');
+    // 3. Separator: loser uses dashes/underscores (after stripping leading punctuation)
+    const lNoLead = ln.replace(/^[''`\u2018\u2019\-_]+/, '');
     if (/[-_]/.test(lNoLead)) reasons.add('separator');
 
-    // 3. British spelling: any word in loser maps to a different US word
+    // 4. British spelling: any word in loser maps to a different US word
     const lWords = lNoLead.replace(/[-_]+/g, ' ').trim().split(' ');
     if (lWords.some(w => acBritToUs(w) !== w)) reasons.add('spelling');
 
-    // 4. Plural: loser words depluralize differently than loser (i.e. loser IS plural form)
+    // 5. Plural: loser words depluralize differently (i.e. loser IS plural form)
     const lUS = lWords.map(acBritToUs).join(' ');
     const lDepl = lUS.split(' ').map(acDepluralize).join(' ');
     if (lDepl !== lUS) reasons.add('plural');
 
-    // Fallback: they normalized to the same key somehow
+    // Fallback: concatenated or otherwise matched
     if (reasons.size === 0) reasons.add('separator');
     return Array.from(reasons);
 }
@@ -470,21 +520,35 @@ router.get('/auto-consolidate-suggestions', (req, res) => {
             ORDER BY t.name ASC
         `).all() as Array<{ id: number; name: string; source: string; model_count: number }>;
 
-        // Group tags by their canonical form
+        // Group tags by their space-stripped canonical form
+        // Using no-space key lets "custom planter" and "customplanter" group together
         const groupMap = new Map<string, typeof tags>();
         for (const tag of tags) {
-            const key = acCanonical(tag.name);
+            const key = acCanonical(tag.name).replace(/\s+/g, '');
             if (!groupMap.has(key)) groupMap.set(key, []);
             groupMap.get(key)!.push(tag);
         }
 
         const groups: AutoGroup[] = [];
+        const renames: Array<{ id: number; from: string; to: string; model_count: number }> = [];
+
         for (const members of groupMap.values()) {
-            if (members.length < 2) continue;
+            // Single-member: check if it's a leading-apostrophe tag that should be renamed
+            if (members.length === 1) {
+                const tag = members[0];
+                if (/^[''\u2018\u2019]/.test(tag.name)) {
+                    const to = tag.name.replace(/^[''\u2018\u2019]+/, '');
+                    if (to && to !== tag.name) {
+                        renames.push({ id: tag.id, from: tag.name, to, model_count: tag.model_count ?? 0 });
+                    }
+                }
+                continue;
+            }
 
             // Pick winner: lowest score, then highest model_count, then alphabetical
+            const hasSpacedCanonical = members.some(t => acCanonical(t.name).includes(' '));
             const sorted = [...members].sort((a, b) => {
-                const sd = acWinnerScore(a.name) - acWinnerScore(b.name);
+                const sd = acWinnerScore(a.name, hasSpacedCanonical) - acWinnerScore(b.name, hasSpacedCanonical);
                 if (sd !== 0) return sd;
                 const cd = (b.model_count ?? 0) - (a.model_count ?? 0);
                 if (cd !== 0) return cd;
@@ -505,7 +569,8 @@ router.get('/auto-consolidate-suggestions', (req, res) => {
 
         // Sort by most models affected first
         groups.sort((a, b) => b.totalModels - a.totalModels);
-        res.json({ groups });
+        renames.sort((a, b) => (b.model_count ?? 0) - (a.model_count ?? 0));
+        res.json({ groups, renames });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         res.status(500).json({ error: message });

@@ -30,19 +30,22 @@
       <!-- Controls -->
       <div class="controls-bar">
         <div class="stats-row">
+          <label class="select-all-label" @click.stop>
+            <input type="checkbox" :checked="allSelected" :indeterminate.prop="someSelected && !allSelected" @change="toggleSelectAll" />
+            <span>{{ selectedIds.size > 0 ? `${selectedIds.size} selected` : `${jobs.length} models` }}</span>
+          </label>
           <span class="stat-pill">{{ doneCount }} / {{ jobs.length }} done</span>
-          <span class="stat-pill skipped" v-if="skippedCount > 0">{{ skippedCount }} skipped (no STL/3MF)</span>
+          <span class="stat-pill skipped" v-if="skippedCount > 0">{{ skippedCount }} skipped</span>
           <span class="stat-pill error" v-if="errorCount > 0">{{ errorCount }} failed</span>
         </div>
         <div class="actions-row">
           <button
             class="btn-primary"
-            :disabled="isProcessing || allDone"
-            @click="processAll"
+            :disabled="isProcessing || selectedIds.size === 0"
+            @click="processSelected"
           >
             <div v-if="isProcessing" class="btn-spinner"></div>
-            <AppIcon v-else name="play" />
-            {{ isProcessing ? 'Processing…' : allDone ? 'All Done' : 'Process All' }}
+            {{ isProcessing ? 'Processing…' : `Generate${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}` }}
           </button>
           <button
             class="btn-secondary"
@@ -66,8 +69,16 @@
         <div
           v-for="job in jobs"
           :key="job.model.id"
-          :class="['job-row', job.status]"
+          :class="['job-row', job.status, { selected: selectedIds.has(job.model.id) }]"
+          @click="openModal(job.model.id)"
         >
+          <input
+            type="checkbox"
+            class="job-checkbox"
+            :checked="selectedIds.has(job.model.id)"
+            @click.stop
+            @change="toggleSelect(job.model.id)"
+          />
           <div class="job-thumb">
             <img
               v-if="job.model.primaryImage"
@@ -89,7 +100,7 @@
             </span>
             <span v-if="job.error" class="error-detail">{{ job.error }}</span>
           </div>
-          <div class="job-actions">
+          <div class="job-actions" @click.stop>
             <button
               v-if="job.status === 'idle' || job.status === 'error'"
               :disabled="isProcessing"
@@ -115,6 +126,13 @@
         @error="onHeadlessError"
       />
     </div>
+
+    <ModelDetailsModal
+      v-if="selectedModelId"
+      :modelId="selectedModelId"
+      @close="selectedModelId = null"
+      @navigate="selectedModelId = $event"
+    />
   </div>
 </template>
 
@@ -124,6 +142,7 @@ import { useRouter } from 'vue-router'
 import { modelsApi, type Model } from '../services/api'
 import AppIcon from '../components/AppIcon.vue'
 import ModelViewer from '../components/ModelViewer.vue'
+import ModelDetailsModal from '../components/ModelDetailsModal.vue'
 
 interface ModelFile {
   id: number
@@ -148,6 +167,8 @@ const loading = ref(false)
 const isProcessing = ref(false)
 const jobs = ref<ThumbnailJob[]>([])
 const activeJob = ref<ThumbnailJob | null>(null)
+const selectedIds = ref<Set<number>>(new Set())
+const selectedModelId = ref<number | null>(null)
 let pendingResolve: (() => void) | null = null
 let pendingReject: ((e: unknown) => void) | null = null
 
@@ -158,6 +179,8 @@ const allDone = computed(() =>
   jobs.value.length > 0 &&
   jobs.value.every(j => ['done', 'skipped', 'error'].includes(j.status))
 )
+const allSelected = computed(() => jobs.value.length > 0 && selectedIds.value.size === jobs.value.length)
+const someSelected = computed(() => selectedIds.value.size > 0)
 const progressPct = computed(() => {
   if (jobs.value.length === 0) return 0
   const finished = jobs.value.filter(j => ['done', 'skipped', 'error'].includes(j.status)).length
@@ -198,10 +221,29 @@ async function loadJobs() {
   }
 }
 
-async function processAll() {
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(jobs.value.map(j => j.model.id))
+  }
+}
+
+function toggleSelect(id: number) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function openModal(id: number) {
+  selectedModelId.value = id
+}
+
+async function processSelected() {
   isProcessing.value = true
-  for (const job of jobs.value) {
-    if (['done', 'skipped'].includes(job.status)) continue
+  const toProcess = jobs.value.filter(j => selectedIds.value.has(j.model.id) && !['done', 'skipped'].includes(j.status))
+  for (const job of toProcess) {
     try {
       await processJob(job)
     } catch {
@@ -467,9 +509,36 @@ onMounted(loadJobs)
   background: var(--bg-secondary);
   transition: border-color 0.15s;
 }
+.job-row { cursor: pointer; }
+.job-row:hover { border-color: rgba(110, 168, 254, 0.3); }
 .job-row.done { border-color: rgba(74, 222, 128, 0.25); background: rgba(74, 222, 128, 0.04); }
 .job-row.error { border-color: rgba(248, 113, 113, 0.25); background: rgba(248, 113, 113, 0.04); }
 .job-row.skipped { opacity: 0.6; }
+.job-row.selected { border-color: rgba(110, 168, 254, 0.5); background: rgba(110, 168, 254, 0.06); }
+
+.job-checkbox {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: #6ea8fe;
+}
+
+.select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.select-all-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: #6ea8fe;
+  cursor: pointer;
+}
 
 .job-thumb {
   width: 48px;
@@ -559,11 +628,12 @@ onMounted(loadJobs)
 .headless-viewer-host {
   position: fixed;
   left: -9999px;
-  top: 0;
+  top: -9999px;
   width: 400px;
   height: 400px;
   overflow: hidden;
   pointer-events: none;
+  opacity: 0;
 }
 
 .loading-spinner,

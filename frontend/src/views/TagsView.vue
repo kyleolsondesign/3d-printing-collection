@@ -207,12 +207,12 @@
           <span v-else class="text-muted">{{ autoFixGroups.length }} group{{ autoFixGroups.length !== 1 ? 's' : '' }} found — review and apply below.</span>
         </div>
         <div class="toolbar-actions">
-          <template v-if="autoFixLoaded && autoFixVisible.length > 0">
-            <span class="pair-count">{{ autoFixVisibleChecked.length }}/{{ autoFixVisible.length }} selected</span>
+          <template v-if="autoFixLoaded && (autoFixVisible.length > 0 || autoFixVisibleRenames.length > 0)">
+            <span class="pair-count">{{ autoFixTotalSelected }}/{{ autoFixVisible.length + autoFixVisibleRenames.length }} selected</span>
             <button class="action-btn secondary small" @click="selectAllAutoFix(true)">All</button>
             <button class="action-btn secondary small" @click="selectAllAutoFix(false)">None</button>
-            <button class="action-btn primary small" @click="applyAutoFix" :disabled="autoFixApplying || autoFixVisibleChecked.length === 0">
-              {{ autoFixApplying ? 'Applying...' : `Apply ${autoFixVisibleChecked.length}` }}
+            <button class="action-btn primary small" @click="applyAutoFix" :disabled="autoFixApplying || autoFixTotalSelected === 0">
+              {{ autoFixApplying ? 'Applying...' : `Apply ${autoFixTotalSelected}` }}
             </button>
           </template>
           <button class="action-btn secondary small" @click="loadAutoFix" :disabled="autoFixLoading">
@@ -225,7 +225,7 @@
       <div v-if="autoFixLoaded && autoFixGroups.length > 0" class="autofix-filters">
         <span class="filter-label">Filter:</span>
         <button
-          v-for="reason in (['leading-dash', 'separator', 'plural', 'spelling'] as const)"
+          v-for="reason in (['leading-dash', 'leading-apostrophe', 'separator', 'plural', 'spelling'] as const)"
           :key="reason"
           class="reason-filter-btn"
           :class="{ active: autoFixReasonFilters.has(reason) }"
@@ -240,8 +240,8 @@
       <div v-else-if="!autoFixLoaded" class="empty-state autofix-intro">
         Click <strong>Load suggestions</strong> to find tags that can be automatically consolidated.
       </div>
-      <div v-else-if="autoFixVisible.length === 0" class="empty-state">
-        {{ autoFixGroups.length > 0 ? 'No groups match the active filters.' : 'No auto-fix suggestions — tags look clean!' }}
+      <div v-else-if="autoFixVisible.length === 0 && autoFixVisibleRenames.length === 0" class="empty-state">
+        {{ (autoFixGroups.length > 0 || autoFixRenames.length > 0) ? 'No groups match the active filters.' : 'No auto-fix suggestions — tags look clean!' }}
       </div>
 
       <table v-else class="autofix-table">
@@ -289,6 +289,33 @@
             </td>
             <td class="af-models-col">{{ group.totalModels }}</td>
           </tr>
+          <!-- Rename rows (solo apostrophe tags) -->
+          <tr
+            v-for="rename in autoFixVisibleRenames"
+            :key="'rename-' + rename.id"
+            :class="{ 'af-unchecked': !autoFixRenameIsChecked(rename) }"
+            @click.stop="toggleAutoFixRename(rename)"
+            style="cursor: pointer;"
+          >
+            <td class="af-cb-col" @click.stop="toggleAutoFixRename(rename)">
+              <input type="checkbox" :checked="autoFixRenameIsChecked(rename)" @change.stop="toggleAutoFixRename(rename)" />
+            </td>
+            <td class="af-winner-cell">
+              <span class="af-tag-chip af-winner">#{{ rename.to }}</span>
+              <span class="af-tag-count">{{ rename.model_count }} models</span>
+            </td>
+            <td class="af-losers-cell">
+              <div class="af-losers-inner">
+                <span class="af-tag-chip af-loser">#{{ rename.from }}</span>
+              </div>
+            </td>
+            <td class="af-reasons-cell">
+              <div class="af-reasons-inner">
+                <span class="af-reason-badge" data-reason="leading-apostrophe">Leading '</span>
+              </div>
+            </td>
+            <td class="af-models-col">{{ rename.model_count }}</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -309,7 +336,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { tagsApi, type Tag, type TagSimilarPair, type AutoConsolidateGroup, type AutoConsolidateReason } from '../services/api';
+import { tagsApi, type Tag, type TagSimilarPair, type AutoConsolidateGroup, type AutoConsolidateReason, type AutoRenameItem } from '../services/api';
 
 const router = useRouter();
 const route = useRoute();
@@ -587,22 +614,26 @@ onMounted(() => {
 // ── Auto-Fix state ────────────────────────────────────────────────────────────
 
 const autoFixGroups = ref<AutoConsolidateGroup[]>([]);
+const autoFixRenames = ref<AutoRenameItem[]>([]);
 const autoFixLoading = ref(false);
 const autoFixLoaded = ref(false);
 const autoFixApplying = ref(false);
 const autoFixReasonFilters = ref<Set<AutoConsolidateReason>>(
-  new Set(['leading-dash', 'separator', 'plural', 'spelling'])
+  new Set(['leading-dash', 'leading-apostrophe', 'separator', 'plural', 'spelling'])
 );
 // Map from group index → true/false (undefined = checked by default)
 const autoFixChecked = ref<Map<number, boolean>>(new Map());
+// Map from rename id → true/false (undefined = checked by default)
+const autoFixRenameChecked = ref<Map<number, boolean>>(new Map());
 
 const autoFixReasonCounts = computed(() => {
   const counts: Record<AutoConsolidateReason, number> = {
-    'leading-dash': 0, 'separator': 0, 'plural': 0, 'spelling': 0,
+    'leading-dash': 0, 'leading-apostrophe': 0, 'separator': 0, 'plural': 0, 'spelling': 0,
   };
   for (const g of autoFixGroups.value) {
     for (const r of g.reasons) counts[r]++;
   }
+  counts['leading-apostrophe'] += autoFixRenames.value.length;
   return counts;
 });
 
@@ -617,6 +648,18 @@ const autoFixVisibleChecked = computed(() =>
     const idx = autoFixGroups.value.indexOf(g);
     return autoFixChecked.value.get(idx) !== false;
   })
+);
+
+const autoFixVisibleRenames = computed(() =>
+  autoFixReasonFilters.value.has('leading-apostrophe') ? autoFixRenames.value : []
+);
+
+const autoFixRenamesChecked = computed(() =>
+  autoFixVisibleRenames.value.filter(r => autoFixRenameChecked.value.get(r.id) !== false)
+);
+
+const autoFixTotalSelected = computed(() =>
+  autoFixVisibleChecked.value.length + autoFixRenamesChecked.value.length
 );
 
 function autoFixIsChecked(group: AutoConsolidateGroup): boolean {
@@ -634,6 +677,19 @@ function selectAllAutoFix(checked: boolean) {
   const map = new Map<number, boolean>();
   autoFixGroups.value.forEach((_, i) => map.set(i, checked));
   autoFixChecked.value = map;
+  const rmap = new Map<number, boolean>();
+  autoFixRenames.value.forEach(r => rmap.set(r.id, checked));
+  autoFixRenameChecked.value = rmap;
+}
+
+function toggleAutoFixRename(rename: AutoRenameItem) {
+  const map = new Map(autoFixRenameChecked.value);
+  map.set(rename.id, autoFixRenameChecked.value.get(rename.id) !== false ? false : true);
+  autoFixRenameChecked.value = map;
+}
+
+function autoFixRenameIsChecked(rename: AutoRenameItem): boolean {
+  return autoFixRenameChecked.value.get(rename.id) !== false;
 }
 
 function toggleAutoFixReason(reason: AutoConsolidateReason) {
@@ -643,7 +699,13 @@ function toggleAutoFixReason(reason: AutoConsolidateReason) {
 }
 
 function reasonLabel(r: AutoConsolidateReason): string {
-  return ({ 'leading-dash': 'Leading dash', separator: 'Separator', plural: 'Plural', spelling: 'Spelling' })[r];
+  return ({
+    'leading-dash': 'Leading dash',
+    'leading-apostrophe': "Leading '",
+    separator: 'Separator',
+    plural: 'Plural',
+    spelling: 'Spelling',
+  })[r];
 }
 
 async function loadAutoFix() {
@@ -651,7 +713,9 @@ async function loadAutoFix() {
   try {
     const res = await tagsApi.getAutoConsolidateSuggestions();
     autoFixGroups.value = res.data.groups;
+    autoFixRenames.value = res.data.renames ?? [];
     autoFixChecked.value = new Map(); // all default to checked
+    autoFixRenameChecked.value = new Map(); // all default to checked
     autoFixLoaded.value = true;
   } finally {
     autoFixLoading.value = false;
@@ -660,20 +724,30 @@ async function loadAutoFix() {
 
 async function applyAutoFix() {
   const toMerge = autoFixVisibleChecked.value;
-  if (toMerge.length === 0) return;
+  const toRename = autoFixRenamesChecked.value;
+  if (toMerge.length === 0 && toRename.length === 0) return;
+
   const merges: Array<{ sourceId: number; targetId: number }> = [];
   for (const group of toMerge) {
     for (const loser of group.losers) {
       merges.push({ sourceId: loser.id, targetId: group.winner.id });
     }
   }
+
   autoFixApplying.value = true;
   try {
-    await tagsApi.mergeBatch(merges);
-    // Remove applied groups from state
+    const calls: Promise<unknown>[] = [];
+    if (merges.length > 0) calls.push(tagsApi.mergeBatch(merges));
+    if (toRename.length > 0) calls.push(tagsApi.bulkRename(toRename.map(r => ({ id: r.id, name: r.to }))));
+    await Promise.all(calls);
+
+    // Remove applied groups and renames from state
     const appliedWinnerIds = new Set(toMerge.map(g => g.winner.id));
+    const renamedIds = new Set(toRename.map(r => r.id));
     autoFixGroups.value = autoFixGroups.value.filter(g => !appliedWinnerIds.has(g.winner.id));
+    autoFixRenames.value = autoFixRenames.value.filter(r => !renamedIds.has(r.id));
     autoFixChecked.value = new Map();
+    autoFixRenameChecked.value = new Map();
     isStale.value = true; // mark consolidate tab as stale
   } finally {
     autoFixApplying.value = false;
@@ -1193,10 +1267,11 @@ async function applyAutoFix() {
   letter-spacing: 0.04em;
 }
 
-.af-reason-badge[data-reason="leading-dash"] { background: rgba(239,68,68,0.15); color: #ef4444; }
-.af-reason-badge[data-reason="separator"]    { background: rgba(251,146,60,0.15); color: #fb923c; }
-.af-reason-badge[data-reason="plural"]       { background: rgba(168,85,247,0.15); color: #a855f7; }
-.af-reason-badge[data-reason="spelling"]     { background: rgba(34,211,238,0.15); color: var(--accent-primary); }
+.af-reason-badge[data-reason="leading-dash"]        { background: rgba(239,68,68,0.15); color: #ef4444; }
+.af-reason-badge[data-reason="leading-apostrophe"]  { background: rgba(239,68,68,0.15); color: #ef4444; }
+.af-reason-badge[data-reason="separator"]           { background: rgba(251,146,60,0.15); color: #fb923c; }
+.af-reason-badge[data-reason="plural"]              { background: rgba(168,85,247,0.15); color: #a855f7; }
+.af-reason-badge[data-reason="spelling"]            { background: rgba(34,211,238,0.15); color: var(--accent-primary); }
 
 /* Confirm dialog */
 .confirm-overlay {

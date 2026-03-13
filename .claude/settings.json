@@ -7,7 +7,9 @@
       "Bash(npm run test)",
       "Bash(npm run test -- --reporter=verbose)",
       "Bash(npx vitest run --reporter=verbose)",
-      "Bash(npx vitest run --reporter=verbose *)"
+      "Bash(npx vitest run --reporter=verbose *)",
+      "Skill(commit-commands:commit)",
+      "Skill(commit-commands:commit:*)"
     ]
   }
 }

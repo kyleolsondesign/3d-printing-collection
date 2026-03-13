@@ -306,6 +306,16 @@
             {{ auditLoading ? 'Auditing...' : 'Run Audit' }}
           </button>
         </div>
+        <div class="maintenance-item">
+          <div class="maintenance-info">
+            <span class="maintenance-title">Generate Thumbnails</span>
+            <span class="maintenance-desc">Render 3D previews for models without images</span>
+          </div>
+          <button @click="router.push('/settings/thumbnails')" class="btn-secondary">
+            <AppIcon name="chevron-right" />
+            Open
+          </button>
+        </div>
       </div>
 
       <div v-if="auditItems !== null" class="audit-results">
@@ -344,75 +354,6 @@
       </div>
     </div>
 
-    <div class="settings-section">
-      <div class="section-header">
-        <div class="section-icon">
-          <AppIcon name="clipboard" />
-        </div>
-        <div>
-          <h3>Database Statistics</h3>
-          <p class="section-description">Overview of your collection</p>
-        </div>
-      </div>
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-icon models">
-            <AppIcon name="package" stroke-width="1.5" />
-          </div>
-          <div class="stat-value">{{ stats.totalModels.toLocaleString() }}</div>
-          <div class="stat-label">Total Models</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon favorites">
-            <AppIcon name="star" stroke-width="1.5" />
-          </div>
-          <div class="stat-value">{{ stats.totalFavorites.toLocaleString() }}</div>
-          <div class="stat-label">Favorites</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon printed">
-            <AppIcon name="check-circle" stroke-width="1.5" />
-          </div>
-          <div class="stat-value">{{ stats.totalPrinted.toLocaleString() }}</div>
-          <div class="stat-label">Printed</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon queued">
-            <AppIcon name="list" stroke-width="1.5" />
-          </div>
-          <div class="stat-value">{{ stats.totalQueued.toLocaleString() }}</div>
-          <div class="stat-label">Queued</div>
-        </div>
-        <div :class="['stat-card', { warning: stats.totalLooseFiles > 0 }]">
-          <div class="stat-icon loose">
-            <AppIcon name="file" stroke-width="1.5" />
-          </div>
-          <div class="stat-value">{{ stats.totalLooseFiles.toLocaleString() }}</div>
-          <div class="stat-label">Loose Files</div>
-        </div>
-        <div v-if="stats.deletedModels > 0" class="stat-card muted">
-          <div class="stat-icon deleted">
-            <AppIcon name="trash" stroke-width="1.5" />
-          </div>
-          <div class="stat-value">{{ stats.deletedModels.toLocaleString() }}</div>
-          <div class="stat-label">Deleted</div>
-        </div>
-      </div>
-
-      <!-- Tools -->
-      <div class="tools-section">
-        <button class="tool-card" @click="router.push('/settings/thumbnails')">
-          <div class="tool-icon">
-            <AppIcon name="image" stroke-width="1.5" />
-          </div>
-          <div class="tool-info">
-            <div class="tool-name">Generate Thumbnails</div>
-            <div class="tool-desc">Render 3D previews for models without images</div>
-          </div>
-          <AppIcon name="chevron-right" class="tool-arrow" />
-        </button>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -1030,97 +971,6 @@ h2 {
   color: var(--danger);
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1rem;
-}
-
-.stat-card {
-  text-align: center;
-  padding: 1.25rem;
-  background: var(--bg-elevated);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  transition: all var(--transition-base);
-}
-
-.stat-card:hover {
-  border-color: var(--border-strong);
-}
-
-.stat-card.warning {
-  border-color: var(--warning);
-  background: var(--warning-dim);
-}
-
-.stat-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  margin: 0 auto 0.75rem;
-}
-
-.stat-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.stat-icon.models {
-  background: var(--accent-primary-dim);
-  color: var(--accent-primary);
-}
-
-.stat-icon.favorites {
-  background: var(--warning-dim);
-  color: var(--warning);
-}
-
-.stat-icon.printed {
-  background: var(--success-dim);
-  color: var(--success);
-}
-
-.stat-icon.queued {
-  background: var(--info-dim);
-  color: var(--info);
-}
-
-.stat-icon.loose {
-  background: var(--warning-dim);
-  color: var(--warning);
-}
-
-.stat-card .stat-value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 0.25rem;
-  font-family: var(--font-mono);
-}
-
-.stat-card.warning .stat-value {
-  color: var(--warning);
-}
-
-.stat-card .stat-label {
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-.stat-card.muted {
-  opacity: 0.7;
-}
-
-.stat-icon.deleted {
-  background: var(--bg-surface);
-  color: var(--text-tertiary);
-}
-
 .scan-mode-section {
   margin-top: 1.25rem;
 }
@@ -1491,66 +1341,6 @@ h2 {
   background: var(--danger-dim, rgba(239, 68, 68, 0.1));
   color: var(--danger, #ef4444);
   border-color: var(--danger, #ef4444);
-}
-
-.tools-section {
-  margin-top: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.tool-card {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  padding: 0.875rem 1rem;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-  transition: background 0.15s, border-color 0.15s;
-  color: var(--text-primary);
-}
-.tool-card:hover {
-  background: var(--bg-tertiary);
-  border-color: rgba(110, 168, 254, 0.3);
-}
-
-.tool-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: rgba(110, 168, 254, 0.12);
-  color: #6ea8fe;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.tool-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.tool-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.tool-desc {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  margin-top: 1px;
-}
-
-.tool-arrow {
-  color: var(--text-secondary);
-  flex-shrink: 0;
 }
 
 /* AI Settings */

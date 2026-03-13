@@ -334,7 +334,7 @@ export interface TagSimilarPair {
     similarity: number;
 }
 
-export type AutoConsolidateReason = 'leading-dash' | 'separator' | 'plural' | 'spelling';
+export type AutoConsolidateReason = 'leading-dash' | 'leading-apostrophe' | 'separator' | 'plural' | 'spelling';
 
 export interface AutoConsolidateLoser extends Tag {
     reasons: AutoConsolidateReason[];
@@ -347,9 +347,17 @@ export interface AutoConsolidateGroup {
     totalModels: number;
 }
 
+export interface AutoRenameItem {
+    id: number;
+    from: string;
+    to: string;
+    model_count: number;
+}
+
 export const tagsApi = {
     getAll: () => api.get('/tags'),
     create: (name: string) => api.post('/tags', { name }),
+    rename: (id: number, name: string) => api.patch(`/tags/${id}`, { name }),
     delete: (id: number) => api.delete(`/tags/${id}`),
     addToModel: (modelId: number, name: string) => api.post(`/tags/model/${modelId}`, { name }),
     removeFromModel: (modelId: number, tagId: number) => api.delete(`/tags/model/${modelId}/${tagId}`),
@@ -358,13 +366,15 @@ export const tagsApi = {
     merge: (sourceIds: number[], targetId: number) => api.post('/tags/merge', { sourceIds, targetId }),
     mergeBatch: (merges: Array<{ sourceId: number; targetId: number }>) =>
         api.post('/tags/merge-batch', { merges }),
+    bulkRename: (renames: Array<{ id: number; name: string }>) =>
+        api.post('/tags/bulk-rename', { renames }),
     cleanup: (opts: { maxCount?: number; source?: string[]; dryRun?: boolean }) => api.post('/tags/cleanup', opts),
     autotag: (opts: { modelIds?: number[]; minTagCount?: number; useAi?: boolean; dryRun?: boolean }) =>
         api.post('/tags/autotag', opts, { timeout: 120000 }),
     aiConsolidate: (pairs: TagSimilarPair[]) =>
         api.post('/tags/ai-consolidate', { pairs }, { timeout: 120000 }),
     getAutoConsolidateSuggestions: () =>
-        api.get<{ groups: AutoConsolidateGroup[] }>('/tags/auto-consolidate-suggestions')
+        api.get<{ groups: AutoConsolidateGroup[]; renames: AutoRenameItem[] }>('/tags/auto-consolidate-suggestions')
 };
 
 export default api;
