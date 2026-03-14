@@ -23,6 +23,13 @@ import { extractMetadataFromDataJson } from '../utils/dataJsonMetadata.js';
 
 const router = express.Router();
 
+function filterBlocklistedTags(tags: string[]): string[] {
+    return tags.filter(t => {
+        const trimmed = t.trim().toLowerCase();
+        return trimmed && !db.prepare('SELECT 1 FROM tag_blocklist WHERE name = ?').get(trimmed);
+    });
+}
+
 const DEFAULT_INGESTION_DIR = '/Users/kyle/Downloads';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -396,7 +403,7 @@ router.get('/scan', async (req, res) => {
                 confidence: fuzzy.confidence,
                 debugScores: fuzzy.debugScores,
                 designer: item.designer,
-                suggestedTags: item.sourceTags?.length ? item.sourceTags : (item.pdfTags || [])
+                suggestedTags: filterBlocklistedTags(item.sourceTags?.length ? item.sourceTags : (item.pdfTags || []))
             };
         });
 
@@ -567,7 +574,7 @@ router.post('/categorize', async (req, res) => {
                     confidence: aiSuggestion.confidence,
                     debugScores: [],
                     designer: item.designer,
-                    suggestedTags: item.sourceTags?.length ? item.sourceTags : (item.pdfTags || [])
+                    suggestedTags: filterBlocklistedTags(item.sourceTags?.length ? item.sourceTags : (item.pdfTags || []))
                 };
             } else {
                 const fuzzy = suggestCategoryFuzzy({
@@ -593,7 +600,7 @@ router.post('/categorize', async (req, res) => {
                     confidence: fuzzy.confidence,
                     debugScores: fuzzy.debugScores,
                     designer: item.designer,
-                    suggestedTags: item.sourceTags?.length ? item.sourceTags : (item.pdfTags || [])
+                    suggestedTags: filterBlocklistedTags(item.sourceTags?.length ? item.sourceTags : (item.pdfTags || []))
                 };
             }
         });

@@ -290,8 +290,9 @@ router.post('/merge', (req, res) => {
                     INSERT OR IGNORE INTO model_tags (model_id, tag_id)
                     SELECT model_id, ? FROM model_tags WHERE tag_id = ?
                 `).run(targetId, srcId);
-                // Remove source associations and tag
+                // Remove source associations and tag (blocklist so it won't be re-ingested)
                 db.prepare('DELETE FROM model_tags WHERE tag_id = ?').run(srcId);
+                db.prepare('INSERT OR IGNORE INTO tag_blocklist (name) SELECT name FROM tags WHERE id = ?').run(srcId);
                 db.prepare('DELETE FROM tags WHERE id = ?').run(srcId);
                 mergedCount++;
             }
@@ -373,6 +374,11 @@ router.post('/cleanup', (req, res) => {
             return res.json({ dryRun: true, wouldDelete: count });
         }
 
+        // Blocklist tags before deleting so they won't be re-ingested
+        const toDelete = db.prepare(`SELECT name FROM tags WHERE ${whereClause}`).all(...params) as { name: string }[];
+        for (const { name } of toDelete) {
+            db.prepare('INSERT OR IGNORE INTO tag_blocklist (name) VALUES (?)').run(name.toLowerCase());
+        }
         const result = db.prepare(`DELETE FROM tags WHERE ${whereClause}`).run(...params);
         res.json({ success: true, deleted: result.changes });
     } catch (error) {
