@@ -19,6 +19,7 @@ import {
     detectPlatform,
     extractDesignerFromFilename
 } from '../utils/pdfMetadata.js';
+import { extractMetadataFromDataJson } from '../utils/dataJsonMetadata.js';
 
 const router = express.Router();
 
@@ -81,6 +82,10 @@ interface ScannedItem {
     pdfTags: string[];
     designer: string | null;
     readmeText: string | null;
+    // From data.json (preferred source when available)
+    sourceTitle: string | null;
+    sourceDescription: string | null;
+    sourceTags: string[];
 }
 
 function getConfig(key: string): string | null {
@@ -163,20 +168,39 @@ function scanFolderContents(dirPath: string): FolderScanResult {
     return result;
 }
 
-async function extractFolderContext(scanResult: FolderScanResult): Promise<{
+async function extractFolderContext(scanResult: FolderScanResult, folderPath?: string): Promise<{
     pdfFilename: string | null;
     pdfText: string | null;
     pdfTags: string[];
     designer: string | null;
     readmeText: string | null;
+    sourceTitle: string | null;
+    sourceDescription: string | null;
+    sourceTags: string[];
 }> {
     let pdfFilename: string | null = null;
     let pdfText: string | null = null;
     let pdfTags: string[] = [];
     let designer: string | null = null;
     let readmeText: string | null = null;
+    let sourceTitle: string | null = null;
+    let sourceDescription: string | null = null;
+    let sourceTags: string[] = [];
 
-    // Extract from first PDF
+    // Try data.json first (richer, more reliable than PDF)
+    if (folderPath) {
+        try {
+            const jsonMeta = await extractMetadataFromDataJson(folderPath);
+            if (jsonMeta) {
+                sourceTitle = jsonMeta.title;
+                sourceDescription = jsonMeta.description;
+                sourceTags = jsonMeta.tags;
+                designer = jsonMeta.designer;
+            }
+        } catch { /* ignore */ }
+    }
+
+    // Extract from first PDF (always collect for supplementary context / license)
     if (scanResult.pdfPaths.length > 0) {
         const pdfPath = scanResult.pdfPaths[0];
         pdfFilename = path.basename(pdfPath);
@@ -187,13 +211,15 @@ async function extractFolderContext(scanResult: FolderScanResult): Promise<{
             pdfText = rawText.substring(0, 1000);
         }
 
-        // Get links, tags, designer from PDF
+        // Get links, tags, designer from PDF (only use designer if JSON didn't provide one)
         try {
             const links = await extractLinksFromPdf(pdfPath);
             const platform = detectPlatform(pdfFilename);
             const classified = classifyLinks(links, platform);
             pdfTags = classified.tags || [];
-            designer = classified.designer || extractDesignerFromFilename(pdfFilename, platform);
+            if (!designer) {
+                designer = classified.designer || extractDesignerFromFilename(pdfFilename, platform);
+            }
         } catch { /* ignore link extraction failures */ }
     }
 
@@ -205,7 +231,7 @@ async function extractFolderContext(scanResult: FolderScanResult): Promise<{
         } catch { /* ignore */ }
     }
 
-    return { pdfFilename, pdfText, pdfTags, designer, readmeText };
+    return { pdfFilename, pdfText, pdfTags, designer, readmeText, sourceTitle, sourceDescription, sourceTags };
 }
 
 async function scanIngestionDir(ingestionDir: string): Promise<ScannedItem[]> {
@@ -220,7 +246,7 @@ async function scanIngestionDir(ingestionDir: string): Promise<ScannedItem[]> {
         if (entry.isDirectory()) {
             const scanResult = scanFolderContents(fullPath);
             if (scanResult.count > 0) {
-                const context = await extractFolderContext(scanResult);
+                const context = await extractFolderContext(scanResult, fullPath);
                 items.push({
                     filename: entry.name,
                     filepath: fullPath,
@@ -266,7 +292,10 @@ async function scanIngestionDir(ingestionDir: string): Promise<ScannedItem[]> {
                 pdfText: null,
                 pdfTags: [],
                 designer: null,
-                readmeText: null
+                readmeText: null,
+                sourceTitle: null,
+                sourceDescription: null,
+                sourceTags: []
             });
         }
     }
@@ -351,6 +380,9 @@ router.get('/scan', async (req, res) => {
                 pdfTags: item.pdfTags,
                 readmeText: item.readmeText,
                 pdfText: item.pdfText,
+                sourceTitle: item.sourceTitle,
+                sourceDescription: item.sourceDescription,
+                sourceTags: item.sourceTags,
             }, categories);
 
             return {
@@ -364,7 +396,7 @@ router.get('/scan', async (req, res) => {
                 confidence: fuzzy.confidence,
                 debugScores: fuzzy.debugScores,
                 designer: item.designer,
-                suggestedTags: item.pdfTags || []
+                suggestedTags: item.sourceTags?.length ? item.sourceTags : (item.pdfTags || [])
             };
         });
 
@@ -480,6 +512,9 @@ router.post('/categorize', async (req, res) => {
                         pdfTags: item.pdfTags,
                         readmeText: item.readmeText,
                         designer: item.designer,
+                        sourceTitle: item.sourceTitle,
+                        sourceDescription: item.sourceDescription,
+                        sourceTags: item.sourceTags,
                     })),
                     categories,
                     apiKey,
@@ -530,7 +565,9 @@ router.post('/categorize', async (req, res) => {
                     imageFile: item.imageFile,
                     suggestedCategory: aiSuggestion.category,
                     confidence: aiSuggestion.confidence,
-                    suggestedTags: item.pdfTags || []
+                    debugScores: [],
+                    designer: item.designer,
+                    suggestedTags: item.sourceTags?.length ? item.sourceTags : (item.pdfTags || [])
                 };
             } else {
                 const fuzzy = suggestCategoryFuzzy({
@@ -541,6 +578,9 @@ router.post('/categorize', async (req, res) => {
                     pdfTags: item.pdfTags,
                     readmeText: item.readmeText,
                     pdfText: item.pdfText,
+                    sourceTitle: item.sourceTitle,
+                    sourceDescription: item.sourceDescription,
+                    sourceTags: item.sourceTags,
                 }, categories);
                 return {
                     filename: item.filename,
@@ -551,7 +591,9 @@ router.post('/categorize', async (req, res) => {
                     imageFile: item.imageFile,
                     suggestedCategory: fuzzy.category,
                     confidence: fuzzy.confidence,
-                    suggestedTags: item.pdfTags || []
+                    debugScores: fuzzy.debugScores,
+                    designer: item.designer,
+                    suggestedTags: item.sourceTags?.length ? item.sourceTags : (item.pdfTags || [])
                 };
             }
         });

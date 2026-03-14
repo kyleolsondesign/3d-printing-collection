@@ -225,7 +225,7 @@
       <div v-if="autoFixLoaded && autoFixGroups.length > 0" class="autofix-filters">
         <span class="filter-label">Filter:</span>
         <button
-          v-for="reason in (['leading-dash', 'leading-apostrophe', 'separator', 'plural', 'spelling'] as const)"
+          v-for="reason in (['leading-dash', 'leading-apostrophe', 'separator', 'plural', 'spelling', 'year'] as const)"
           :key="reason"
           class="reason-filter-btn"
           :class="{ active: autoFixReasonFilters.has(reason) }"
@@ -250,11 +250,12 @@
             <th class="af-cb-col">
               <input
                 type="checkbox"
-                :checked="autoFixVisibleChecked.length === autoFixVisible.length"
+                :checked="autoFixVisibleChecked.length === autoFixVisible.length && autoFixVisibleChecked.length > 0"
                 @change="selectAllAutoFix(($event.target as HTMLInputElement).checked)"
               />
             </th>
             <th>Keep</th>
+            <th class="af-swap-col"></th>
             <th>Remove</th>
             <th>Reason</th>
             <th class="af-models-col">Models</th>
@@ -265,19 +266,52 @@
             v-for="group in autoFixVisible"
             :key="group.winner.id"
             :class="{ 'af-unchecked': !autoFixIsChecked(group) }"
-            @click.stop="toggleAutoFixGroup(group)"
+            @click="toggleAutoFixGroup(group)"
             style="cursor: pointer;"
           >
-            <td class="af-cb-col" @click.stop="toggleAutoFixGroup(group)">
-              <input type="checkbox" :checked="autoFixIsChecked(group)" @change.stop="toggleAutoFixGroup(group)" />
+            <td class="af-cb-col">
+              <input type="checkbox" :checked="autoFixIsChecked(group)" @click.stop @change="toggleAutoFixGroup(group)" />
             </td>
-            <td class="af-winner-cell">
-              <span class="af-tag-chip af-winner">#{{ group.winner.name }}</span>
-              <span class="af-tag-count">{{ group.winner.model_count ?? 0 }} models</span>
+            <td class="af-winner-cell" @click.stop>
+              <template v-if="getOverride(group.winner.id).deleteMode">
+                <span class="af-tag-chip af-delete-chip">delete all</span>
+              </template>
+              <template v-else-if="!getOverride(group.winner.id).editing">
+                <span class="af-tag-chip af-winner">#{{ effectiveWinnerName(group) }}</span>
+                <span class="af-tag-count">{{ effectiveWinnerCount(group) }} models</span>
+                <button class="af-edit-btn" @click.stop="startEditing(group)" title="Set custom target tag">✏</button>
+              </template>
+              <template v-else>
+                <input
+                  class="af-custom-input"
+                  :value="getOverride(group.winner.id).customTarget || effectiveWinnerName(group)"
+                  @input="getOverride(group.winner.id).customTarget = ($event.target as HTMLInputElement).value"
+                  @click.stop
+                  @keydown.enter.stop="stopEditing(group)"
+                  @keydown.escape.stop="clearCustomTarget(group)"
+                  :placeholder="effectiveWinnerName(group)"
+                />
+                <button class="af-edit-btn af-edit-ok" @click.stop="stopEditing(group)" title="Done">✓</button>
+                <button class="af-edit-btn af-edit-cancel" @click.stop="clearCustomTarget(group)" title="Clear custom">✕</button>
+              </template>
+            </td>
+            <td class="af-swap-col" @click.stop>
+              <button
+                v-if="!getOverride(group.winner.id).deleteMode"
+                class="af-swap-btn"
+                :class="{ 'af-swap-active': getOverride(group.winner.id).swapped }"
+                @click.stop="toggleSwap(group)"
+                title="Swap keep/remove direction"
+              >⇄</button>
             </td>
             <td class="af-losers-cell">
               <div class="af-losers-inner">
-                <span v-for="loser in group.losers" :key="loser.id" class="af-tag-chip af-loser">
+                <span
+                  v-for="loser in (getOverride(group.winner.id).deleteMode ? [group.winner, ...group.losers] : effectiveLosers(group))"
+                  :key="loser.id"
+                  class="af-tag-chip af-loser"
+                  :class="{ 'af-delete-loser': getOverride(group.winner.id).deleteMode }"
+                >
                   #{{ loser.name }}<span class="af-tag-count">{{ loser.model_count ?? 0 }} models</span>
                 </span>
               </div>
@@ -287,23 +321,32 @@
                 <span v-for="r in group.reasons" :key="r" class="af-reason-badge" :data-reason="r">{{ reasonLabel(r) }}</span>
               </div>
             </td>
-            <td class="af-models-col">{{ group.totalModels }}</td>
+            <td class="af-models-col" @click.stop style="white-space: nowrap;">
+              {{ group.totalModels }}
+              <button
+                class="af-delete-btn"
+                :class="{ 'af-delete-active': getOverride(group.winner.id).deleteMode }"
+                @click.stop="toggleDeleteMode(group)"
+                title="Delete all tags in this group"
+              >🗑</button>
+            </td>
           </tr>
-          <!-- Rename rows (solo apostrophe tags) -->
+          <!-- Rename rows (solo apostrophe / year tags) -->
           <tr
             v-for="rename in autoFixVisibleRenames"
             :key="'rename-' + rename.id"
             :class="{ 'af-unchecked': !autoFixRenameIsChecked(rename) }"
-            @click.stop="toggleAutoFixRename(rename)"
+            @click="toggleAutoFixRename(rename)"
             style="cursor: pointer;"
           >
-            <td class="af-cb-col" @click.stop="toggleAutoFixRename(rename)">
-              <input type="checkbox" :checked="autoFixRenameIsChecked(rename)" @change.stop="toggleAutoFixRename(rename)" />
+            <td class="af-cb-col">
+              <input type="checkbox" :checked="autoFixRenameIsChecked(rename)" @click.stop @change="toggleAutoFixRename(rename)" />
             </td>
             <td class="af-winner-cell">
               <span class="af-tag-chip af-winner">#{{ rename.to }}</span>
               <span class="af-tag-count">{{ rename.model_count }} models</span>
             </td>
+            <td class="af-swap-col"></td>
             <td class="af-losers-cell">
               <div class="af-losers-inner">
                 <span class="af-tag-chip af-loser">#{{ rename.from }}</span>
@@ -311,7 +354,8 @@
             </td>
             <td class="af-reasons-cell">
               <div class="af-reasons-inner">
-                <span class="af-reason-badge" data-reason="leading-apostrophe">Leading '</span>
+                <span v-if="/^[''\u2018\u2019]/.test(rename.from)" class="af-reason-badge" data-reason="leading-apostrophe">Leading '</span>
+                <span v-else-if="/((?:19|20)\d{2})/.test(rename.from)" class="af-reason-badge" data-reason="year">Year</span>
               </div>
             </td>
             <td class="af-models-col">{{ rename.model_count }}</td>
@@ -618,8 +662,67 @@ const autoFixRenames = ref<AutoRenameItem[]>([]);
 const autoFixLoading = ref(false);
 const autoFixLoaded = ref(false);
 const autoFixApplying = ref(false);
+
+interface RowOverride { swapped: boolean; customTarget: string; editing: boolean; deleteMode: boolean }
+const autoFixOverrides = ref<Record<number, RowOverride>>({});
+
+function getOverride(winnerId: number): RowOverride {
+  if (!autoFixOverrides.value[winnerId]) {
+    autoFixOverrides.value[winnerId] = { swapped: false, customTarget: '', editing: false, deleteMode: false };
+  }
+  return autoFixOverrides.value[winnerId];
+}
+
+function effectiveWinner(group: AutoConsolidateGroup) {
+  const ov = getOverride(group.winner.id);
+  return ov.swapped && group.losers.length > 0 ? group.losers[0] : group.winner;
+}
+
+function effectiveWinnerName(group: AutoConsolidateGroup): string {
+  const ov = getOverride(group.winner.id);
+  if (ov.customTarget.trim()) return ov.customTarget.trim();
+  return effectiveWinner(group).name;
+}
+
+function effectiveWinnerCount(group: AutoConsolidateGroup): number {
+  return effectiveWinner(group).model_count ?? 0;
+}
+
+function effectiveLosers(group: AutoConsolidateGroup) {
+  const ov = getOverride(group.winner.id);
+  if (ov.swapped && group.losers.length > 0) {
+    return [group.winner, ...group.losers.slice(1)];
+  }
+  return group.losers;
+}
+
+function toggleSwap(group: AutoConsolidateGroup) {
+  getOverride(group.winner.id).swapped = !getOverride(group.winner.id).swapped;
+}
+
+function startEditing(group: AutoConsolidateGroup) {
+  const ov = getOverride(group.winner.id);
+  if (!ov.customTarget) ov.customTarget = effectiveWinner(group).name;
+  ov.editing = true;
+}
+
+function stopEditing(group: AutoConsolidateGroup) {
+  getOverride(group.winner.id).editing = false;
+}
+
+function clearCustomTarget(group: AutoConsolidateGroup) {
+  const ov = getOverride(group.winner.id);
+  ov.customTarget = '';
+  ov.editing = false;
+}
+
+function toggleDeleteMode(group: AutoConsolidateGroup) {
+  const ov = getOverride(group.winner.id);
+  ov.deleteMode = !ov.deleteMode;
+  if (ov.deleteMode) { ov.swapped = false; ov.customTarget = ''; ov.editing = false; }
+}
 const autoFixReasonFilters = ref<Set<AutoConsolidateReason>>(
-  new Set(['leading-dash', 'leading-apostrophe', 'separator', 'plural', 'spelling'])
+  new Set(['leading-dash', 'leading-apostrophe', 'separator', 'plural', 'spelling', 'year'])
 );
 // Map from group index → true/false (undefined = checked by default)
 const autoFixChecked = ref<Map<number, boolean>>(new Map());
@@ -628,12 +731,15 @@ const autoFixRenameChecked = ref<Map<number, boolean>>(new Map());
 
 const autoFixReasonCounts = computed(() => {
   const counts: Record<AutoConsolidateReason, number> = {
-    'leading-dash': 0, 'leading-apostrophe': 0, 'separator': 0, 'plural': 0, 'spelling': 0,
+    'leading-dash': 0, 'leading-apostrophe': 0, 'separator': 0, 'plural': 0, 'spelling': 0, 'year': 0,
   };
   for (const g of autoFixGroups.value) {
     for (const r of g.reasons) counts[r]++;
   }
-  counts['leading-apostrophe'] += autoFixRenames.value.length;
+  for (const r of autoFixRenames.value) {
+    if (/^[''\u2018\u2019]/.test(r.from)) counts['leading-apostrophe']++;
+    else if (/((?:19|20)\d{2})/.test(r.from)) counts['year']++;
+  }
   return counts;
 });
 
@@ -651,7 +757,11 @@ const autoFixVisibleChecked = computed(() =>
 );
 
 const autoFixVisibleRenames = computed(() =>
-  autoFixReasonFilters.value.has('leading-apostrophe') ? autoFixRenames.value : []
+  autoFixRenames.value.filter(r => {
+    if (/^[''\u2018\u2019]/.test(r.from)) return autoFixReasonFilters.value.has('leading-apostrophe');
+    if (/((?:19|20)\d{2})/.test(r.from)) return autoFixReasonFilters.value.has('year');
+    return false;
+  })
 );
 
 const autoFixRenamesChecked = computed(() =>
@@ -705,6 +815,7 @@ function reasonLabel(r: AutoConsolidateReason): string {
     separator: 'Separator',
     plural: 'Plural',
     spelling: 'Spelling',
+    year: 'Year',
   })[r];
 }
 
@@ -716,6 +827,7 @@ async function loadAutoFix() {
     autoFixRenames.value = res.data.renames ?? [];
     autoFixChecked.value = new Map(); // all default to checked
     autoFixRenameChecked.value = new Map(); // all default to checked
+    autoFixOverrides.value = {}; // reset per-row overrides
     autoFixLoaded.value = true;
   } finally {
     autoFixLoading.value = false;
@@ -728,18 +840,33 @@ async function applyAutoFix() {
   if (toMerge.length === 0 && toRename.length === 0) return;
 
   const merges: Array<{ sourceId: number; targetId: number }> = [];
+  const customRenames: Array<{ id: number; name: string }> = [];
+  const deleteIds: number[] = [];
+
   for (const group of toMerge) {
-    for (const loser of group.losers) {
-      merges.push({ sourceId: loser.id, targetId: group.winner.id });
+    const ov = autoFixOverrides.value[group.winner.id];
+    if (ov?.deleteMode) {
+      deleteIds.push(group.winner.id, ...group.losers.map(l => l.id));
+      continue;
     }
+    const swapped = (ov?.swapped ?? false) && group.losers.length > 0;
+    const customTarget = ov?.customTarget?.trim() ?? '';
+    const targetId = swapped ? group.losers[0].id : group.winner.id;
+    const sources = swapped ? [group.winner, ...group.losers.slice(1)] : group.losers;
+    for (const src of sources) merges.push({ sourceId: src.id, targetId });
+    if (customTarget) customRenames.push({ id: targetId, name: customTarget });
   }
 
   autoFixApplying.value = true;
   try {
-    const calls: Promise<unknown>[] = [];
-    if (merges.length > 0) calls.push(tagsApi.mergeBatch(merges));
-    if (toRename.length > 0) calls.push(tagsApi.bulkRename(toRename.map(r => ({ id: r.id, name: r.to }))));
-    await Promise.all(calls);
+    // Run merges first, then renames, then deletes
+    if (merges.length > 0) await tagsApi.mergeBatch(merges);
+    const allRenames = [
+      ...customRenames,
+      ...(toRename.length > 0 ? toRename.map(r => ({ id: r.id, name: r.to })) : []),
+    ];
+    if (allRenames.length > 0) await tagsApi.bulkRename(allRenames);
+    if (deleteIds.length > 0) await Promise.all(deleteIds.map(id => tagsApi.delete(id)));
 
     // Remove applied groups and renames from state
     const appliedWinnerIds = new Set(toMerge.map(g => g.winner.id));
@@ -1234,11 +1361,69 @@ async function applyAutoFix() {
 .autofix-table tbody tr:hover td { background: var(--bg-hover); }
 
 .af-cb-col { width: 32px; text-align: center; }
+.af-swap-col { width: 32px; text-align: center; padding: 0 2px; }
 .af-models-col { width: 55px; text-align: right; color: var(--text-secondary); font-size: 0.8rem; }
 
 .af-winner-cell { white-space: nowrap; }
+
+.af-swap-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 1px 4px;
+  line-height: 1.4;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.af-swap-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.af-swap-btn.af-swap-active { border-color: var(--accent-primary); color: var(--accent-primary); background: var(--accent-primary-dim); }
+
+.af-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  opacity: 0.4;
+  padding: 1px 3px;
+  margin-left: 2px;
+  transition: opacity 0.15s;
+  vertical-align: middle;
+}
+.af-edit-btn:hover { opacity: 1; }
+.af-edit-ok { color: #4ade80; }
+.af-edit-cancel { color: #ef4444; }
+
+.af-custom-input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  padding: 1px 6px;
+  width: 140px;
+  outline: none;
+  vertical-align: middle;
+}
 .af-losers-cell { }
 .af-losers-inner { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+
+.af-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  opacity: 0.3;
+  padding: 1px 3px;
+  margin-left: 4px;
+  transition: opacity 0.15s;
+  vertical-align: middle;
+}
+.af-delete-btn:hover { opacity: 1; }
+.af-delete-btn.af-delete-active { opacity: 1; color: #ef4444; }
+.af-delete-chip { background: rgba(239,68,68,0.15); color: #ef4444; font-size: 0.75rem; padding: 0.1rem 0.4rem; border-radius: var(--radius-sm); }
+.af-delete-loser { background: rgba(239,68,68,0.1); color: #ef4444; text-decoration: line-through; }
 
 .af-tag-chip {
   display: inline-flex;
@@ -1272,6 +1457,7 @@ async function applyAutoFix() {
 .af-reason-badge[data-reason="separator"]           { background: rgba(251,146,60,0.15); color: #fb923c; }
 .af-reason-badge[data-reason="plural"]              { background: rgba(168,85,247,0.15); color: #a855f7; }
 .af-reason-badge[data-reason="spelling"]            { background: rgba(34,211,238,0.15); color: var(--accent-primary); }
+.af-reason-badge[data-reason="year"]               { background: rgba(250,204,21,0.15); color: #facc15; }
 
 /* Confirm dialog */
 .confirm-overlay {

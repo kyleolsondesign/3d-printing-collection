@@ -10,6 +10,7 @@ import { isModelFile, isImageFile, isDocumentFile, isArchiveFile } from '../util
 import { cleanupFolderName } from '../utils/nameCleanup.js';
 import { getFinderTags, parseModelStateFromTags } from '../utils/finderTags.js';
 import { extractMetadataFromPdf } from '../utils/pdfMetadata.js';
+import { extractMetadataFromDataJson, downloadImageFromUrl } from '../utils/dataJsonMetadata.js';
 import { syncDesignersCore } from '../routes/designers.js';
 
 export type ScanMode = 'full' | 'full_sync' | 'add_only';
@@ -330,47 +331,65 @@ class Scanner {
      * Looks for PDF assets and extracts designer, tags, etc.
      */
     private async extractMetadataForModel(modelId: number): Promise<void> {
+        // Skip if metadata already exists
+        const existing = db.prepare('SELECT model_id FROM model_metadata WHERE model_id = ?').get(modelId);
+        if (existing) return;
+
+        const insertTag = db.prepare('INSERT OR IGNORE INTO tags (name) SELECT ? WHERE LOWER(?) NOT IN (SELECT name FROM tag_blocklist)');
+        const getTagId = db.prepare('SELECT id FROM tags WHERE name = ?');
+        const insertModelTag = db.prepare('INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)');
+
+        const insertMetadata = (meta: {
+            source_platform: string | null; source_url: string | null; designer: string | null;
+            designer_url: string | null; description: string | null; license: string | null; license_url: string | null;
+            tags: string[];
+        }) => {
+            db.prepare(`
+                INSERT OR REPLACE INTO model_metadata (model_id, source_platform, source_url, designer, designer_url, description, license, license_url, extracted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(modelId, meta.source_platform, meta.source_url, meta.designer, meta.designer_url, meta.description, meta.license, meta.license_url, new Date().toISOString());
+            for (const tag of meta.tags) {
+                insertTag.run(tag, tag);
+                const tagRow = getTagId.get(tag) as { id: number } | undefined;
+                if (tagRow) insertModelTag.run(modelId, tagRow.id);
+            }
+        };
+
+        // Prefer data.json metadata over PDF when available
+        const modelRecord = db.prepare('SELECT filepath FROM models WHERE id = ?').get(modelId) as { filepath: string } | undefined;
+        const folderPath = modelRecord?.filepath ?? null;
+
+        if (folderPath) {
+            try {
+                const jsonMeta = await extractMetadataFromDataJson(folderPath);
+                if (jsonMeta) {
+                    // Supplement with PDF license URL if JSON doesn't provide one (e.g. CC license)
+                    let { license, license_url } = jsonMeta;
+                    if (!license_url) {
+                        const pdfAsset = db.prepare(`SELECT filepath FROM model_assets WHERE model_id = ? AND asset_type = 'pdf' LIMIT 1`).get(modelId) as { filepath: string } | undefined;
+                        if (pdfAsset) {
+                            try {
+                                const pdfMeta = await extractMetadataFromPdf(pdfAsset.filepath);
+                                if (pdfMeta.license_url) { license = pdfMeta.license; license_url = pdfMeta.license_url; }
+                            } catch { /* ignore */ }
+                        }
+                    }
+                    insertMetadata({ ...jsonMeta, license, license_url });
+                    return;
+                }
+            } catch { /* ignore, fall through to PDF */ }
+        }
+
+        // Fall back to PDF extraction
         const pdfAsset = db.prepare(`
             SELECT filepath FROM model_assets WHERE model_id = ? AND asset_type = 'pdf' LIMIT 1
         `).get(modelId) as { filepath: string } | undefined;
 
         if (!pdfAsset) return;
 
-        // Skip if metadata already exists
-        const existing = db.prepare('SELECT model_id FROM model_metadata WHERE model_id = ?').get(modelId);
-        if (existing) return;
-
         try {
             const metadata = await extractMetadataFromPdf(pdfAsset.filepath);
-
-            db.prepare(`
-                INSERT OR REPLACE INTO model_metadata (model_id, source_platform, source_url, designer, designer_url, description, license, license_url, extracted_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-                modelId,
-                metadata.source_platform,
-                metadata.source_url,
-                metadata.designer,
-                metadata.designer_url,
-                metadata.description,
-                metadata.license,
-                metadata.license_url,
-                new Date().toISOString()
-            );
-
-            // Insert tags from PDF (skip blocklisted names)
-            if (metadata.tags.length > 0) {
-                const insertTag = db.prepare('INSERT OR IGNORE INTO tags (name) SELECT ? WHERE LOWER(?) NOT IN (SELECT name FROM tag_blocklist)');
-                const getTagId = db.prepare('SELECT id FROM tags WHERE name = ?');
-                const insertModelTag = db.prepare('INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)');
-                for (const tag of metadata.tags) {
-                    insertTag.run(tag, tag);
-                    const tagRow = getTagId.get(tag) as { id: number } | undefined;
-                    if (tagRow) {
-                        insertModelTag.run(modelId, tagRow.id);
-                    }
-                }
-            }
+            insertMetadata(metadata);
         } catch {
             // Insert empty record to avoid re-processing
             db.prepare(`
@@ -1119,18 +1138,19 @@ class Scanner {
      * and pdftotext for description text.
      */
     private async extractMetadataFromPdfs(): Promise<void> {
-        // Find models with PDF assets that either have no metadata record, or have a
-        // failed/empty placeholder record (source_platform and designer both null, no tags)
+        // Find models that either have no metadata record, or have a failed/empty placeholder
+        // (source_platform and designer both null, no tags). Include those with PDF assets
+        // OR those in a folder that may have a data.json.
         const modelsWithPdfs = db.prepare(`
-            SELECT DISTINCT m.id as model_id, ma.filepath as pdf_path
+            SELECT DISTINCT m.id as model_id, m.filepath as folder_path, ma.filepath as pdf_path
             FROM models m
-            JOIN model_assets ma ON ma.model_id = m.id AND ma.asset_type = 'pdf'
+            LEFT JOIN model_assets ma ON ma.model_id = m.id AND ma.asset_type = 'pdf'
             LEFT JOIN model_metadata mm ON mm.model_id = m.id
             LEFT JOIN model_tags mt ON mt.model_id = m.id
             WHERE (mm.model_id IS NULL OR (mm.source_platform IS NULL AND mm.designer IS NULL AND mt.model_id IS NULL))
               AND m.deleted_at IS NULL
             GROUP BY m.id
-        `).all() as Array<{ model_id: number; pdf_path: string }>;
+        `).all() as Array<{ model_id: number; folder_path: string; pdf_path: string | null }>;
 
         if (modelsWithPdfs.length === 0) {
             this.progress.overallProgress = 95;
@@ -1156,9 +1176,33 @@ class Scanner {
         const getTagId = db.prepare(`SELECT id FROM tags WHERE name = ?`);
         const insertModelTag = db.prepare(`INSERT OR IGNORE INTO model_tags (model_id, tag_id) VALUES (?, ?)`);
 
-        for (const { model_id, pdf_path } of modelsWithPdfs) {
+        for (const { model_id, folder_path, pdf_path } of modelsWithPdfs) {
             try {
-                const metadata = await extractMetadataFromPdf(pdf_path);
+                // Prefer data.json metadata over PDF when available
+                let metadata: { source_platform: string | null; source_url: string | null; designer: string | null; designer_url: string | null; description: string | null; license: string | null; license_url: string | null; tags: string[] } | null = null;
+
+                try {
+                    const jsonMeta = await extractMetadataFromDataJson(folder_path);
+                    if (jsonMeta) {
+                        metadata = { ...jsonMeta };
+                        // Supplement with PDF CC license URL if JSON doesn't provide one
+                        if (!metadata.license_url && pdf_path) {
+                            try {
+                                const pdfMeta = await extractMetadataFromPdf(pdf_path);
+                                if (pdfMeta.license_url) { metadata.license = pdfMeta.license; metadata.license_url = pdfMeta.license_url; }
+                            } catch { /* ignore */ }
+                        }
+                    }
+                } catch { /* ignore */ }
+
+                if (!metadata && pdf_path) {
+                    metadata = await extractMetadataFromPdf(pdf_path);
+                }
+
+                if (!metadata) {
+                    insertMetadata.run(model_id, null, null, null, null, null, null, null, new Date().toISOString());
+                    continue;
+                }
 
                 insertMetadata.run(
                     model_id,
@@ -1651,6 +1695,24 @@ class Scanner {
             this.selectPrimaryImage(modelId);
             return;
         }
+
+        // Fallback: try to download cover image from data.json URLs (before PDF extraction)
+        try {
+            const jsonMeta = await extractMetadataFromDataJson(folderPath);
+            if (jsonMeta && jsonMeta.imageUrls.length > 0) {
+                for (const imageUrl of jsonMeta.imageUrls) {
+                    const ext = imageUrl.match(/\.(jpe?g|png|webp)(\?|$)/i)?.[1]?.replace('jpg', 'jpg') ?? 'jpg';
+                    const destPath = path.join(folderPath, `_downloaded_cover.${ext}`);
+                    const ok = await downloadImageFromUrl(imageUrl, destPath);
+                    if (ok) {
+                        insert.run(modelId, destPath);
+                        this.progress.assetsFound++;
+                        db.prepare('UPDATE model_assets SET is_primary = 1 WHERE model_id = ? AND filepath = ?').run(modelId, destPath);
+                        return;
+                    }
+                }
+            }
+        } catch { /* ignore, fall through to PDF */ }
 
         // Fallback: try to extract first page from PDFs as thumbnail
         const extracted = await this.extractImageFromPdf(folderPath);

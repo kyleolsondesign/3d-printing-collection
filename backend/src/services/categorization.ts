@@ -56,6 +56,10 @@ export interface FuzzyMatchContext {
     pdfTags?: string[];
     readmeText?: string | null;
     pdfText?: string | null;
+    // From data.json (preferred source when available)
+    sourceTitle?: string | null;
+    sourceDescription?: string | null;
+    sourceTags?: string[];
 }
 
 export interface ScoreDebugEntry {
@@ -82,6 +86,10 @@ export interface CategorizationItem {
     pdfTags?: string[];
     readmeText?: string | null;
     designer?: string | null;
+    // From data.json (preferred source when available)
+    sourceTitle?: string | null;
+    sourceDescription?: string | null;
+    sourceTags?: string[];
 }
 
 export function tokenize(name: string): string[] {
@@ -173,18 +181,23 @@ export function suggestCategoryFuzzy(
     item: FuzzyMatchContext,
     categories: string[]
 ): CategorizationSuggestion {
-    const primaryTokens = expandWithSynonyms(tokenize(item.name));
+    // Merge source title tokens into primary tokens (treated as name-weight signals)
+    const primaryTokens = expandWithSynonyms([
+        ...tokenize(item.name),
+        ...(item.sourceTitle ? tokenize(item.sourceTitle) : []),
+    ]);
 
     const modelFileContexts = (item.modelFileNames || []).map(fn => {
         const baseName = fn.replace(/\.(stl|3mf|obj|gcode|ply|amf|zip|rar|7z)$/i, '');
         return { name: baseName, tokens: expandWithSynonyms(tokenize(baseName)) };
     });
 
-    const pdfTagTokens = expandWithSynonyms(
-        (item.pdfTags || []).flatMap(tag => tokenize(tag))
-    );
+    // Merge source tags with PDF tags (same scoring weight)
+    const allTags = [...(item.pdfTags || []), ...(item.sourceTags || [])];
+    const pdfTagTokens = expandWithSynonyms(allTags.flatMap(tag => tokenize(tag)));
 
-    const textContent = [item.readmeText, item.pdfText]
+    // Merge source description with readme/pdfText (same text-weight scoring)
+    const textContent = [item.readmeText, item.pdfText, item.sourceDescription]
         .filter(Boolean)
         .join(' ')
         .substring(0, 500);
@@ -329,13 +342,24 @@ function formatItemForPrompt(item: CategorizationItem, index: number): string {
     if (item.modelFileNames && item.modelFileNames.length > 0) {
         lines.push(`   Model files: ${item.modelFileNames.join(', ')}`);
     }
-    if (item.pdfFilename) {
+    // Prefer data.json source metadata over PDF when available
+    if (item.sourceTitle) {
+        lines.push(`   Source title: "${item.sourceTitle}"`);
+    }
+    if (item.sourceDescription) {
+        lines.push(`   Source description: "${item.sourceDescription.substring(0, 1000)}"`);
+    }
+    if (item.sourceTags && item.sourceTags.length > 0) {
+        lines.push(`   Source tags: ${item.sourceTags.slice(0, 20).join(', ')}`);
+    }
+    // Include PDF metadata as supplementary context if no JSON source data
+    if (!item.sourceTitle && item.pdfFilename) {
         lines.push(`   PDF filename: "${item.pdfFilename}"`);
     }
-    if (item.pdfText) {
+    if (!item.sourceDescription && item.pdfText) {
         lines.push(`   PDF text: "${item.pdfText}"`);
     }
-    if (item.pdfTags && item.pdfTags.length > 0) {
+    if (!item.sourceTags?.length && item.pdfTags && item.pdfTags.length > 0) {
         lines.push(`   Tags from PDF: ${item.pdfTags.join(', ')}`);
     }
     if (item.designer) {

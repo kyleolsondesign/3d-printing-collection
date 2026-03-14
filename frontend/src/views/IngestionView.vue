@@ -79,17 +79,6 @@
           </button>
         </div>
       </div>
-      <div class="ai-config-rows">
-        <div class="config-row">
-          <span class="config-label">Claude API key</span>
-          <div class="config-path-row">
-            <span class="config-path" :class="{ configured: hasApiKey, unconfigured: !hasApiKey }">
-              {{ hasApiKey ? 'Configured' : 'Not set' }}
-            </span>
-            <router-link to="/settings" class="btn-sm btn-ghost">Configure in Settings →</router-link>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- Results Panel -->
@@ -411,7 +400,7 @@
       <!-- No API key notice -->
       <div v-if="!hasApiKey" class="paid-notice">
         <AppIcon name="info" />
-        AI suggestions require an Anthropic API key — configure it in the Import tab.
+        AI suggestions require an Anthropic API key — configure it in Settings.
       </div>
 
       <!-- AI progress -->
@@ -2083,19 +2072,6 @@ h2 {
   align-items: center;
   gap: 0.75rem;
   flex-shrink: 0;
-}
-
-.ai-config-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid rgba(139, 92, 246, 0.15);
-}
-
-.ai-config-rows .config-row {
-  padding: 0;
 }
 
 .ai-categorize-info {

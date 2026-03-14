@@ -23,7 +23,13 @@
         <AppIcon name="check-circle" stroke-width="1.5" />
       </div>
       <h3>All caught up!</h3>
-      <p>All models with STL or 3MF files already have thumbnails.</p>
+      <p v-if="includeZipOnly">All models without thumbnails have been processed.</p>
+      <template v-else>
+        <p>All models with STL or 3MF files already have thumbnails.</p>
+        <button class="btn-enable-zip" @click="includeZipOnly = true">
+          Check zip-only models too
+        </button>
+      </template>
     </div>
 
     <template v-else>
@@ -52,17 +58,26 @@
             <input
               type="checkbox"
               v-model="includeZipOnly"
-              :disabled="isProcessing"
+              :disabled="isProcessing || isRescanning"
             />
             Include zip-only models
           </label>
-          <button class="btn-refresh" :disabled="isProcessing" @click="loadJobs">
+          <button class="btn-refresh" :disabled="isProcessing || isRescanning" @click="loadJobs">
             <AppIcon name="refresh" />
             Refresh
           </button>
           <button
+            v-if="includeZipOnly"
+            class="btn-rescan"
+            :disabled="isProcessing || isRescanning || selectedIds.size === 0"
+            @click="rescanSelected"
+          >
+            <div v-if="isRescanning" class="btn-spinner"></div>
+            {{ isRescanning ? 'Rescanning…' : `Rescan${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}` }}
+          </button>
+          <button
             class="btn-generate-bulk"
-            :disabled="isProcessing || selectedIds.size === 0"
+            :disabled="isProcessing || isRescanning || selectedIds.size === 0"
             @click="processSelected"
           >
             <div v-if="isProcessing" class="btn-spinner"></div>
@@ -190,6 +205,7 @@ interface ThumbnailJob {
 const router = useRouter()
 const loading = ref(false)
 const isProcessing = ref(false)
+const isRescanning = ref(false)
 const jobs = ref<ThumbnailJob[]>([])
 const activeJob = ref<ThumbnailJob | null>(null)
 const selectedIds = ref<Set<number>>(new Set())
@@ -277,6 +293,20 @@ async function processSelected() {
     }
   }
   isProcessing.value = false
+}
+
+async function rescanSelected() {
+  if (selectedIds.value.size === 0) return
+  isRescanning.value = true
+  try {
+    await modelsApi.bulkRescan(Array.from(selectedIds.value))
+    await loadJobs()
+    selectedIds.value = new Set()
+  } catch (err) {
+    console.error('Rescan failed:', err)
+  } finally {
+    isRescanning.value = false
+  }
 }
 
 async function processSingle(job: ThumbnailJob) {
@@ -462,8 +492,24 @@ onMounted(loadJobs)
 .empty-icon {
   font-size: 2.5rem;
   margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
 }
 .empty-icon svg { width: 48px; height: 48px; }
+
+.btn-enable-zip {
+  margin-top: 1rem;
+  padding: 0.5rem 1.25rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-enable-zip:hover { background: var(--bg-hover); }
 .empty-state h3 {
   font-size: 1.1rem;
   font-weight: 600;
@@ -573,6 +619,24 @@ onMounted(loadJobs)
 .btn-refresh:hover:not(:disabled) { background: var(--bg-hover); }
 .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-refresh svg { width: 14px; height: 14px; }
+
+.btn-rescan {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.45rem 1rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-rescan:hover:not(:disabled) { background: var(--bg-hover); }
+.btn-rescan:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-generate-bulk {
   display: flex;

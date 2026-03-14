@@ -421,7 +421,7 @@ router.post('/ai-consolidate', async (req, res) => {
 
 // ── Auto-consolidate suggestions ─────────────────────────────────────────────
 
-type AutoReason = 'leading-dash' | 'leading-apostrophe' | 'separator' | 'plural' | 'spelling';
+type AutoReason = 'leading-dash' | 'leading-apostrophe' | 'separator' | 'plural' | 'spelling' | 'year';
 
 interface AutoGroup {
     winner: { id: number; name: string; source: string; model_count: number };
@@ -450,8 +450,8 @@ function acBritToUs(word: string): string {
 
 function acDepluralize(word: string): string {
     if (word.length < 4) return word;
-    // -ss, -us, -is endings are not regular plurals
-    if (/ss$/.test(word) || /us$/.test(word) || /is$/.test(word)) return word;
+    // -ss and -us endings are not regular plurals (glass, radius, virus)
+    if (/ss$/.test(word) || /us$/.test(word)) return word;
     if (word.length >= 5 && /ies$/.test(word)) return word.slice(0, -3) + 'y'; // butterflies → butterfly
     if (/s$/.test(word)) return word.slice(0, -1); // cats → cat, toys → toy
     return word;
@@ -459,20 +459,28 @@ function acDepluralize(word: string): string {
 
 function acCanonical(name: string): string {
     let s = name.toLowerCase().trim();
-    s = s.replace(/^['\u2018\u2019\-_]+/, ''); // strip leading apostrophes, dashes, underscores
-    s = s.replace(/[-_]+/g, ' ');              // separators → spaces
+    s = s.replace(/['\u2018\u2019]+/g, '');    // strip ALL apostrophes (leading, embedded, trailing)
+    s = s.replace(/^[-_\s]+/, '');              // strip leading dashes/underscores/spaces
+    s = s.replace(/[-_\s]+$/, '');              // strip trailing dashes/underscores/spaces
+    s = s.replace(/[-_&+]+/g, ' ');            // separators + & + → spaces
+    s = s.replace(/((?:19|20)\d{2})/g, '');    // strip 4-digit years (christmas2025 → christmas)
+    s = s.replace(/[^a-z0-9\s]+$/, '');        // strip trailing garbage (backslash, etc.)
     s = s.replace(/\s+/g, ' ').trim();
-    s = s.split(' ').map(w => acDepluralize(acBritToUs(w))).join(' ');
+    s = s.split(' ').filter(w => w.length > 0).map(w => acDepluralize(acBritToUs(w))).join(' ');
     return s;
 }
 
-function acWinnerScore(name: string, groupHasSpaced = false): number {
+function acWinnerScore(name: string): number {
     let score = 0;
     if (/^[-_]/.test(name))             score += 1000; // leading dash — worst
     if (/^[''\u2018\u2019]/.test(name)) score += 900;  // leading apostrophe
-    if (/[-_]/.test(name.replace(/^[-_]+/, ''))) score += 100; // dashes instead of spaces
-    // Concatenated word (no separators) when the group has space-separated versions
-    if (groupHasSpaced && !name.includes(' ') && !/[-_''\u2018\u2019]/.test(name)) score += 50;
+    if (/((?:19|20)\d{2})/.test(name))  score += 500;  // year suffix (christmas2025 vs christmas)
+    // Trailing garbage chars (christmas\, halloween 2, etc.)
+    if (/[^a-z0-9\s]$/i.test(name.trim())) score += 300;
+    // Embedded/trailing apostrophe (valentine 's day, skadisikea')
+    const withoutLeading = name.replace(/^[''\u2018\u2019\-_]+/, '');
+    if (/['\u2018\u2019]/.test(withoutLeading)) score += 200;
+    if (/[-_]/.test(withoutLeading)) score += 100; // dashes instead of spaces
     const words = name.toLowerCase().split(/\s+/);
     if (words.some(w => acBritToUs(w) !== w)) score += 10; // British spelling
     const canon = name.toLowerCase().replace(/[-_]+/g, ' ').trim();
@@ -515,6 +523,9 @@ function acDetectReasons(loserName: string, winnerName: string): AutoReason[] {
         if (lDepl !== lUS) reasons.add('plural');
     }
 
+    // 7. Year suffix: loser name contains a 4-digit year
+    if (/((?:19|20)\d{2})/.test(loserName)) reasons.add('year');
+
     // Spelling fallback: if no other reason and the canonical forms differ by edit distance,
     // it's a spelling error (covers misspellings not in the brit-to-US dictionary)
     if (reasons.size === 0) {
@@ -548,8 +559,9 @@ router.get('/auto-consolidate-suggestions', (req, res) => {
         // 2. rawKey: raw no-separator form (handles concatenated variants like "dungeonsanddragons")
         const canonKey = (name: string) => acCanonical(name).replace(/\s+/g, '');
         const rawKey = (name: string) => name.toLowerCase()
-            .replace(/^[''\u2018\u2019\-_]+/, '')
-            .replace(/[\s\-_]+/g, '');
+            .replace(/['\u2018\u2019]+/g, '')  // strip ALL apostrophes
+            .replace(/^[-_\s]+/, '')            // strip leading
+            .replace(/[\s\-_&+]+/g, '');       // strip all separators incl & and +
 
         const parent = new Map<number, number>();
         for (const tag of tags) parent.set(tag.id, tag.id);
@@ -575,27 +587,20 @@ router.get('/auto-consolidate-suggestions', (req, res) => {
             }
         }
 
-        // Fuzzy spelling pass: compare still-ungrouped tags with same canonical word count.
-        // Catches real misspellings like "suculent" vs "succulent" that exact keys miss.
-        const tagCanons = new Map(tags.map(t => [t.id, acCanonical(t.name)]));
+        // Fuzzy spelling pass: compare all ungrouped singletons by rawKey.
+        // Catches misspellings across word-count boundaries (e.g. "desk organizer" vs "deskorganiser").
+        const tagRawKeys = new Map(tags.map(t => [t.id, rawKey(t.name)]));
         const singletons = tags.filter(t => find(t.id) === t.id);
-        const byWordCount = new Map<number, typeof singletons>();
-        for (const tag of singletons) {
-            const wc = tagCanons.get(tag.id)!.split(' ').length;
-            if (!byWordCount.has(wc)) byWordCount.set(wc, []);
-            byWordCount.get(wc)!.push(tag);
-        }
-        for (const group of byWordCount.values()) {
-            for (let i = 0; i < group.length; i++) {
-                const ca = tagCanons.get(group[i].id)!;
-                if (ca.length < 6) continue; // skip very short tags to avoid false positives
-                for (let j = i + 1; j < group.length; j++) {
-                    const cb = tagCanons.get(group[j].id)!;
-                    if (cb.length < 6) continue;
-                    const maxLen = Math.max(ca.length, cb.length);
-                    const threshold = maxLen <= 10 ? 1 : 2;
-                    if (levenshtein(ca, cb) <= threshold) union(group[i].id, group[j].id);
-                }
+        for (let i = 0; i < singletons.length; i++) {
+            const ra = tagRawKeys.get(singletons[i].id)!;
+            if (ra.length < 8) continue; // skip short tags to avoid false positives
+            for (let j = i + 1; j < singletons.length; j++) {
+                const rb = tagRawKeys.get(singletons[j].id)!;
+                if (rb.length < 8) continue;
+                if (Math.abs(ra.length - rb.length) > 2) continue; // fast reject
+                const maxLen = Math.max(ra.length, rb.length);
+                const threshold = maxLen <= 10 ? 1 : 2;
+                if (levenshtein(ra, rb) <= threshold) union(singletons[i].id, singletons[j].id);
             }
         }
 
@@ -610,7 +615,7 @@ router.get('/auto-consolidate-suggestions', (req, res) => {
         const renames: Array<{ id: number; from: string; to: string; model_count: number }> = [];
 
         for (const members of byRoot.values()) {
-            // Single-member: check if it's a leading-apostrophe tag that should be renamed
+            // Single-member: check if it needs a rename (leading-apostrophe or year suffix)
             if (members.length === 1) {
                 const tag = members[0];
                 if (/^[''\u2018\u2019]/.test(tag.name)) {
@@ -618,14 +623,18 @@ router.get('/auto-consolidate-suggestions', (req, res) => {
                     if (to && to !== tag.name) {
                         renames.push({ id: tag.id, from: tag.name, to, model_count: tag.model_count ?? 0 });
                     }
+                } else if (/((?:19|20)\d{2})/.test(tag.name)) {
+                    const to = tag.name.replace(/((?:19|20)\d{2})/g, '').replace(/\s+/g, ' ').trim().replace(/[-_\s]+$/, '').trim();
+                    if (to && to !== tag.name && to.length > 0) {
+                        renames.push({ id: tag.id, from: tag.name, to, model_count: tag.model_count ?? 0 });
+                    }
                 }
                 continue;
             }
 
             // Pick winner: lowest score, then highest model_count, then alphabetical
-            const hasSpacedCanonical = members.some(t => acCanonical(t.name).includes(' '));
             const sorted = [...members].sort((a, b) => {
-                const sd = acWinnerScore(a.name, hasSpacedCanonical) - acWinnerScore(b.name, hasSpacedCanonical);
+                const sd = acWinnerScore(a.name) - acWinnerScore(b.name);
                 if (sd !== 0) return sd;
                 const cd = (b.model_count ?? 0) - (a.model_count ?? 0);
                 if (cd !== 0) return cd;
@@ -642,6 +651,14 @@ router.get('/auto-consolidate-suggestions', (req, res) => {
             const totalModels = members.reduce((s, t) => s + (t.model_count ?? 0), 0);
 
             groups.push({ winner, losers: losersWithReasons, reasons: Array.from(allReasons), totalModels });
+
+            // If winner has a year suffix, schedule a rename to the year-free form
+            if (/((?:19|20)\d{2})/.test(winner.name)) {
+                const idealTo = winner.name.replace(/((?:19|20)\d{2})/g, '').replace(/\s+/g, ' ').trim().replace(/[-_\s]+$/, '').trim();
+                if (idealTo && idealTo !== winner.name && idealTo.length > 0) {
+                    renames.push({ id: winner.id, from: winner.name, to: idealTo, model_count: winner.model_count ?? 0 });
+                }
+            }
         }
 
         // Sort by most models affected first
